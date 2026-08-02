@@ -1,121 +1,137 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
+const API = 'https://mu-backend-l0uw.onrender.com'
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [sessions, setSessions] = useState([])
+  const [currentSession, setCurrentSession] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(false)
+  const messagesEndRef = useRef(null)
+
+  useEffect(() => {
+    fetch(`${API}/api/sessions`).then(r => r.json()).then(data => {
+      setSessions(data)
+      if (data.length > 0) setCurrentSession(data[0])
+    })
+  }, [])
+
+  useEffect(() => {
+    if (currentSession) {
+      fetch(`${API}/api/sessions/${currentSession.id}/messages`)
+        .then(r => r.json()).then(setMessages)
+    }
+  }, [currentSession])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const createSession = async () => {
+    const res = await fetch(`${API}/api/sessions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '新对话' })
+    })
+    const session = await res.json()
+    setSessions(prev => [session, ...prev])
+    setCurrentSession(session)
+    setMessages([])
+    setShowSidebar(false)
+  }
+
+  const deleteSession = async (id) => {
+    await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' })
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (currentSession?.id === id) {
+      setCurrentSession(null)
+      setMessages([])
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!input.trim() || !currentSession || loading) return
+    const text = input.trim()
+    setInput('')
+    setMessages(prev => [...prev, { role: 'user', content: text }])
+    setLoading(true)
+
+    try {
+      const res = await fetch(`${API}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: currentSession.id, message: text })
+      })
+      const data = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+    } catch (e) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '连接失败了...' }])
+    }
+    setLoading(false)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app">
+      <div className={`sidebar ${showSidebar ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <h2>对话</h2>
+          <button className="new-chat" onClick={createSession}>+</button>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+        <div className="session-list">
+          {sessions.map(s => (
+            <div key={s.id}
+              className={`session-item ${currentSession?.id === s.id ? 'active' : ''}`}
+              onClick={() => { setCurrentSession(s); setShowSidebar(false) }}>
+              <span>{s.name}</span>
+              <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteSession(s.id) }}>×</button>
+            </div>
+          ))}
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </div>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <div className="main">
+        <div className="header">
+          <button className="menu-btn" onClick={() => setShowSidebar(!showSidebar)}>☰</button>
+          <h1>沐</h1>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <div className="messages">
+          {messages.length === 0 && (
+            <div className="empty">开始和沐对话吧</div>
+          )}
+          {messages.map((m, i) => (
+            <div key={i} className={`message ${m.role}`}>
+              <div className="bubble">{m.content}</div>
+            </div>
+          ))}
+          {loading && (
+            <div className="message assistant">
+              <div className="bubble typing">沐在思考...</div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="input-area">
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="说点什么..."
+            rows={1}
+          />
+          <button onClick={sendMessage} disabled={loading || !input.trim()}>发送</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
