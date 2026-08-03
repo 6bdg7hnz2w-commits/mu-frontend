@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+mport { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
@@ -11,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const messagesEndRef = useRef(null)
+  const textareaRef = useRef(null)
 
   useEffect(() => {
     fetch(`${API}/api/sessions`).then(r => r.json()).then(data => {
@@ -29,6 +30,13 @@ function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
+    }
+  }, [input])
 
   const createSession = async () => {
     const res = await fetch(`${API}/api/sessions`, {
@@ -124,6 +132,7 @@ function App() {
 
         <div className="input-area">
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
