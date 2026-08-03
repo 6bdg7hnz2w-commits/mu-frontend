@@ -95,7 +95,7 @@ body {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  padding-top: env(safe-area-inset-top, 12px);
+  padding-top: calc(env(safe-area-inset-top) + 8px);
   border-bottom: 1px solid #c5d5e5;
   background: #e8f0f8;
   position: sticky;
