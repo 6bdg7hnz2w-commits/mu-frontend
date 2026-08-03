@@ -2,8 +2,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #1a2332;
-  color: #e8e4df;
+  background: #e8f0f8;
+  color: #2a3a4a;
   height: 100vh;
   overflow: hidden;
 }
@@ -17,8 +17,8 @@ body {
 
 .sidebar {
   width: 260px;
-  background: #141c28;
-  border-right: 1px solid #2a3545;
+  background: #dce8f2;
+  border-right: 1px solid #c5d5e5;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -29,26 +29,26 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid #2a3545;
+  border-bottom: 1px solid #c5d5e5;
 }
 
 .sidebar-header h2 {
   font-size: 16px;
   font-weight: 500;
-  color: #8a9bb5;
+  color: #6a8aa8;
 }
 
 .new-chat {
   width: 32px; height: 32px;
   border-radius: 8px;
-  border: 1px solid #2a3545;
+  border: 1px solid #c5d5e5;
   background: transparent;
-  color: #8a9bb5;
+  color: #6a8aa8;
   font-size: 18px;
   cursor: pointer;
 }
 
-.new-chat:hover { background: #1e2a3a; color: #c8d0dc; }
+.new-chat:hover { background: #c5d5e5; color: #3a5a7a; }
 
 .session-list {
   flex: 1;
@@ -64,21 +64,21 @@ body {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #8a9bb5;
+  color: #6a8aa8;
   margin-bottom: 2px;
 }
 
-.session-item:hover { background: #1e2a3a; }
-.session-item.active { background: #1e2a3a; color: #c8d0dc; }
+.session-item:hover { background: #c5d5e5; }
+.session-item.active { background: #c5d5e5; color: #2a4a6a; }
 
 .delete-btn {
   background: none; border: none;
-  color: #4a5568; font-size: 16px; cursor: pointer;
+  color: #a0b5c8; font-size: 16px; cursor: pointer;
   opacity: 0;
 }
 
 .session-item:hover .delete-btn { opacity: 1; }
-.delete-btn:hover { color: #e88a9a; }
+.delete-btn:hover { color: #e08888; }
 
 .main {
   flex: 1;
@@ -92,19 +92,19 @@ body {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border-bottom: 1px solid #2a3545;
+  border-bottom: 1px solid #c5d5e5;
 }
 
 .header h1 {
   font-size: 18px;
   font-weight: 600;
-  color: #c8d0dc;
+  color: #3a5a7a;
 }
 
 .menu-btn {
   display: none;
   background: none; border: none;
-  color: #8a9bb5; font-size: 20px; cursor: pointer;
+  color: #6a8aa8; font-size: 20px; cursor: pointer;
 }
 
 .messages {
@@ -121,7 +121,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #4a5e78;
+  color: #98b0c8;
   font-size: 15px;
 }
 
@@ -143,53 +143,53 @@ body {
 }
 
 .message.user .bubble {
-  background: #3d2e4a;
-  color: #e8ddf0;
+  background: #f2d5dd;
+  color: #4a2a35;
   border-bottom-right-radius: 4px;
 }
 
 .message.assistant .bubble {
-  background: #1e3040;
-  color: #d0dce8;
+  background: #d5e8e0;
+  color: #2a3a32;
   border-bottom-left-radius: 4px;
 }
 
-.typing { color: #6a8eaa; font-style: italic; }
+.typing { color: #7aaa96; font-style: italic; }
 
 .input-area {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid #2a3545;
-  background: #161e2a;
+  border-top: 1px solid #c5d5e5;
+  background: #e0ecf4;
 }
 
 .input-area textarea {
   flex: 1;
-  background: #1e2a3a;
-  border: 1px solid #2a3545;
+  background: #f0f5fa;
+  border: 1px solid #c5d5e5;
   border-radius: 12px;
   padding: 10px 14px;
-  color: #e8e4df;
+  color: #2a3a4a;
   font-size: 15px;
   font-family: inherit;
   resize: none;
   outline: none;
 }
 
-.input-area textarea:focus { border-color: #4a6a8a; }
+.input-area textarea:focus { border-color: #8ab0d0; }
 
 .input-area button {
   padding: 10px 20px;
-  background: #2a3d55;
+  background: #b8d0e5;
   border: none;
   border-radius: 12px;
-  color: #c8d0dc;
+  color: #2a4a6a;
   font-size: 14px;
   cursor: pointer;
 }
 
-.input-area button:hover { background: #3a5070; }
+.input-area button:hover { background: #98c0dd; }
 .input-area button:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 640px) {
