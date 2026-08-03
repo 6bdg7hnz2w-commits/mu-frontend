@@ -80,6 +80,8 @@ function App() {
 
   return (
     <div className="app">
+      {showSidebar && <div className="overlay" onClick={() => setShowSidebar(false)} />}
+
       <div className={`sidebar ${showSidebar ? 'open' : ''}`}>
         <div className="sidebar-header">
           <h2>对话</h2>

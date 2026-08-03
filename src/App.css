@@ -203,3 +203,26 @@ body {
   .sidebar.open { left: 0; }
   .menu-btn { display: block; }
 }
+
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.2);
+  z-index: 99;
+}
+
+.header {
+  padding-top: max(16px, env(safe-area-inset-top));
+  background: #e8f0f8;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.input-area {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.sidebar {
+  padding-top: env(safe-area-inset-top);
+}
