@@ -130,7 +130,7 @@ body {
   align-items: center;
   justify-content: center;
   color: #98b0c8;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .message {
@@ -144,7 +144,7 @@ body {
   max-width: 75%;
   padding: 10px 14px;
   border-radius: 16px;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -180,7 +180,7 @@ body {
   border-radius: 12px;
   padding: 8px 12px;
   color: #2a3a4a;
-  font-size: 15px;
+  font-size: 16px;
   font-family: inherit;
   resize: none;
   outline: none;
