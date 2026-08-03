@@ -1,4 +1,4 @@
-mport { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
