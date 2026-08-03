@@ -80,7 +80,10 @@ function App() {
     setLoading(false)
   }
 
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+
   const handleKeyDown = (e) => {
+    if (isMobile) return
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault()
       sendMessage()
