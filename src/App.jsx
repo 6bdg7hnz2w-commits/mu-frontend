@@ -115,7 +115,9 @@ function App() {
         <div className="header">
           <button className="menu-btn" onClick={() => setShowSidebar(!showSidebar)}>☰</button>
           <h1>沐</h1>
+          <button className="refresh-btn" onClick={() => { if (currentSession) { fetch(`${API}/api/sessions/${currentSession.id}/messages`).then(r => r.json()).then(setMessages) } }}>↻</button>
         </div>
+
 
         <div className="messages">
           {messages.length === 0 && (
