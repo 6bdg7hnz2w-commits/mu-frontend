@@ -227,7 +227,7 @@ body {
   color: #6a8aa8;
   font-size: 18px;
   cursor: pointer;
-  margin-left: auto;
+  margin-left: auto; margin-right: 8px;
 }
 
 .refresh-btn:hover {
