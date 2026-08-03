@@ -10,6 +10,7 @@ function App() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
+  const [composing, setComposing] = useState(false)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -80,7 +81,7 @@ function App() {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !composing) {
       e.preventDefault()
       sendMessage()
     }
@@ -136,6 +137,8 @@ function App() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             placeholder="说点什么..."
             rows={1}
           />
