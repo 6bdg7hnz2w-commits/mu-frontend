@@ -11,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [composing, setComposing] = useState(false)
+  const [model, setModel] = useState('opus')
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -80,7 +81,7 @@ function App() {
     try {
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: currentSession.id, message: text })
+        body: JSON.stringify({ session_id: currentSession.id, message: text, model })
       })
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
@@ -125,6 +126,9 @@ function App() {
         <div className="header">
           <button className="menu-btn" onClick={() => setShowSidebar(!showSidebar)}>☰</button>
           <h1>沐</h1>
+          <button className="model-btn" onClick={() => setModel(m => m === 'opus' ? 'sonnet' : m === 'sonnet' ? 'deepseek' : 'opus')}>
+  {model === 'opus' ? 'Opus' : model === 'sonnet' ? 'Sonnet' : 'DS'}
+</button>
           <button className="refresh-btn" onClick={() => { if (currentSession) { fetch(`${API}/api/sessions/${currentSession.id}/messages`).then(r => r.json()).then(setMessages) } }}>↻</button>
         </div>
 
