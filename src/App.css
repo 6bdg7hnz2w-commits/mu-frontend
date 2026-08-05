@@ -233,3 +233,12 @@ body {
 .refresh-btn:hover {
   color: #3a5a7a;
 }
+.model-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: inherit;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
