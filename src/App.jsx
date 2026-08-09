@@ -1,17 +1,97 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
 
+// ─── 图标组件 ───────────────────────────────────────
+const Icons = {
+  back: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>,
+  plus: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>,
+  send: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="#fff" strokeWidth="2"/><path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="#fff" strokeWidth="2"/></svg>,
+  more: <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>,
+  search: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>,
+  camera: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  photo: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>,
+  file: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>,
+  chevron: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>,
+  check: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>,
+  avatar: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  close: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+  thinking: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>,
+  down: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>,
+}
+
+// ─── 左滑删除组件 ────────────────────────────────────
+function SwipeRow({ children, onDelete }) {
+  const rowRef = useRef(null)
+  const startX = useRef(0)
+  const currentX = useRef(0)
+  const swiping = useRef(false)
+
+  const onTouchStart = (e) => {
+    startX.current = e.touches[0].clientX
+    currentX.current = 0
+    swiping.current = false
+  }
+
+  const onTouchMove = (e) => {
+    const dx = e.touches[0].clientX - startX.current
+    if (dx < -10) {
+      swiping.current = true
+      currentX.current = Math.max(dx, -80)
+      if (rowRef.current) rowRef.current.style.transform = `translateX(${currentX.current}px)`
+    }
+  }
+
+  const onTouchEnd = () => {
+    if (rowRef.current) {
+      if (currentX.current < -50) {
+        rowRef.current.style.transform = 'translateX(-80px)'
+      } else {
+        rowRef.current.style.transform = 'translateX(0)'
+      }
+    }
+    setTimeout(() => { swiping.current = false }, 50)
+  }
+
+  const handleClick = (e) => {
+    if (swiping.current || currentX.current < -20) {
+      e.stopPropagation()
+      e.preventDefault()
+    }
+  }
+
+  return (
+    <div className="swipe-container">
+      <div className="swipe-delete" onClick={onDelete}>删除</div>
+      <div
+        ref={rowRef}
+        className="swipe-content"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClickCapture={handleClick}
+        style={{ transition: 'transform .2s' }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ─── Chat: 会话列表 ─────────────────────────────────
-function ChatListPage({ onOpen }) {
+function ChatListPage({ onOpen, onOpenMenu }) {
   const [sessions, setSessions] = useState([])
   const [lastMessages, setLastMessages] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [showNew, setShowNew] = useState(false)
 
   useEffect(() => {
+    setLoading(true)
     fetch(`${API}/api/sessions`).then(r => r.json()).then(async data => {
-      if (!Array.isArray(data)) return
+      if (!Array.isArray(data)) { setLoading(false); return }
       setSessions(data)
+      setLoading(false)
       const msgs = {}
       for (const s of data.slice(0, 10)) {
         try {
@@ -23,7 +103,7 @@ function ChatListPage({ onOpen }) {
         } catch(e) {}
       }
       setLastMessages(msgs)
-    })
+    }).catch(() => setLoading(false))
   }, [])
 
   const createSession = async (model) => {
@@ -37,13 +117,10 @@ function ChatListPage({ onOpen }) {
     onOpen({ ...session, model })
   }
 
-  const deleteSession = async (e, id) => {
-    e.stopPropagation()
+  const deleteSession = async (id) => {
     await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' })
     setSessions(prev => prev.filter(s => s.id !== id))
   }
-
-  const [showNew, setShowNew] = useState(false)
 
   const formatTime = (t) => {
     if (!t) return ''
@@ -71,9 +148,14 @@ function ChatListPage({ onOpen }) {
     <div className="chatlist-page">
       <div className="page-header">
         <h1>Chats</h1>
-        <button className="icon-btn" onClick={() => setShowNew(!showNew)}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
+        <div className="header-actions">
+          <button className="icon-btn" onClick={() => onOpenMenu && onOpenMenu()}>
+            {Icons.more}
+          </button>
+          <button className="icon-btn" onClick={() => setShowNew(!showNew)}>
+            {Icons.plus}
+          </button>
+        </div>
       </div>
 
       {showNew && (
@@ -93,26 +175,123 @@ function ChatListPage({ onOpen }) {
       )}
 
       <div className="session-list-v2">
-        {sessions.map(s => (
-          <div key={s.id} className="session-row" onClick={() => onOpen(s)}>
-            <div className="session-avatar">{(s.name || '沐').charAt(0)}</div>
-            <div className="session-info">
-              <div className="session-top">
-                <span className="session-name">{s.name || '沐'}</span>
-                <span className="session-time">{getTime(s)}</span>
+        {loading && <div className="loading-state"><span className="spinner" />加载中...</div>}
+        {!loading && sessions.length === 0 && <div className="empty-state">点 + 开始第一个对话</div>}
+        {!loading && sessions.map(s => (
+          <SwipeRow key={s.id} onDelete={() => deleteSession(s.id)}>
+            <div className="session-row" onClick={() => onOpen(s)}>
+              <div className="session-avatar">{(s.name || '沐').charAt(0)}</div>
+              <div className="session-info">
+                <div className="session-top">
+                  <span className="session-name">{s.name || '沐'}</span>
+                  <span className="session-time">{getTime(s)}</span>
+                </div>
+                <div className="session-preview">{getPreview(s.id)}</div>
               </div>
-              <div className="session-preview">{getPreview(s.id)}</div>
             </div>
-            <button className="delete-btn" onClick={(e) => deleteSession(e, s.id)}>×</button>
-          </div>
+          </SwipeRow>
         ))}
-        {sessions.length === 0 && <div className="empty-state">点 + 开始第一个对话</div>}
       </div>
     </div>
   )
 }
 
-// ─── Chat: 聊天室（不显示tab）────────────────────────
+// ─── 菜单弹窗 ───────────────────────────────────────
+function ChatMenu({ onClose, onSearch }) {
+  return (
+    <>
+      <div className="overlay" onClick={onClose} />
+      <div className="chat-menu-panel">
+        <div className="menu-item" onClick={() => { onSearch(); onClose() }}>
+          {Icons.search}
+          <span>搜索聊天记录</span>
+        </div>
+        <div className="menu-item" onClick={onClose}>
+          {Icons.avatar}
+          <span>设置头像</span>
+          <span className="menu-dim">即将推出</span>
+        </div>
+        <div className="menu-item" onClick={onClose}>
+          {Icons.photo}
+          <span>文件与照片</span>
+          <span className="menu-dim">即将推出</span>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── 搜索面板 ───────────────────────────────────────
+function SearchPanel({ onClose }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const doSearch = async () => {
+    if (!query.trim()) return
+    setSearching(true)
+    try {
+      // 搜索所有session的messages
+      const sessRes = await fetch(`${API}/api/sessions`)
+      const sessions = await sessRes.json()
+      if (!Array.isArray(sessions)) { setSearching(false); return }
+
+      const found = []
+      for (const s of sessions.slice(0, 20)) {
+        try {
+          const msgRes = await fetch(`${API}/api/sessions/${s.id}/messages`)
+          const msgs = await msgRes.json()
+          if (!Array.isArray(msgs)) continue
+          for (const m of msgs) {
+            if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) {
+              found.push({ ...m, sessionName: s.name })
+            }
+          }
+        } catch(e) {}
+      }
+      setResults(found.slice(0, 50))
+    } catch(e) {}
+    setSearching(false)
+  }
+
+  return (
+    <div className="search-panel">
+      <div className="search-header">
+        <div className="search-input-row">
+          {Icons.search}
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && doSearch()}
+            placeholder="搜索聊天记录..."
+          />
+        </div>
+        <button className="text-btn" onClick={onClose}>取消</button>
+      </div>
+      <div className="search-results">
+        {searching && <div className="loading-state"><span className="spinner" />搜索中...</div>}
+        {!searching && results.length === 0 && query && <div className="empty-state">没有找到</div>}
+        {results.map((r, i) => (
+          <div key={i} className="search-result-item">
+            <div className="search-result-meta">
+              <span className="search-result-session">{r.sessionName || '对话'}</span>
+              <span className="search-result-role">{r.role === 'user' ? '桦桦' : '沐'}</span>
+            </div>
+            <div className="search-result-content">{r.content.length > 100 ? r.content.slice(0, 100) + '...' : r.content}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Chat: 聊天室 ───────────────────────────────────
 function ChatRoom({ session, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -144,7 +323,7 @@ function ChatRoom({ session, onBack }) {
     if (!input.trim() || loading) return
     const text = input.trim()
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: text }])
+    setMessages(prev => [...prev, { role: 'user', content: text, created_at: new Date().toISOString() }])
     setLoading(true)
     try {
       const res = await fetch(`${API}/api/chat`, {
@@ -153,10 +332,10 @@ function ChatRoom({ session, onBack }) {
       })
       const data = await res.json()
       setMessages(prev => [...prev, {
-        role: 'assistant', content: data.reply, thinking: data.thinking
+        role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString()
       }])
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '连接失败了...' }])
+      setMessages(prev => [...prev, { role: 'assistant', content: '连接失败了...', created_at: new Date().toISOString() }])
     }
     setLoading(false)
   }
@@ -174,11 +353,17 @@ function ChatRoom({ session, onBack }) {
     setExpandedThinking(prev => ({ ...prev, [i]: !prev[i] }))
   }
 
+  const formatMsgTime = (t) => {
+    if (!t) return ''
+    const d = new Date(t)
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
   return (
     <div className="chatroom">
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+          {Icons.back}
         </button>
         <div className="chatroom-title">
           <div className="chatroom-name">{session.name || '沐'}</div>
@@ -192,15 +377,16 @@ function ChatRoom({ session, onBack }) {
           <div key={i} className={`msg ${m.role}`}>
             {m.thinking && (
               <div className="thinking-toggle" onClick={() => toggleThinking(i)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                {Icons.thinking}
                 <span>Thought process</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform: expandedThinking[i] ? 'rotate(180deg)' : '', transition: 'transform .2s'}}><path d="M6 9l6 6 6-6"/></svg>
+                <span style={{transform: expandedThinking[i] ? 'rotate(180deg)' : '', transition: 'transform .2s', display: 'flex'}}>{Icons.down}</span>
               </div>
             )}
             {expandedThinking[i] && m.thinking && (
               <div className="thinking-content">{m.thinking}</div>
             )}
             <div className="bubble">{m.content}</div>
+            <div className="msg-time">{formatMsgTime(m.created_at)}</div>
           </div>
         ))}
         {loading && <div className="msg assistant"><div className="bubble typing">
@@ -210,17 +396,24 @@ function ChatRoom({ session, onBack }) {
       </div>
 
       <div className="composer">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="说点什么..."
-          rows={1}
-        />
-        <button className="send-btn" onClick={sendMessage} disabled={loading || !input.trim()}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-        </button>
+        <div className="composer-attachments">
+          <button className="attach-btn" title="拍照">{Icons.camera}</button>
+          <button className="attach-btn" title="照片">{Icons.photo}</button>
+          <button className="attach-btn" title="文件">{Icons.file}</button>
+        </div>
+        <div className="composer-input-row">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="说点什么..."
+            rows={1}
+          />
+          <button className="send-btn" onClick={sendMessage} disabled={loading || !input.trim()}>
+            {Icons.send}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -228,17 +421,38 @@ function ChatRoom({ session, onBack }) {
 
 function ChatPage({ onEnterRoom }) {
   const [openSession, setOpenSession] = useState(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
   useEffect(() => {
-    onEnterRoom(!!openSession)
-  }, [openSession])
+    onEnterRoom(!!openSession || showSearch)
+  }, [openSession, showSearch])
+
+  if (showSearch) {
+    return <SearchPanel onClose={() => setShowSearch(false)} />
+  }
 
   if (openSession) {
     return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
   }
-  return <ChatListPage onOpen={setOpenSession} />
+
+  return (
+    <>
+      <ChatListPage
+        onOpen={setOpenSession}
+        onOpenMenu={() => setShowMenu(true)}
+      />
+      {showMenu && (
+        <ChatMenu
+          onClose={() => setShowMenu(false)}
+          onSearch={() => setShowSearch(true)}
+        />
+      )}
+    </>
+  )
 }
-// ─── Tab: Calendar ───────────────────────────────────
+
+// ─── Tab: Calendar ──────────────────────────────────
 function CalendarPage() {
   const today = new Date()
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -354,13 +568,9 @@ function CalendarPage() {
 
       <div className="card cal-card">
         <div className="cal-nav">
-          <button className="icon-btn small" onClick={prevMonth}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
+          <button className="icon-btn small" onClick={prevMonth}>{Icons.back}</button>
           <span className="cal-month">{year}年{month+1}月</span>
-          <button className="icon-btn small" onClick={nextMonth}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
+          <button className="icon-btn small" onClick={nextMonth}>{Icons.chevron}</button>
         </div>
         <div className="cal-grid">
           {days.map(d => <div key={d} className="cal-head">{d}</div>)}
@@ -374,19 +584,7 @@ function CalendarPage() {
         </div>
       </div>
 
-      {selectedDay && (
-        <div className="card day-detail">
-          <div className="card-title">{selectedDateStr}</div>
-          <div className="period-toggle">
-            <span className="period-label">经期</span>
-            <button className={`toggle-btn ${isPeriod(selectedDay) ? 'on' : ''}`}
-              onClick={() => togglePeriod(dateStr(selectedDay))}>
-              <div className="toggle-knob" />
-            </button>
-          </div>
-        </div>
-      )}
-
+      {/* 待办卡片 */}
       <div className="card todo-card">
         <div className="todo-header">
           <div className="card-title">待办</div>
@@ -415,9 +613,7 @@ function CalendarPage() {
               {editMode ? (
                 <div className={`todo-select ${selectedTodos.has(t.id) ? 'selected' : ''}`} />
               ) : (
-                <div className="todo-check checked">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
-                </div>
+                <div className="todo-check checked">{Icons.check}</div>
               )}
               <span>{t.text}</span>
             </div>
@@ -434,17 +630,30 @@ function CalendarPage() {
           </div>
         )}
       </div>
+
+      {/* 经期卡片 — 移到待办下面 */}
+      {selectedDay && (
+        <div className="card day-detail">
+          <div className="card-title">{selectedDateStr}</div>
+          <div className="period-toggle">
+            <span className="period-label">经期</span>
+            <button className={`toggle-btn ${isPeriod(selectedDay) ? 'on' : ''}`}
+              onClick={() => togglePeriod(dateStr(selectedDay))}>
+              <div className="toggle-knob" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-// ─── Tab: Today ──────────────────────────────────────
+
+// ─── Tab: Today ─────────────────────────────────────
 function TodayPage() {
   const [diaries, setDiaries] = useState([])
   const [todos, setTodos] = useState([])
   const [showWrite, setShowWrite] = useState(false)
   const [diaryText, setDiaryText] = useState('')
-  const [diaryAuthor, setDiaryAuthor] = useState('her')
-  const [filter, setFilter] = useState('all')
   const [submitting, setSubmitting] = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
   const [editingDiary, setEditingDiary] = useState(null)
@@ -469,7 +678,7 @@ function TodayPage() {
     try {
       const res = await fetch(`${API}/api/diaries`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: diaryAuthor, content: diaryText.trim() })
+        body: JSON.stringify({ author: 'her', content: diaryText.trim() })
       })
       const entry = await res.json()
       setDiaries(prev => [entry, ...prev])
@@ -488,6 +697,7 @@ function TodayPage() {
   }
 
   const startEdit = (d) => {
+    if (d.author !== 'her') return // 只能编辑自己的
     setEditingDiary(d.id)
     setEditText(d.content)
     setContextMenu(null)
@@ -521,12 +731,24 @@ function TodayPage() {
     return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
-  const filteredDiaries = filter === 'all' ? diaries : diaries.filter(d => d.author === filter)
-  const showWriteBtn = filter !== 'all'
+  // 按日期分组
+  const groupByDate = (entries) => {
+    const groups = {}
+    entries.forEach(d => {
+      const date = new Date(d.created_at)
+      const key = `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}`
+      if (!groups[key]) groups[key] = { date, entries: [] }
+      groups[key].entries.push(d)
+    })
+    return Object.values(groups).sort((a, b) => b.date - a.date)
+  }
+
   const todayTodos = todos.filter(t => !t.done)
+  const diaryGroups = groupByDate(diaries)
 
   return (
     <div className="today-page" onClick={() => contextMenu && setContextMenu(null)}>
+      {/* 纪念日卡片 */}
       <div className="anniversary-widget glass">
         <div className="anni-label">在 一 起</div>
         <div className="anni-days">{daysTogether}</div>
@@ -549,32 +771,30 @@ function TodayPage() {
         </div>
       )}
 
+      {/* 日记区 */}
       <div className="section-header">
         <h2>日记</h2>
+        <button className="write-trigger-btn" onClick={() => setShowWrite(!showWrite)}>
+          {Icons.plus}
+        </button>
       </div>
 
-      <div className="diary-filter">
-        {[['all','全部'],['her','桦桦'],['mu','沐']].map(([k,v]) => (
-          <button key={k} className={`filter-btn ${filter===k?'active':''}`}
-            onClick={() => { setFilter(k); setShowWrite(false); setDiaryText('') }}>{v}</button>
-        ))}
-      </div>
-
-      {filter !== 'all' && (
-        <div className="write-inline">
+      {/* 写日记（只能写桦桦的，沐的由AI生成） */}
+      {showWrite && (
+        <div className="card write-card">
           {editingDiary ? (
-            <div className="card write-card">
+            <>
               <textarea className="write-area" value={editText} onChange={e => setEditText(e.target.value)} rows={4} />
               <div className="write-actions">
                 <button className="btn-ghost" onClick={() => { setEditingDiary(null); setEditText('') }}>取消</button>
                 <button className="btn-primary" onClick={saveEdit} disabled={!editText.trim()}>保存</button>
               </div>
-            </div>
-          ) : showWrite ? (
-            <div className="card write-card">
+            </>
+          ) : (
+            <>
               <textarea className="write-area" value={diaryText}
                 onChange={e => setDiaryText(e.target.value)}
-                placeholder={filter === 'her' ? '写点什么...' : '沐想说...'}
+                placeholder="写点什么..."
                 rows={4} />
               <div className="write-actions">
                 <button className="btn-ghost" onClick={() => { setShowWrite(false); setDiaryText('') }}>取消</button>
@@ -582,38 +802,46 @@ function TodayPage() {
                   {submitting ? '...' : '记上'}
                 </button>
               </div>
-            </div>
-          ) : (
-            <button className="write-trigger" onClick={() => { setShowWrite(true); setDiaryAuthor(filter) }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-              <span>写日记</span>
-            </button>
+            </>
           )}
         </div>
       )}
 
-      <div className="diary-timeline">
-        {filteredDiaries.length === 0 && <div className="empty-state">还没有日记</div>}
-        {filteredDiaries.map(d => (
-          <div key={d.id} className={`diary-entry ${d.author}`}
-            onContextMenu={(e) => handleLongPress(e, d)}
-            onTouchStart={() => {
-              longPressTimer.current = setTimeout(() => setContextMenu({ id: d.id, diary: d }), 500)
-            }}
-            onTouchEnd={() => clearTimeout(longPressTimer.current)}
-            onTouchMove={() => clearTimeout(longPressTimer.current)}>
-            <div className="diary-meta">
-              <span className="diary-author">{d.author === 'her' ? '桦桦' : '沐'}</span>
-              <span className="diary-date">{formatDate(d.created_at)} {formatTime(d.created_at)}</span>
+      {/* 时间轴日记 */}
+      <div className="diary-timeline-v2">
+        {diaryGroups.length === 0 && <div className="empty-state">还没有日记</div>}
+        {diaryGroups.map((group, gi) => (
+          <div key={gi} className="timeline-day">
+            <div className="timeline-date-col">
+              <div className="timeline-date-num">{group.date.getDate()}</div>
+              <div className="timeline-date-month">{group.date.getMonth()+1}月</div>
             </div>
-            <div className="diary-content">{d.content}</div>
+            <div className="timeline-line" />
+            <div className="timeline-entries">
+              {group.entries.map(d => (
+                <div key={d.id}
+                  className={`timeline-entry ${d.author}`}
+                  onContextMenu={(e) => handleLongPress(e, d)}
+                  onTouchStart={() => {
+                    longPressTimer.current = setTimeout(() => setContextMenu({ id: d.id, diary: d }), 500)
+                  }}
+                  onTouchEnd={() => clearTimeout(longPressTimer.current)}
+                  onTouchMove={() => clearTimeout(longPressTimer.current)}>
+                  <div className="timeline-entry-header">
+                    <span className={`timeline-author ${d.author}`}>{d.author === 'her' ? '桦桦' : '沐'}</span>
+                    <span className="timeline-time">{formatTime(d.created_at)}</span>
+                  </div>
+                  <div className="timeline-entry-content">{d.content}</div>
 
-            {contextMenu && contextMenu.id === d.id && (
-              <div className="context-menu" onClick={e => e.stopPropagation()}>
-                <button onClick={() => startEdit(d)}>编辑</button>
-                <button className="danger" onClick={() => deleteDiary(d.id)}>删除</button>
-              </div>
-            )}
+                  {contextMenu && contextMenu.id === d.id && (
+                    <div className="context-menu" onClick={e => e.stopPropagation()}>
+                      {d.author === 'her' && <button onClick={() => startEdit(d)}>编辑</button>}
+                      <button className="danger" onClick={() => deleteDiary(d.id)}>删除</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -621,7 +849,7 @@ function TodayPage() {
   )
 }
 
-// ─── Tab: Settings ───────────────────────────────────
+// ─── Tab: Settings ──────────────────────────────────
 function SettingsPage() {
   return (
     <div className="settings-page">
@@ -630,11 +858,11 @@ function SettingsPage() {
       <div className="card settings-card">
         <div className="setting-item" onClick={() => window.open('https://openrouter.ai/settings/keys','_blank')}>
           <span>OpenRouter API</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+          {Icons.chevron}
         </div>
         <div className="setting-item" onClick={() => window.open('https://platform.deepseek.com','_blank')}>
           <span>DeepSeek API</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+          {Icons.chevron}
         </div>
         <div className="setting-item">
           <span>皮肤</span>
@@ -649,14 +877,14 @@ function SettingsPage() {
       <div className="card settings-card">
         <div className="setting-item">
           <span>版本</span>
-          <span className="setting-value dim">0.3.1</span>
+          <span className="setting-value dim">0.4.0</span>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Main App ────────────────────────────────────────
+// ─── Main App ───────────────────────────────────────
 function App() {
   const [tab, setTab] = useState('chat')
   const [inRoom, setInRoom] = useState(false)
