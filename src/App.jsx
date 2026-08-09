@@ -6,10 +6,23 @@ const API = 'https://mu-backend-l0uw.onrender.com'
 // ─── Chat: 会话列表 ─────────────────────────────────
 function ChatListPage({ onOpen }) {
   const [sessions, setSessions] = useState([])
+  const [lastMessages, setLastMessages] = useState({})
 
   useEffect(() => {
-    fetch(`${API}/api/sessions`).then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setSessions(data)
+    fetch(`${API}/api/sessions`).then(r => r.json()).then(async data => {
+      if (!Array.isArray(data)) return
+      setSessions(data)
+      const msgs = {}
+      for (const s of data.slice(0, 10)) {
+        try {
+          const res = await fetch(`${API}/api/sessions/${s.id}/messages`)
+          const arr = await res.json()
+          if (Array.isArray(arr) && arr.length > 0) {
+            msgs[s.id] = arr[arr.length - 1]
+          }
+        } catch(e) {}
+      }
+      setLastMessages(msgs)
     })
   }, [])
 
@@ -32,14 +45,26 @@ function ChatListPage({ onOpen }) {
 
   const [showNew, setShowNew] = useState(false)
 
-  const getLastMsg = (s) => {
-    return s.last_message || ''
-  }
-
   const formatTime = (t) => {
     if (!t) return ''
     const d = new Date(t)
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+    const now = new Date()
+    if (d.toDateString() === now.toDateString()) {
+      return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+    }
+    return `${d.getMonth()+1}/${d.getDate()}`
+  }
+
+  const getPreview = (sid) => {
+    const m = lastMessages[sid]
+    if (!m) return ''
+    const text = m.content || ''
+    return text.length > 30 ? text.slice(0, 30) + '...' : text
+  }
+
+  const getTime = (s) => {
+    const m = lastMessages[s.id]
+    return formatTime(m?.created_at || s.updated_at)
   }
 
   return (
@@ -70,15 +95,13 @@ function ChatListPage({ onOpen }) {
       <div className="session-list-v2">
         {sessions.map(s => (
           <div key={s.id} className="session-row" onClick={() => onOpen(s)}>
-            <div className="session-avatar">
-              {(s.name || '沐').charAt(0)}
-            </div>
+            <div className="session-avatar">{(s.name || '沐').charAt(0)}</div>
             <div className="session-info">
               <div className="session-top">
                 <span className="session-name">{s.name || '沐'}</span>
-                <span className="session-time">{formatTime(s.updated_at)}</span>
+                <span className="session-time">{getTime(s)}</span>
               </div>
-              <div className="session-preview">{getLastMsg(s)}</div>
+              <div className="session-preview">{getPreview(s.id)}</div>
             </div>
             <button className="delete-btn" onClick={(e) => deleteSession(e, s.id)}>×</button>
           </div>
@@ -89,7 +112,7 @@ function ChatListPage({ onOpen }) {
   )
 }
 
-// ─── Chat: 聊天室 ────────────────────────────────────
+// ─── Chat: 聊天室（不显示tab）────────────────────────
 function ChatRoom({ session, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -151,8 +174,6 @@ function ChatRoom({ session, onBack }) {
     setExpandedThinking(prev => ({ ...prev, [i]: !prev[i] }))
   }
 
-  const modelLabels = { opus: 'Opus', sonnet: 'Sonnet', deepseek: 'DS' }
-
   return (
     <div className="chatroom">
       <div className="chatroom-header">
@@ -161,7 +182,6 @@ function ChatRoom({ session, onBack }) {
         </button>
         <div className="chatroom-title">
           <div className="chatroom-name">{session.name || '沐'}</div>
-          <div className="chatroom-model">{modelLabels[model] || model}</div>
         </div>
         <div style={{width: 36}} />
       </div>
@@ -206,8 +226,12 @@ function ChatRoom({ session, onBack }) {
   )
 }
 
-function ChatPage() {
+function ChatPage({ onEnterRoom }) {
   const [openSession, setOpenSession] = useState(null)
+
+  useEffect(() => {
+    onEnterRoom(!!openSession)
+  }, [openSession])
 
   if (openSession) {
     return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
@@ -216,8 +240,9 @@ function ChatPage() {
 }
 // ─── Tab: Calendar ───────────────────────────────────
 function CalendarPage() {
+  const today = new Date()
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDay, setSelectedDay] = useState(null)
+  const [selectedDay, setSelectedDay] = useState(today.getDate())
   const [todos, setTodos] = useState([])
   const [periods, setPeriods] = useState([])
   const [newTodo, setNewTodo] = useState('')
@@ -228,7 +253,6 @@ function CalendarPage() {
   const month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const today = new Date()
 
   useEffect(() => {
     fetch(`${API}/api/todos`).then(r => r.json()).then(data => {
@@ -294,9 +318,12 @@ function CalendarPage() {
     } catch (e) {}
   }
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1))
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
-  const goToday = () => { setCurrentDate(new Date()); setSelectedDay(null) }
+  const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null) }
+  const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null) }
+  const goToday = () => {
+    setCurrentDate(new Date())
+    setSelectedDay(today.getDate())
+  }
 
   const days = ['日', '一', '二', '三', '四', '五', '六']
   const cells = []
@@ -305,15 +332,10 @@ function CalendarPage() {
 
   const isToday = (d) => d === today.getDate() && month === today.getMonth() && year === today.getFullYear()
   const periodSet = new Set(periods.map(p => p.date))
-
   const dateStr = (d) => `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-
   const isPeriod = (d) => d && periodSet.has(dateStr(d))
 
-  const selectedDateStr = selectedDay ? dateStr(selectedDay) : null
-  const selectedLabel = selectedDay
-    ? `${month+1}月${selectedDay}日${isToday(selectedDay) ? ' · 今天' : ''}`
-    : null
+  const selectedDateStr = selectedDay ? `${month+1}月${selectedDay}日${isToday(selectedDay) ? ' · 今天' : ''}` : null
 
   const incompleteTodos = todos.filter(t => !t.done)
   const completedTodos = todos.filter(t => t.done)
@@ -344,7 +366,7 @@ function CalendarPage() {
           {days.map(d => <div key={d} className="cal-head">{d}</div>)}
           {cells.map((d, i) => (
             <div key={i}
-              className={`cal-day ${d ? '' : 'empty'} ${isToday(d) ? 'today' : ''} ${selectedDay === d ? 'selected' : ''} ${isPeriod(d) ? 'period' : ''}`}
+              className={`cal-day ${d ? '' : 'empty'} ${isToday(d) ? 'today' : ''} ${selectedDay === d && !isToday(d) ? 'selected' : ''} ${isPeriod(d) ? 'period' : ''}`}
               onClick={() => d && setSelectedDay(d === selectedDay ? null : d)}>
               {d || ''}
             </div>
@@ -354,8 +376,7 @@ function CalendarPage() {
 
       {selectedDay && (
         <div className="card day-detail">
-          <div className="card-title">{selectedLabel}</div>
-
+          <div className="card-title">{selectedDateStr}</div>
           <div className="period-toggle">
             <span className="period-label">经期</span>
             <button className={`toggle-btn ${isPeriod(selectedDay) ? 'on' : ''}`}
@@ -424,6 +445,11 @@ function TodayPage() {
   const [diaryText, setDiaryText] = useState('')
   const [diaryAuthor, setDiaryAuthor] = useState('her')
   const [filter, setFilter] = useState('all')
+  const [submitting, setSubmitting] = useState(false)
+  const [contextMenu, setContextMenu] = useState(null)
+  const [editingDiary, setEditingDiary] = useState(null)
+  const [editText, setEditText] = useState('')
+  const longPressTimer = useRef(null)
 
   const startDate = new Date('2026-07-27')
   const daysTogether = Math.floor((new Date() - startDate) / (1000 * 60 * 60 * 24))
@@ -438,7 +464,8 @@ function TodayPage() {
   }, [])
 
   const submitDiary = async () => {
-    if (!diaryText.trim()) return
+    if (!diaryText.trim() || submitting) return
+    setSubmitting(true)
     try {
       const res = await fetch(`${API}/api/diaries`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -449,6 +476,39 @@ function TodayPage() {
       setDiaryText('')
       setShowWrite(false)
     } catch (e) {}
+    setSubmitting(false)
+  }
+
+  const deleteDiary = async (id) => {
+    try {
+      await fetch(`${API}/api/diaries/${id}`, { method: 'DELETE' })
+      setDiaries(prev => prev.filter(d => d.id !== id))
+    } catch (e) {}
+    setContextMenu(null)
+  }
+
+  const startEdit = (d) => {
+    setEditingDiary(d.id)
+    setEditText(d.content)
+    setContextMenu(null)
+  }
+
+  const saveEdit = async () => {
+    if (!editText.trim() || !editingDiary) return
+    try {
+      await fetch(`${API}/api/diaries/${editingDiary}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editText.trim() })
+      })
+      setDiaries(prev => prev.map(d => d.id === editingDiary ? { ...d, content: editText.trim() } : d))
+    } catch (e) {}
+    setEditingDiary(null)
+    setEditText('')
+  }
+
+  const handleLongPress = (e, d) => {
+    e.preventDefault()
+    setContextMenu({ id: d.id, diary: d })
   }
 
   const formatDate = (dateStr) => {
@@ -462,11 +522,11 @@ function TodayPage() {
   }
 
   const filteredDiaries = filter === 'all' ? diaries : diaries.filter(d => d.author === filter)
-
+  const showWriteBtn = filter !== 'all'
   const todayTodos = todos.filter(t => !t.done)
 
   return (
-    <div className="today-page">
+    <div className="today-page" onClick={() => contextMenu && setContextMenu(null)}>
       <div className="anniversary-widget glass">
         <div className="anni-label">在 一 起</div>
         <div className="anni-days">{daysTogether}</div>
@@ -491,41 +551,69 @@ function TodayPage() {
 
       <div className="section-header">
         <h2>日记</h2>
-        <button className="icon-btn" onClick={() => setShowWrite(!showWrite)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
       </div>
 
       <div className="diary-filter">
         {[['all','全部'],['her','桦桦'],['mu','沐']].map(([k,v]) => (
-          <button key={k} className={`filter-btn ${filter===k?'active':''}`} onClick={() => setFilter(k)}>{v}</button>
+          <button key={k} className={`filter-btn ${filter===k?'active':''}`}
+            onClick={() => { setFilter(k); setShowWrite(false); setDiaryText('') }}>{v}</button>
         ))}
       </div>
 
-      {showWrite && (
-        <div className="card write-card">
-          <div className="write-tabs">
-            <button className={`write-tab ${diaryAuthor==='her'?'active':''}`} onClick={() => setDiaryAuthor('her')}>桦桦</button>
-            <button className={`write-tab ${diaryAuthor==='mu'?'active':''}`} onClick={() => setDiaryAuthor('mu')}>沐</button>
-          </div>
-          <textarea className="write-area" value={diaryText} onChange={e => setDiaryText(e.target.value)}
-            placeholder={diaryAuthor==='her'?'写点什么...':'沐想说...'} rows={4} />
-          <div className="write-actions">
-            <button className="btn-ghost" onClick={() => {setShowWrite(false);setDiaryText('')}}>取消</button>
-            <button className="btn-primary" onClick={submitDiary} disabled={!diaryText.trim()}>记上</button>
-          </div>
+      {filter !== 'all' && (
+        <div className="write-inline">
+          {editingDiary ? (
+            <div className="card write-card">
+              <textarea className="write-area" value={editText} onChange={e => setEditText(e.target.value)} rows={4} />
+              <div className="write-actions">
+                <button className="btn-ghost" onClick={() => { setEditingDiary(null); setEditText('') }}>取消</button>
+                <button className="btn-primary" onClick={saveEdit} disabled={!editText.trim()}>保存</button>
+              </div>
+            </div>
+          ) : showWrite ? (
+            <div className="card write-card">
+              <textarea className="write-area" value={diaryText}
+                onChange={e => setDiaryText(e.target.value)}
+                placeholder={filter === 'her' ? '写点什么...' : '沐想说...'}
+                rows={4} />
+              <div className="write-actions">
+                <button className="btn-ghost" onClick={() => { setShowWrite(false); setDiaryText('') }}>取消</button>
+                <button className="btn-primary" onClick={submitDiary} disabled={!diaryText.trim() || submitting}>
+                  {submitting ? '...' : '记上'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="write-trigger" onClick={() => { setShowWrite(true); setDiaryAuthor(filter) }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+              <span>写日记</span>
+            </button>
+          )}
         </div>
       )}
 
       <div className="diary-timeline">
         {filteredDiaries.length === 0 && <div className="empty-state">还没有日记</div>}
         {filteredDiaries.map(d => (
-          <div key={d.id} className={`diary-entry ${d.author}`}>
+          <div key={d.id} className={`diary-entry ${d.author}`}
+            onContextMenu={(e) => handleLongPress(e, d)}
+            onTouchStart={() => {
+              longPressTimer.current = setTimeout(() => setContextMenu({ id: d.id, diary: d }), 500)
+            }}
+            onTouchEnd={() => clearTimeout(longPressTimer.current)}
+            onTouchMove={() => clearTimeout(longPressTimer.current)}>
             <div className="diary-meta">
-              <span className="diary-author">{d.author==='her'?'桦桦':'沐'}</span>
+              <span className="diary-author">{d.author === 'her' ? '桦桦' : '沐'}</span>
               <span className="diary-date">{formatDate(d.created_at)} {formatTime(d.created_at)}</span>
             </div>
             <div className="diary-content">{d.content}</div>
+
+            {contextMenu && contextMenu.id === d.id && (
+              <div className="context-menu" onClick={e => e.stopPropagation()}>
+                <button onClick={() => startEdit(d)}>编辑</button>
+                <button className="danger" onClick={() => deleteDiary(d.id)}>删除</button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -561,7 +649,7 @@ function SettingsPage() {
       <div className="card settings-card">
         <div className="setting-item">
           <span>版本</span>
-          <span className="setting-value dim">0.3.0</span>
+          <span className="setting-value dim">0.3.1</span>
         </div>
       </div>
     </div>
@@ -571,6 +659,7 @@ function SettingsPage() {
 // ─── Main App ────────────────────────────────────────
 function App() {
   const [tab, setTab] = useState('chat')
+  const [inRoom, setInRoom] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
 
   useEffect(() => {
@@ -583,6 +672,8 @@ function App() {
     return () => vv.removeEventListener('resize', onResize)
   }, [])
 
+  const showTab = !inRoom && !keyboardOpen
+
   const tabs = [
     { key: 'chat', label: 'Chat', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
     { key: 'calendar', label: '日历', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> },
@@ -593,13 +684,13 @@ function App() {
   return (
     <div className="app">
       <div className="page-container">
-        {tab === 'chat' && <ChatPage />}
+        {tab === 'chat' && <ChatPage onEnterRoom={setInRoom} />}
         {tab === 'calendar' && <CalendarPage />}
         {tab === 'today' && <TodayPage />}
         {tab === 'settings' && <SettingsPage />}
       </div>
 
-      {!keyboardOpen && (
+      {showTab && (
         <nav className="tab-bar">
           {tabs.map(t => (
             <button key={t.key} className={`tab-item ${tab===t.key?'active':''}`}

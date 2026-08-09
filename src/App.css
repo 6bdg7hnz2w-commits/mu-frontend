@@ -457,5 +457,35 @@ html, body, #root {
 .setting-value { font-size: 14px; color: var(--text-secondary); }
 .setting-value.dim { color: var(--text-dim); }
 
+/* 鈹€鈹€鈹€ Context Menu 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+.diary-entry { position: relative; }
+
+.context-menu {
+  position: absolute; right: 12px; top: 12px;
+  background: var(--surface); border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  overflow: hidden; z-index: 50;
+  min-width: 100px;
+}
+.context-menu button {
+  display: block; width: 100%; padding: 10px 16px;
+  border: none; background: none; font-size: 14px;
+  text-align: left; cursor: pointer; color: var(--text);
+}
+.context-menu button:active { background: var(--card); }
+.context-menu button.danger { color: var(--danger); }
+
+/* 鈹€鈹€鈹€ Write Trigger 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+.write-inline { padding: 0 16px 8px; }
+
+.write-trigger {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 12px 16px;
+  background: var(--surface); border: 1px dashed var(--border);
+  border-radius: var(--radius); cursor: pointer;
+  font-size: 14px; color: var(--text-secondary);
+}
+.write-trigger:active { background: var(--card); }
+
 /* 鈹€鈹€鈹€ Scrollbar 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
 ::-webkit-scrollbar { width: 0; }
