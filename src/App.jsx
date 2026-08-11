@@ -3,6 +3,58 @@ import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
 
+// ─── Avatar helpers (localStorage) ──────────────────
+function getAvatar(sessionId) {
+  try { return localStorage.getItem(`avatar_${sessionId}`) } catch(e) { return null }
+}
+function setAvatarStorage(sessionId, dataUrl) {
+  try { if(dataUrl) localStorage.setItem(`avatar_${sessionId}`, dataUrl); else localStorage.removeItem(`avatar_${sessionId}`) } catch(e) {}
+}
+
+// ─── Avatar Upload Modal ────────────────────────────
+function AvatarUploadModal({ sessionId, sessionName, onClose }) {
+  const [preview, setPreview] = useState(getAvatar(sessionId))
+  const handleFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      // Resize to 200x200 to save space
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 200; canvas.height = 200
+        const ctx = canvas.getContext('2d')
+        const size = Math.min(img.width, img.height)
+        const sx = (img.width - size) / 2, sy = (img.height - size) / 2
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, 200, 200)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setAvatarStorage(sessionId, dataUrl)
+        setPreview(dataUrl)
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  const removeAvatar = () => { setAvatarStorage(sessionId, null); setPreview(null) }
+
+  return (
+    <div className="avatar-upload-overlay" onClick={onClose}>
+      <div className="avatar-upload-card" onClick={e=>e.stopPropagation()}>
+        <h3>设置头像</h3>
+        <div className="avatar-preview">
+          {preview ? <img src={preview} alt="" /> : (sessionName||'沐').charAt(0)}
+        </div>
+        <div className="avatar-upload-actions">
+          <label>选择图片<input type="file" accept="image/*" onChange={handleFile}/></label>
+          {preview && <button className="danger" onClick={removeAvatar}>移除头像</button>}
+          <button onClick={onClose}>取消</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Sticker System ─────────────────────────────────
 const STICKERS = [
   { file: 'gaming.png', keywords: ['游戏','玩','play','switch','斗地主'] },
@@ -28,11 +80,24 @@ function pickSticker(text) {
   for (const s of STICKERS) {
     if (s.keywords.length > 0 && s.keywords.some(k => t.includes(k))) return s.file
   }
-  // 20% 的概率随机显示一个
   if (Math.random() < 0.2) {
     return STICKERS[Math.floor(Math.random() * STICKERS.length)].file
   }
   return null
+}
+
+// ─── Model display helpers ──────────────────────────
+// 所有会话统一叫"沐"，模型名显示在副标题
+function getSessionDisplayName() { return '沐' }
+function getModelSubtitle(model) {
+  if (model === 'deepseek') return 'DeepSeek V4 flash'
+  if (model === 'sonnet') return 'Claude Sonnet'
+  return 'Claude Opus'
+}
+function getModelTag(model) {
+  if (model === 'deepseek') return 'DeepSeek'
+  if (model === 'sonnet') return 'Sonnet'
+  return 'Opus'
 }
 
 // ─── Icons ──────────────────────────────────────────
@@ -49,6 +114,7 @@ const I = {
   down: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>,
   calendar: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
   close: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+  editPen: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
 }
 
 // ─── SwipeRow ───────────────────────────────────────
@@ -67,6 +133,14 @@ function SwipeRow({ children, onDelete }) {
   )
 }
 
+// ─── Swipe-back hook for sub-pages ──────────────────
+function useSwipeBack(onBack) {
+  const touchStartX = useRef(0)
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
+  const onTouchEnd = (e) => { const dx = e.changedTouches[0].clientX - touchStartX.current; if (dx > 80 && touchStartX.current < 40) onBack() }
+  return { onTouchStart, onTouchEnd }
+}
+
 // ─── SearchPanel ────────────────────────────────────
 function SearchPanel({ onClose, sessionId }) {
   const [query, setQuery] = useState('')
@@ -74,6 +148,7 @@ function SearchPanel({ onClose, sessionId }) {
   const [searching, setSearching] = useState(false)
   const [tab, setTab] = useState('all')
   const inputRef = useRef(null)
+  const swipe = useSwipeBack(onClose)
   useEffect(() => { inputRef.current?.focus() }, [])
 
   const doSearch = async () => {
@@ -98,7 +173,7 @@ function SearchPanel({ onClose, sessionId }) {
   }
 
   return (
-    <div className="search-panel">
+    <div className="search-panel" {...swipe}>
       <div className="search-header">
         <div className="search-input-row">{I.search}<input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="搜索..."/></div>
         <button className="text-btn" onClick={onClose}>取消</button>
@@ -152,6 +227,7 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   const [lastMessages, setLastMessages] = useState({})
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
+  const [avatarKey, setAvatarKey] = useState(0) // force re-render after avatar change
 
   useEffect(() => {
     setLoading(true)
@@ -165,41 +241,44 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   }, [])
 
   const createSession = async (model) => {
-    const names = { opus:'沐', sonnet:'沐', deepseek:'DeepSeek V4 flash' }
-    const res = await fetch(`${API}/api/sessions`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:names[model]||'新对话',model}) })
+    // 所有会话统一叫"沐"
+    const res = await fetch(`${API}/api/sessions`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:'沐',model}) })
     const session = await res.json()
     setSessions(prev=>[session,...prev])
     onOpen({...session,model})
   }
 
-  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`,{method:'DELETE'}); setSessions(prev=>prev.filter(s=>s.id!==id)) }
+  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`,{method:'DELETE'}); setSessions(prev=>prev.filter(s=>s.id!==id)); setAvatarStorage(id, null) }
   const fmtTime = (t) => { if(!t)return''; const d=new Date(t),now=new Date(); if(d.toDateString()===now.toDateString())return`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; return`${d.getMonth()+1}/${d.getDate()}` }
   const getPreview = (sid) => { const m=lastMessages[sid]; if(!m)return''; const t=m.content||''; return t.length>30?t.slice(0,30)+'...':t }
   const getTime = (s) => fmtTime(lastMessages[s.id]?.created_at||s.updated_at)
-  const getModelTag = (s) => { const m=s.model||'opus'; if(m==='deepseek')return'DeepSeek'; if(m==='sonnet')return'Sonnet'; return'Opus' }
 
   return (
     <div className="chatlist-page">
       <div className="page-header"><h1>Chats</h1><div className="header-actions"><button className="icon-btn" onClick={onOpenSearch}>{I.search}</button><button className="icon-btn" onClick={()=>setShowNew(!showNew)}>{I.plus}</button></div></div>
       {showNew&&(<div className="card new-chat-card"><div className="card-title">新对话</div>
-        {[{key:'opus',label:'沐',desc:'Claude Opus'},{key:'sonnet',label:'沐',desc:'Claude Sonnet'},{key:'deepseek',label:'DeepSeek V4 flash',desc:'DeepSeek Chat'}].map(m=>(
+        {[{key:'opus',label:'沐',desc:'Claude Opus'},{key:'sonnet',label:'沐',desc:'Claude Sonnet'},{key:'deepseek',label:'沐',desc:'DeepSeek V4 flash'}].map(m=>(
           <div key={m.key} className="new-chat-option" onClick={()=>{createSession(m.key);setShowNew(false)}}><div className="new-chat-name">{m.label}</div><div className="new-chat-desc">{m.desc}</div></div>
         ))}
       </div>)}
       <div className="session-list-v2">
         {loading&&<div className="loading-state"><span className="spinner"/>加载中...</div>}
         {!loading&&sessions.length===0&&<div className="empty-state">点 + 开始第一个对话</div>}
-        {!loading&&sessions.map(s=>(
+        {!loading&&sessions.map(s=>{
+          const avatar = getAvatar(s.id)
+          return (
           <SwipeRow key={s.id} onDelete={()=>deleteSession(s.id)}>
             <div className="session-card" onClick={()=>onOpen(s)}>
-              <div className="session-avatar">{(s.name||'沐').charAt(0)}</div>
+              <div className="session-avatar">
+                {avatar ? <img src={avatar} alt="" /> : (s.name||'沐').charAt(0)}
+              </div>
               <div className="session-info">
-                <div className="session-top"><span className="session-name">{s.name||'沐'}</span><span className="session-time">{getTime(s)}</span></div>
-                <div className="session-bottom"><span className="session-preview">{getPreview(s.id)}</span><span className="session-model-tag">{getModelTag(s)}</span></div>
+                <div className="session-top"><span className="session-name">{getSessionDisplayName()}</span><span className="session-time">{getTime(s)}</span></div>
+                <div className="session-bottom"><span className="session-preview">{getPreview(s.id)}</span><span className="session-model-tag">{getModelTag(s.model)}</span></div>
               </div>
             </div>
           </SwipeRow>
-        ))}
+        )})}
       </div>
     </div>
   )
@@ -213,6 +292,8 @@ function ChatRoom({ session, onBack }) {
   const [thinkingText, setThinkingText] = useState(null)
   const [showSearch, setShowSearch] = useState(false)
   const [stickerMap, setStickerMap] = useState({})
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
+  const [avatarVer, setAvatarVer] = useState(0)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
   const model = session.model || 'opus'
@@ -232,7 +313,6 @@ function ChatRoom({ session, onBack }) {
       .then(r=>r.json()).then(data=>{
         if(Array.isArray(data)){
           setMessages(data)
-          // 为每条assistant消息生成sticker
           const map = {}
           data.forEach((m,i)=>{ if(m.role==='assistant') map[i]=pickSticker(m.content) })
           setStickerMap(map)
@@ -266,22 +346,22 @@ function ChatRoom({ session, onBack }) {
   const handleKeyDown = (e) => { if(isMobile)return; if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&e.keyCode!==229){e.preventDefault();sendMessage()} }
   const fmtTime = (t) => { if(!t)return''; const d=new Date(t); return`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}` }
 
-  // 左滑退出
-  const touchStartX = useRef(0)
-  const onPageTS = (e) => { touchStartX.current = e.touches[0].clientX }
-  const onPageTE = (e) => { const dx = e.changedTouches[0].clientX - touchStartX.current; if (dx > 80 && touchStartX.current < 40) onBack() }
+  const swipe = useSwipeBack(onBack)
 
   if (showSearch) return <SearchPanel onClose={()=>setShowSearch(false)} sessionId={session.id}/>
 
-  const modelLabel = model==='deepseek'?'DeepSeek V4 flash':model==='sonnet'?'Sonnet':'Opus'
+  const avatar = getAvatar(session.id)
 
   return (
-    <div className="chatroom" onTouchStart={onPageTS} onTouchEnd={onPageTE}>
+    <div className="chatroom" {...swipe}>
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
+        <div className="chatroom-avatar-wrap" onClick={()=>setShowAvatarUpload(true)}>
+          {avatar ? <img src={avatar} alt="" /> : <span className="avatar-placeholder">{getSessionDisplayName().charAt(0)}</span>}
+        </div>
         <div className="chatroom-title">
-          <div className="chatroom-name">{session.name||'沐'}</div>
-          <div className="chatroom-model">{modelLabel}</div>
+          <div className="chatroom-name">{getSessionDisplayName()}</div>
+          <div className="chatroom-model">{getModelSubtitle(model)}</div>
         </div>
         <button className="icon-btn" onClick={()=>setShowSearch(true)}>{I.search}</button>
       </div>
@@ -322,6 +402,7 @@ function ChatRoom({ session, onBack }) {
       </div>
 
       {thinkingText&&<ThinkingPanel text={thinkingText} onClose={()=>setThinkingText(null)}/>}
+      {showAvatarUpload&&<AvatarUploadModal sessionId={session.id} sessionName={getSessionDisplayName()} onClose={()=>{setShowAvatarUpload(false);setAvatarVer(v=>v+1)}}/>}
     </div>
   )
 }
@@ -374,7 +455,6 @@ function CalendarPage() {
   const periodSet=new Set(periods.map(p=>p.date))
   const isPeriod=(d)=>d&&periodSet.has(mkDate(d))
 
-  // 哪些日期有未完成待办
   const todoDateSet = new Set(todos.filter(t=>!t.done&&t.due_time).map(t=>t.due_time.slice(0,10)))
   const hasTodo=(d)=>d&&todoDateSet.has(mkDate(d))
 
@@ -531,20 +611,24 @@ function TodayPage() {
 // ─── SettingsPage ───────────────────────────────────
 function SettingsPage() {
   const [subPage, setSubPage] = useState(null)
+  const swipe = useSwipeBack(()=>setSubPage(null))
 
   if (subPage === 'mcp') return (
-    <div className="settings-page"><div className="page-header"><button className="icon-btn" onClick={()=>setSubPage(null)}>{I.back}</button><h1>MCP 连接</h1></div>
+    <div className="settings-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={()=>setSubPage(null)}>{I.back}</button><h1>MCP 连接</h1></div>
       <div className="card"><div className="empty-state-sm">暂无已连接的 MCP 服务</div></div>
       <div className="card settings-card">
         <div className="setting-item"><span>HealthKit</span><span className="setting-value dim">待接入</span></div>
         <div className="setting-item"><span>Apple Calendar</span><span className="setting-value dim">待接入</span></div>
         <div className="setting-item"><span>Reminders</span><span className="setting-value dim">待接入</span></div>
+        <div className="setting-item"><span>ElevenLabs TTS</span><span className="setting-value dim">待接入</span></div>
       </div>
     </div>
   )
 
   if (subPage === 'skin') return (
-    <div className="settings-page"><div className="page-header"><button className="icon-btn" onClick={()=>setSubPage(null)}>{I.back}</button><h1>皮肤</h1></div>
+    <div className="settings-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={()=>setSubPage(null)}>{I.back}</button><h1>皮肤</h1></div>
       <div className="card settings-card">
         <div className="setting-item"><span>Claude (当前)</span><span className="setting-value">✓</span></div>
         <div className="setting-item"><span>旧绿粉配色</span><span className="setting-value dim">即将推出</span></div>

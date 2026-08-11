@@ -22,15 +22,19 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .section-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px}.section-header h2{font-size:20px;font-weight:700;letter-spacing:-0.3px}.header-actions{display:flex;align-items:center;gap:4px}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:90}
 
-/* Swipe */
-.swipe-container{position:relative;overflow:hidden}.swipe-delete{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;cursor:pointer}.swipe-content{position:relative;background:var(--bg);z-index:1}
+/* Swipe 鈥� delete bg matches card radius */
+.swipe-container{position:relative;overflow:hidden;border-radius:14px;margin-bottom:8px}
+.swipe-delete{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;cursor:pointer}
+.swipe-content{position:relative;background:var(--bg);z-index:1}
 
 /* Chat List */
 .chatlist-page{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .new-chat-card{margin-top:4px}.new-chat-option{padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}.new-chat-option:last-child{border-bottom:none}.new-chat-option:active{opacity:.6}.new-chat-name{font-size:15px;font-weight:600}.new-chat-desc{font-size:13px;color:var(--text-secondary);margin-top:2px}
 .session-list-v2{padding:0 16px}
-.session-card{display:flex;align-items:center;gap:12px;padding:14px 12px;margin-bottom:8px;background:var(--surface);border-radius:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04)}.session-card:active{opacity:.7}
-.session-avatar{width:44px;height:44px;border-radius:12px;background:var(--card);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;flex-shrink:0}
+/* session-card margin-bottom moved to swipe-container */
+.session-card{display:flex;align-items:center;gap:12px;padding:14px 12px;background:var(--surface);border-radius:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04)}.session-card:active{opacity:.7}
+.session-avatar{width:44px;height:44px;border-radius:12px;background:var(--card);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;flex-shrink:0;overflow:hidden;position:relative}
+.session-avatar img{width:100%;height:100%;object-fit:cover}
 .session-info{flex:1;min-width:0}.session-top{display:flex;justify-content:space-between;align-items:center}.session-name{font-size:15px;font-weight:600}.session-time{font-size:12px;color:var(--text-dim)}
 .session-bottom{display:flex;align-items:center;gap:6px;margin-top:2px}.session-preview{flex:1;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-model-tag{font-size:10px;color:var(--text-dim);background:var(--card);padding:1px 6px;border-radius:4px;flex-shrink:0}
 
@@ -42,6 +46,13 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 /* Chat Room */
 .chatroom{height:100%;display:flex;flex-direction:column}.chatroom-header{display:flex;align-items:center;padding:12px 12px 8px;gap:8px;background:var(--bg)}.chatroom-title{flex:1;text-align:center}.chatroom-name{font-size:16px;font-weight:600}.chatroom-model{font-size:11px;color:var(--text-dim)}
+/* Avatar in chatroom header */
+.chatroom-avatar-wrap{width:32px;height:32px;border-radius:10px;overflow:hidden;background:var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;position:relative}
+.chatroom-avatar-wrap img{width:100%;height:100%;object-fit:cover}
+.chatroom-avatar-wrap .avatar-placeholder{font-size:14px;font-weight:600;color:var(--text)}
+.chatroom-avatar-edit{position:absolute;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s}
+.chatroom-avatar-wrap:active .chatroom-avatar-edit{opacity:1}
+
 .messages{flex:1;overflow-y:auto;padding:8px 16px;-webkit-overflow-scrolling:touch}
 .msg{display:flex;flex-direction:column;margin-bottom:8px}.msg.user{align-items:flex-end}.msg.assistant{align-items:flex-start}
 .bubble-row{display:flex;align-items:flex-end;gap:4px}
@@ -103,7 +114,23 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .diary-cards{padding:0 16px;display:flex;flex-direction:column;gap:8px}.diary-card-item{padding:14px 16px;border-radius:12px;position:relative;cursor:pointer}.diary-card-item.her{background:var(--her-bg)}.diary-card-item.mu{background:var(--mu-bg)}.diary-card-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px}.diary-card-date{font-size:13px;font-weight:600;color:var(--text)}.diary-card-time{font-size:11px;color:var(--text-dim)}.diary-card-content{font-size:14px;line-height:1.5;color:var(--text-secondary)}
 
 .settings-page{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:20px}.settings-card{padding:0;overflow:hidden}.settings-card+.settings-card{margin-top:0}
-.setting-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--border)}.setting-item:last-child{border-bottom:none}.setting-item:active{background:var(--card)}.setting-value{font-size:14px;color:var(--text-secondary)}.setting-value.dim{color:var(--text-dim)}
+.setting-item{display:flex;align-items:center;padding:14px 16px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--border);gap:8px}.setting-item:last-child{border-bottom:none}.setting-item:active{background:var(--card)}
+.setting-item span:first-child{flex:1}
+.setting-value{font-size:14px;color:var(--text-secondary);flex-shrink:0}.setting-value.dim{color:var(--text-dim)}
 
 .context-menu{position:absolute;right:12px;top:12px;background:var(--surface);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);overflow:hidden;z-index:50;min-width:100px}.context-menu button{display:block;width:100%;padding:10px 16px;border:none;background:none;font-size:14px;text-align:left;cursor:pointer;color:var(--text)}.context-menu button:active{background:var(--card)}.context-menu button.danger{color:var(--danger)}
+
+/* Avatar upload overlay */
+.avatar-upload-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center}
+.avatar-upload-card{background:var(--surface);border-radius:var(--radius);padding:24px;width:280px;text-align:center}
+.avatar-upload-card h3{font-size:17px;font-weight:600;margin-bottom:16px}
+.avatar-preview{width:80px;height:80px;border-radius:20px;margin:0 auto 16px;background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:28px;font-weight:600;color:var(--text)}
+.avatar-preview img{width:100%;height:100%;object-fit:cover}
+.avatar-upload-actions{display:flex;flex-direction:column;gap:8px}
+.avatar-upload-actions label{padding:10px;background:var(--text);color:#fff;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer}
+.avatar-upload-actions label:active{opacity:.8}
+.avatar-upload-actions label input{display:none}
+.avatar-upload-actions button{padding:10px;border:none;background:none;font-size:14px;color:var(--text-secondary);cursor:pointer}
+.avatar-upload-actions button.danger{color:var(--danger)}
+
 ::-webkit-scrollbar{width:0}
