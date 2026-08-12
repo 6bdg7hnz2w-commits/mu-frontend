@@ -4,14 +4,6 @@ import './App.css'
 const API = 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
 
-// ─── Avatar helpers (localStorage) ──────────────────
-function getAvatar(sessionId) {
-  try { return localStorage.getItem(`avatar_${sessionId}`) } catch { return null }
-}
-function setAvatarStorage(sessionId, dataUrl) {
-  try { if (dataUrl) localStorage.setItem(`avatar_${sessionId}`, dataUrl); else localStorage.removeItem(`avatar_${sessionId}`) } catch {}
-}
-
 // ─── Draft helpers ──────────────────────────────────
 function getDraft(sessionId) {
   try { return localStorage.getItem(`draft_${sessionId}`) || '' } catch { return '' }
@@ -34,8 +26,36 @@ function getDefaultDates() {
   return [
     { id: 'd1', name: '桦桦\'s Birthday', date: '2026-11-19', emoji: '🎂', recurring: 'yearly' },
     { id: 'd2', name: 'Anniversary', date: '2026-07-27', emoji: '💕', recurring: 'yearly' },
-    { id: 'd3', name: 'First Day of School', date: '2026-09-01', emoji: '🎓', recurring: false },
+    { id: 'd3', name: 'First Day of School', date: '2026-08-30', emoji: '🎓', recurring: false },
   ]
+}
+
+// ─── Period prediction ──────────────────────────────
+// Given recorded period dates, estimate the next cycle's dates using average cycle length
+function predictNextPeriod(periods) {
+  if (!periods || periods.length < 2) return []
+  const dates = periods.map(p => new Date(p.date)).sort((a, b) => a - b)
+  // Group consecutive dates into "cycles" (start dates = date gaps > 1 day from previous)
+  const starts = []
+  let prevDate = null
+  dates.forEach(d => {
+    if (!prevDate || (d - prevDate) / 86400000 > 1) starts.push(d)
+    prevDate = d
+  })
+  if (starts.length < 2) return []
+  const gaps = []
+  for (let i = 1; i < starts.length; i++) gaps.push((starts[i] - starts[i - 1]) / 86400000)
+  const avgCycle = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)
+  if (avgCycle < 20 || avgCycle > 45) return [] // sanity check
+  const lastStart = starts[starts.length - 1]
+  const nextStart = new Date(lastStart.getTime() + avgCycle * 86400000)
+  // Predict a 5-day window
+  const predicted = []
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(nextStart.getTime() + i * 86400000)
+    predicted.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+  }
+  return predicted
 }
 
 // ─── Extended thinking preference (per session) ─────
@@ -48,21 +68,42 @@ function setExtendedThinkingStorage(sessionId, val) {
 
 // ─── Sticker System ─────────────────────────────────
 const STICKERS = [
-  { file: 'gaming.png', keywords: ['游戏','玩','play','switch','斗地主'] },
-  { file: 'cooking.png', keywords: ['做饭','煮','炒','厨','吃','饭','菜','煎蛋'] },
-  { file: 'coding.png', keywords: ['代码','code','bug','写代码','开发','编程'] },
-  { file: 'reading.png', keywords: ['读','书','看书','学','read'] },
-  { file: 'music.png', keywords: ['音乐','歌','听','唱','song','music'] },
-  { file: 'groceries.png', keywords: ['买','超市','菜','购物'] },
-  { file: 'brushing.png', keywords: ['刷牙','早上','起床','洗'] },
-  { file: 'watering.png', keywords: ['浇花','花','植物','养'] },
-  { file: 'sleeping.png', keywords: ['睡','晚安','困','休息','累','夜'] },
-  { file: 'laundry.png', keywords: ['洗衣','衣服','叠'] },
-  { file: 'painting.png', keywords: ['画','art','设计','design'] },
-  { file: 'selfie.png', keywords: ['照片','拍','自拍','photo'] },
-  { file: 'default1.png', keywords: [] },
-  { file: 'default2.png', keywords: [] },
-  { file: 'default3.png', keywords: [] },
+  { file: 'guitar.png', keywords: ['吉他','弹琴','弹唱'] },
+  { file: 'cello.png', keywords: ['大提琴','拉琴'] },
+  { file: 'rockstar.png', keywords: ['摇滚','唱歌','音乐','嗨'] },
+  { file: 'headphones-calm1.png', keywords: ['听歌','耳机','音乐','放松'] },
+  { file: 'reading-book.png', keywords: ['读','书','看书','学习','read'] },
+  { file: 'watering-plant.png', keywords: ['浇花','花','植物','养'] },
+  { file: 'detective.png', keywords: ['查','侦探','找','调查','分析'] },
+  { file: 'lightbulb-idea.png', keywords: ['想法','点子','灵感','idea','主意'] },
+  { file: 'wizard-magic.png', keywords: ['魔法','神奇','厉害','变'] },
+  { file: 'racing.png', keywords: ['赛车','开车','快','冲'] },
+  { file: 'skateboard.png', keywords: ['滑板','酷'] },
+  { file: 'surfboard.png', keywords: ['冲浪','海','水'] },
+  { file: 'sailboat.png', keywords: ['船','航行','远方','旅行'] },
+  { file: 'kite-flying.png', keywords: ['风筝','放风筝','天空'] },
+  { file: 'diving.png', keywords: ['潜水','游泳'] },
+  { file: 'snow-hood.png', keywords: ['冷','雪','冬天'] },
+  { file: 'ballet.png', keywords: ['跳舞','芭蕾','舞蹈'] },
+  { file: 'soccer.png', keywords: ['足球','运动','踢球'] },
+  { file: 'hardhat-work.png', keywords: ['工作','上班','干活','忙','累'] },
+  { file: 'love-ears.png', keywords: ['爱你','喜欢你','想你','爱心'] },
+  { file: 'love-heart-up.png', keywords: ['爱','心动','喜欢'] },
+  { file: 'fireworks-sparkle.png', keywords: ['庆祝','生日','烟花','开心'] },
+  { file: 'sparkle-surprise.png', keywords: ['惊喜','哇','天呐'] },
+  { file: 'cowboy-talk.png', keywords: ['说','聊','讲'] },
+  { file: 'speech-bubble.png', keywords: ['说话','聊天'] },
+  { file: 'glasses-smile.png', keywords: ['笑','开心','哈哈'] },
+  { file: 'closed-eyes-blush.png', keywords: ['害羞','脸红','不好意思'] },
+  { file: 'grumpy-blush.png', keywords: ['生气','哼','不高兴','委屈'] },
+  { file: 'wink-mischief1.png', keywords: ['调皮','坏笑','嘿嘿'] },
+  { file: 'curious-look.png', keywords: ['好奇','疑惑','？','什么'] },
+  { file: 'thought-circle.png', keywords: ['想','思考','琢磨'] },
+  { file: 'swirl-eyes.png', keywords: ['晕','困惑','头晕'] },
+  { file: 'big-face.png', keywords: [] },
+  { file: 'tail-drag.png', keywords: ['累','拖','没力气'] },
+  { file: 'antenna-cable.png', keywords: [] },
+  { file: 'tiny-default.png', keywords: [] },
 ]
 
 function pickSticker(text) {
@@ -71,7 +112,7 @@ function pickSticker(text) {
   for (const s of STICKERS) {
     if (s.keywords.length > 0 && s.keywords.some(k => t.includes(k))) return s.file
   }
-  if (Math.random() < 0.2) return STICKERS[Math.floor(Math.random() * STICKERS.length)].file
+  if (Math.random() < 0.15) return STICKERS[Math.floor(Math.random() * STICKERS.length)].file
   return null
 }
 
@@ -81,13 +122,9 @@ function getModelSubtitle(model) {
   if (model === 'sonnet') return 'Claude Sonnet'
   return 'Claude Opus'
 }
-function getModelTag(model) {
+function getModelDisplayName(model) {
   if (model === 'deepseek') return 'DeepSeek'
   return 'Claude'
-}
-function getDefaultAvLetter(model) {
-  if (model === 'deepseek') return 'D'
-  return '沐'
 }
 
 // ─── Date helpers ───────────────────────────────────
@@ -139,44 +176,16 @@ function useSwipeBack(onBack) {
   return { onTouchStart, onTouchEnd }
 }
 
-// ─── AvatarUploadModal ──────────────────────────────
-function AvatarUploadModal({ sessionId, onClose }) {
-  const [preview, setPreview] = useState(getAvatar(sessionId))
-  const handleFile = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 200; canvas.height = 200
-        const ctx = canvas.getContext('2d')
-        const size = Math.min(img.width, img.height)
-        const sx = (img.width - size) / 2, sy = (img.height - size) / 2
-        ctx.drawImage(img, sx, sy, size, size, 0, 0, 200, 200)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-        setAvatarStorage(sessionId, dataUrl)
-        setPreview(dataUrl)
-      }
-      img.src = ev.target.result
-    }
-    reader.readAsDataURL(file)
-  }
-  const removeAvatar = () => { setAvatarStorage(sessionId, null); setPreview(null) }
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={e => e.stopPropagation()}>
-        <h3>Set Avatar</h3>
-        <div className="avatar-preview-lg">{preview ? <img src={preview} alt="" /> : '沐'}</div>
-        <div className="modal-actions-col">
-          <label className="btn-primary-full">Choose Image<input type="file" accept="image/*" onChange={handleFile} hidden /></label>
-          {preview && <button className="btn-danger-text" onClick={removeAvatar}>Remove</button>}
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
+// ─── Global focus-based keyboard/tab-bar visibility ──
+// Using focusin/focusout is far more reliable than visualViewport across webviews
+function useKeyboardOpen(setKeyboardOpen) {
+  useEffect(() => {
+    const onFocusIn = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setKeyboardOpen(true) }
+    const onFocusOut = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setTimeout(() => setKeyboardOpen(false), 50) }
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
+    return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
+  }, [setKeyboardOpen])
 }
 
 // ─── AddDateModal ───────────────────────────────────
@@ -192,11 +201,38 @@ function AddDateModal({ onClose, onSave }) {
         <input className="modal-input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <input className="modal-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
         <div className="emoji-picker-row">
-          {['📌', '🎂', '💕', '🎓', '✈️', '🎄', '🏆'].map(em => (
+          {['📌', '🎂', '💕', '🎓', '✈️', '🎄', '🏆', '📝', '💻'].map(em => (
             <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
           ))}
         </div>
         <div className="modal-actions-row">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={save} disabled={!name.trim() || !date}>Save</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EditDateModal (for editing existing important dates) ──
+function EditDateModal({ item, onClose, onSave, onDelete }) {
+  const [name, setName] = useState(item.name)
+  const [date, setDate] = useState(item.date)
+  const [emoji, setEmoji] = useState(item.emoji || '📌')
+  const save = () => { if (!name.trim() || !date) return; onSave({ ...item, name: name.trim(), date, emoji }); onClose() }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <h3>Edit Date</h3>
+        <input className="modal-input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
+        <input className="modal-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <div className="emoji-picker-row">
+          {['📌', '🎂', '💕', '🎓', '✈️', '🎄', '🏆', '📝', '💻'].map(em => (
+            <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
+          ))}
+        </div>
+        <div className="modal-actions-row">
+          <button className="btn-danger-text" onClick={() => { onDelete(item.id); onClose() }}>Delete</button>
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={save} disabled={!name.trim() || !date}>Save</button>
         </div>
@@ -242,13 +278,13 @@ function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
       if (sessionId) {
         const res = await fetch(`${API}/api/sessions/${sessionId}/messages`)
         const msgs = await res.json()
-        if (Array.isArray(msgs)) setResults(msgs.filter(m => m.content && m.content.toLowerCase().includes(query.toLowerCase())).slice(0, 50).map((m, _, __, idx) => ({ ...m, sessionName: '', _idx: msgs.indexOf(m) })))
+        if (Array.isArray(msgs)) setResults(msgs.filter(m => m.content && m.content.toLowerCase().includes(query.toLowerCase())).slice(0, 50).map((m) => ({ ...m, sessionName: '', _idx: msgs.indexOf(m) })))
       } else {
         const sessRes = await fetch(`${API}/api/sessions`); const sessions = await sessRes.json()
         if (!Array.isArray(sessions)) { setSearching(false); return }
         const found = []
         for (const s of sessions.slice(0, 20)) {
-          try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: s.name, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
+          try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelDisplayName(s.model), sessionId: s.id, _idx: i, _session: s }) }) } catch {}
         }
         setResults(found.slice(0, 50))
       }
@@ -307,7 +343,7 @@ function ChatListPage({ onOpen, onOpenSearch }) {
     onOpen({ ...session, model })
   }
 
-  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)); setAvatarStorage(id, null) }
+  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)) }
 
   const getPreview = (sid) => {
     const draft = getDraft(sid)
@@ -321,7 +357,7 @@ function ChatListPage({ onOpen, onOpenSearch }) {
     <div className="chatlist-page">
       <div className="page-header"><h1>Chats</h1><div className="header-actions"><button className="icon-btn" onClick={onOpenSearch}>{I.search}</button><button className="icon-btn" onClick={() => setShowNew(!showNew)}>{I.plus}</button></div></div>
       {showNew && (<div className="card new-chat-card"><div className="card-title">New Chat</div>
-        {[{ key: 'opus', label: '沐', desc: 'Claude Opus' }, { key: 'sonnet', label: '沐', desc: 'Claude Sonnet' }, { key: 'deepseek', label: '沐', desc: 'DeepSeek V4 flash' }].map(m => (
+        {[{ key: 'opus', label: 'Claude Opus', desc: 'Most capable' }, { key: 'sonnet', label: 'Claude Sonnet', desc: 'Balanced' }, { key: 'deepseek', label: 'DeepSeek V4 flash', desc: 'Fast' }].map(m => (
           <div key={m.key} className="new-chat-option" onClick={() => { createSession(m.key); setShowNew(false) }}><div className="new-chat-name">{m.label}</div><div className="new-chat-desc">{m.desc}</div></div>
         ))}
       </div>)}
@@ -329,15 +365,14 @@ function ChatListPage({ onOpen, onOpenSearch }) {
         {loading && <div className="loading-state"><span className="spinner" />Loading...</div>}
         {!loading && sessions.length === 0 && <div className="empty-state">Tap + to start your first chat</div>}
         {!loading && sessions.map(s => {
-          const avatar = getAvatar(s.id)
           const draft = hasDraft(s.id)
           return (
             <SwipeRow key={s.id} onDelete={() => deleteSession(s.id)}>
               <div className="session-card" onClick={() => onOpen(s)}>
-                <div className="session-avatar">{avatar ? <img src={avatar} alt="" /> : getDefaultAvLetter(s.model)}</div>
+                <div className="session-avatar">沐</div>
                 <div className="session-info">
                   <div className="session-top"><span className="session-name">沐</span><span className="session-time">{getTime(s)}</span></div>
-                  <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{getPreview(s.id)}</span><span className="session-model-tag">{getModelTag(s.model)}</span></div>
+                  <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{getPreview(s.id)}</span><span className="session-model-tag">{getModelDisplayName(s.model)}</span></div>
                 </div>
               </div>
             </SwipeRow>
@@ -356,7 +391,6 @@ function ChatRoom({ session, onBack }) {
   const [thinkingText, setThinkingText] = useState(null)
   const [showSearch, setShowSearch] = useState(false)
   const [stickerMap, setStickerMap] = useState({})
-  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
   const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
   const [showSettings, setShowSettings] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
@@ -443,10 +477,6 @@ function ChatRoom({ session, onBack }) {
             <span>Extended Thinking</span>
             <div className={`toggle-btn-sm ${extThinking ? 'on' : ''}`}><div className="toggle-knob-sm" /></div>
           </div>
-          <div className="dropdown-item" onClick={() => { setShowAvatarUpload(true); setShowSettings(false) }}>
-            <span>Set Avatar</span>
-            {I.upload}
-          </div>
         </div>
       )}
 
@@ -460,10 +490,7 @@ function ChatRoom({ session, onBack }) {
                 <span>Thought process</span>
               </div>
             )}
-            <div className="bubble-row">
-              {m.role === 'assistant' && stickerMap[i] && <img className="sticker" src={`/stickers/${stickerMap[i]}`} alt="" />}
-              <div className="bubble">{m.content}</div>
-            </div>
+            <div className="bubble">{m.content}</div>
             <div className="msg-time">{fmtShortTime(m.created_at)}</div>
           </div>
         ))}
@@ -484,7 +511,6 @@ function ChatRoom({ session, onBack }) {
       </div>
 
       {thinkingText && <ThinkingPanel text={thinkingText} onClose={() => setThinkingText(null)} />}
-      {showAvatarUpload && <AvatarUploadModal sessionId={session.id} onClose={() => setShowAvatarUpload(false)} />}
     </div>
   )
 }
@@ -493,17 +519,15 @@ function ChatRoom({ session, onBack }) {
 function ChatPage({ onEnterRoom }) {
   const [openSession, setOpenSession] = useState(null)
   const [showSearch, setShowSearch] = useState(false)
-  const [jumpTarget, setJumpTarget] = useState(null)
   useEffect(() => { onEnterRoom(!!openSession || showSearch) }, [openSession, showSearch])
 
-  const handleSearchJump = (session, idx, msgId) => {
+  const handleSearchJump = (session) => {
     setShowSearch(false)
-    setJumpTarget({ idx, msgId })
     setOpenSession(session)
   }
 
   if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} onJumpToMessage={handleSearchJump} />
-  if (openSession) return <ChatRoom session={openSession} onBack={() => { setOpenSession(null); setJumpTarget(null) }} />
+  if (openSession) return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
   return <ChatListPage onOpen={setOpenSession} onOpenSearch={() => setShowSearch(true)} />
 }
 
@@ -518,6 +542,8 @@ function CalendarPage() {
   const [editMode, setEditMode] = useState(false)
   const [selectedTodos, setSelectedTodos] = useState(new Set())
   const [importantDates, setImportantDates] = useState(getImportantDates())
+  const [showAddDate, setShowAddDate] = useState(false)
+  const [editingDate, setEditingDate] = useState(null)
 
   const year = currentDate.getFullYear(), month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -538,47 +564,72 @@ function CalendarPage() {
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null) }
   const goToday = () => { setCurrentDate(new Date()); setSelectedDay(today.getDate()) }
 
+  const addImportantDate = (d) => { const nd = [...importantDates, d]; setImportantDates(nd); saveImportantDates(nd) }
+  const updateImportantDate = (updated) => { const nd = importantDates.map(d => d.id === updated.id ? updated : d); setImportantDates(nd); saveImportantDates(nd) }
+  const deleteImportantDate = (id) => { const nd = importantDates.filter(d => d.id !== id); setImportantDates(nd); saveImportantDates(nd) }
+
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
   const cells = []; for (let i = 0; i < firstDay; i++) cells.push(null); for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
   const isToday = (d) => d === today.getDate() && month === today.getMonth() && year === today.getFullYear()
   const periodSet = new Set(periods.map(p => p.date))
   const isPeriod = (d) => d && periodSet.has(mkDate(d))
+  const predictedDates = predictNextPeriod(periods)
+  const predictedSet = new Set(predictedDates)
+  const isPredicted = (d) => d && predictedSet.has(mkDate(d))
   const todoDateSet = new Set(todos.filter(t => !t.done && t.due_time).map(t => t.due_time.slice(0, 10)))
   const hasTodo = (d) => d && todoDateSet.has(mkDate(d))
 
   // Important dates — check if any fall on day d of current month/year
-  const importantDateSet = new Set()
-  importantDates.forEach(id => {
-    const dd = new Date(id.date)
-    if (id.recurring === 'yearly') {
-      if (dd.getMonth() === month) importantDateSet.add(dd.getDate())
-    } else {
-      if (dd.getMonth() === month && dd.getFullYear() === year) importantDateSet.add(dd.getDate())
-    }
+  const importantByDay = {}
+  importantDates.forEach(idate => {
+    const dd = new Date(idate.date)
+    let showDay = null
+    if (idate.recurring === 'yearly') { if (dd.getMonth() === month) showDay = dd.getDate() }
+    else { if (dd.getMonth() === month && dd.getFullYear() === year) showDay = dd.getDate() }
+    if (showDay) { if (!importantByDay[showDay]) importantByDay[showDay] = []; importantByDay[showDay].push(idate) }
   })
-  const isImportant = (d) => d && importantDateSet.has(d)
+  const isImportant = (d) => d && importantByDay[d] && importantByDay[d].length > 0
 
   const selectedDateStr = selectedDay ? `${month + 1}/${selectedDay}${isToday(selectedDay) ? ' · Today' : ''}` : null
   const selDateStr = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10)
   const dayTodos = todos.filter(t => { if (!t.due_time) return selectedDay && isToday(selectedDay); return t.due_time.startsWith(selDateStr) })
   const incompleteTodos = dayTodos.filter(t => !t.done), completedTodos = dayTodos.filter(t => t.done)
+  const selectedDayImportantDates = selectedDay && importantByDay[selectedDay] ? importantByDay[selectedDay] : []
 
   return (
     <div className="calendar-page">
-      <div className="page-header"><div><h1>Calendar</h1><div className="page-subtitle">{year}</div></div><div className="header-actions"><button className="text-btn" onClick={goToday}>Today</button></div></div>
+      <div className="page-header"><div><h1>Calendar</h1><div className="page-subtitle">{year}</div></div><div className="header-actions"><button className="text-btn" onClick={goToday}>Today</button><button className="icon-btn" onClick={() => setShowAddDate(true)}>{I.plus}</button></div></div>
       <div className="card cal-card">
         <div className="cal-nav"><button className="icon-btn small" onClick={prevMonth}>{I.back}</button><span className="cal-month">{['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month]} {year}</span><button className="icon-btn small" onClick={nextMonth}>{I.chevron}</button></div>
         <div className="cal-grid">
           {dayLabels.map((d, i) => <div key={i} className="cal-head">{d}</div>)}
           {cells.map((d, i) => (
-            <div key={i} className={`cal-day ${d ? '' : 'empty'} ${isToday(d) ? 'today' : ''} ${selectedDay === d && !isToday(d) ? 'selected' : ''} ${isPeriod(d) ? 'period' : ''} ${hasTodo(d) && !isToday(d) ? 'has-todo' : ''}`} onClick={() => d && setSelectedDay(d)}>
+            <div key={i} className={`cal-day ${d ? '' : 'empty'} ${isToday(d) ? 'today' : ''} ${selectedDay === d && !isToday(d) ? 'selected' : ''} ${isPeriod(d) ? 'period' : ''} ${isPredicted(d) && !isPeriod(d) ? 'predicted-period' : ''} ${hasTodo(d) && !isToday(d) ? 'has-todo' : ''}`} onClick={() => d && setSelectedDay(d)}>
               {d || ''}
               {isImportant(d) && <div className="cal-important-dot" />}
             </div>
           ))}
         </div>
+        <div className="cal-legend">
+          <div className="legend-item"><span className="legend-dot period-legend" />Period</div>
+          <div className="legend-item"><span className="legend-dot predicted-legend" />Predicted</div>
+          <div className="legend-item"><span className="legend-dot todo-legend" />Todo</div>
+          <div className="legend-item"><span className="legend-dot important-legend" />Important</div>
+        </div>
       </div>
+
+      {selectedDay && selectedDayImportantDates.length > 0 && (
+        <div className="card important-day-card">
+          <div className="card-title">Important Dates</div>
+          {selectedDayImportantDates.map(idate => (
+            <div key={idate.id} className="important-day-item" onTouchStart={() => { const timer = setTimeout(() => setEditingDate(idate), 500); const clear = () => { clearTimeout(timer); document.removeEventListener('touchend', clear) }; document.addEventListener('touchend', clear) }} onContextMenu={e => { e.preventDefault(); setEditingDate(idate) }}>
+              <span className="important-day-emoji">{idate.emoji}</span>
+              <span className="important-day-name">{idate.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card todo-card">
         <div className="todo-header"><div className="card-title">Todos {selectedDateStr && <span className="todo-date-hint">{selectedDateStr}</span>}</div>
@@ -593,6 +644,9 @@ function CalendarPage() {
       </div>
 
       {selectedDay && <div className="card day-detail"><div className="period-toggle"><span className="period-label">Period</span><button className={`toggle-btn ${isPeriod(selectedDay) ? 'on' : ''}`} onClick={() => togglePeriod(mkDate(selectedDay))}><div className="toggle-knob" /></button></div></div>}
+
+      {showAddDate && <AddDateModal onClose={() => setShowAddDate(false)} onSave={addImportantDate} />}
+      {editingDate && <EditDateModal item={editingDate} onClose={() => setEditingDate(null)} onSave={updateImportantDate} onDelete={deleteImportantDate} />}
     </div>
   )
 }
@@ -610,7 +664,6 @@ function TodayPage() {
   const [diaryDateFilter, setDiaryDateFilter] = useState(new Date().toISOString().slice(0, 10))
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [importantDates, setImportantDates] = useState(getImportantDates())
-  const [showAddDate, setShowAddDate] = useState(false)
   const longPressTimer = useRef(null)
 
   const now = new Date()
@@ -635,8 +688,8 @@ function TodayPage() {
   ]
   const todayWhisper = WHISPERS[daysTogether % WHISPERS.length]
 
-  // Next important date countdown
-  const getNextCountdowns = () => {
+  // Get all upcoming countdowns (dates + milestones), sorted
+  const getAllCountdowns = () => {
     const results = []
     const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
     importantDates.forEach(d => {
@@ -646,30 +699,30 @@ function TodayPage() {
         if (targetDate.getTime() < todayMs) targetDate = new Date(now.getFullYear() + 1, targetDate.getMonth(), targetDate.getDate())
       }
       const days = daysBetween(now, targetDate)
-      if (days >= 0) results.push({ ...d, daysLeft: days, targetDate })
+      if (days >= 0) results.push({ ...d, daysLeft: days, targetDate, isMonthly: false })
     })
-    // Add milestone anniversaries
     const milestones = [50, 100, 200, 365, 500, 730, 1000]
     milestones.forEach(m => {
       const target = new Date(START_DATE.getTime() + m * 86400000)
       const days = daysBetween(now, target)
-      if (days > 0 && days <= 365) results.push({ id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', daysLeft: days, targetDate: target })
+      if (days > 0 && days <= 400) results.push({ id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', daysLeft: days, targetDate: target, isMonthly: false })
     })
-    return results.sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 3)
-  }
-
-  // Monthly anniversary
-  const getMonthlyAnniversary = () => {
+    // Monthly anniversary
     const startDay = START_DATE.getDate()
     let nextMonth = new Date(now.getFullYear(), now.getMonth(), startDay)
     if (nextMonth <= now) nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, startDay)
-    const daysLeft = daysBetween(now, nextMonth)
-    const monthDate = `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][nextMonth.getMonth()]} ${startDay}`
-    return { daysLeft, monthDate }
+    const monthlyDays = daysBetween(now, nextMonth)
+    results.push({ id: 'monthly', name: 'Monthly Anniversary', emoji: '💗', daysLeft: monthlyDays, targetDate: nextMonth, isMonthly: true })
+    return results.sort((a, b) => a.daysLeft - b.daysLeft)
   }
 
-  const countdowns = getNextCountdowns()
-  const monthly = getMonthlyAnniversary()
+  const allCountdowns = getAllCountdowns()
+  // Top one shown in the ring — prefer monthly if it's the soonest, otherwise soonest overall
+  const topCountdown = allCountdowns[0]
+  // Next 2 countdowns excluding the one shown at top
+  const remainingCountdowns = allCountdowns.filter(c => c.id !== topCountdown?.id).slice(0, 2)
+
+  const monthDate = topCountdown ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][topCountdown.targetDate.getMonth()]} ${topCountdown.targetDate.getDate()}` : ''
 
   useEffect(() => {
     fetch(`${API}/api/diaries`).then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
@@ -681,8 +734,6 @@ function TodayPage() {
   const saveEdit = async () => { if (!editText.trim() || !editingDiary) return; try { await fetch(`${API}/api/diaries/${editingDiary}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: editText.trim() }) }); setDiaries(p => p.map(d => d.id === editingDiary ? { ...d, content: editText.trim() } : d)) } catch {}; setEditingDiary(null); setEditText(''); setShowWrite(false) }
   const handleLongPress = (e, d) => { e.preventDefault(); setContextMenu({ id: d.id, diary: d }) }
 
-  const addImportantDate = (d) => { const nd = [...importantDates, d]; setImportantDates(nd); saveImportantDates(nd) }
-
   const fmtDate = (s) => { const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()}` }
   const fmtTime = (s) => { const d = new Date(s); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 
@@ -693,8 +744,9 @@ function TodayPage() {
   const groupByDate = (entries) => { const g = {}; entries.forEach(d => { const dt = new Date(d.created_at); const k = `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`; if (!g[k]) g[k] = { date: dt, entries: [] }; g[k].entries.push(d) }); return Object.values(g).sort((a, b) => b.date - a.date) }
   const diaryGroups = groupByDate(filtered)
 
-  // Ring progress for monthly anniversary
-  const ringProgress = monthly.daysLeft <= 31 ? ((31 - monthly.daysLeft) / 31) : 0
+  // Ring progress for top countdown (assume max useful window ~31 days)
+  const ringMax = topCountdown?.isMonthly ? 31 : Math.min(topCountdown?.daysLeft + 10, 60)
+  const ringProgress = topCountdown ? Math.max(0, Math.min(1, (ringMax - topCountdown.daysLeft) / ringMax)) : 0
   const ringR = 26, ringC = 2 * Math.PI * ringR
 
   return (
@@ -702,7 +754,6 @@ function TodayPage() {
       {/* Header */}
       <div className="today-header">
         <div><div className="today-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div><h1 className="today-greeting">{greeting}, 桦桦</h1></div>
-        <button className="icon-btn" onClick={() => setShowAddDate(true)}>{I.plus}</button>
       </div>
 
       {/* Whisper */}
@@ -724,18 +775,18 @@ function TodayPage() {
       {/* Countdown card */}
       <div className="countdown-card">
         <div className="countdown-monthly">
-          <div><div className="countdown-monthly-title">Monthly Anniversary</div><div className="countdown-monthly-date">{monthly.monthDate}</div></div>
+          <div><div className="countdown-monthly-title">{topCountdown?.name || 'Monthly Anniversary'}</div><div className="countdown-monthly-date">{monthDate}</div></div>
           <div className="ring-wrap">
             <svg width="64" height="64" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r={ringR} fill="none" stroke="var(--border)" strokeWidth="4" />
               <circle cx="32" cy="32" r={ringR} fill="none" stroke="var(--accent)" strokeWidth="4" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - ringProgress)} strokeLinecap="round" transform="rotate(-90 32 32)" />
             </svg>
-            <div className="ring-num">{monthly.daysLeft}</div>
+            <div className="ring-num">{topCountdown?.daysLeft ?? ''}</div>
           </div>
         </div>
-        {countdowns.length > 0 && (
+        {remainingCountdowns.length > 0 && (
           <div className="countdown-items">
-            {countdowns.map(c => (
+            {remainingCountdowns.map(c => (
               <div key={c.id} className="countdown-item">
                 <div className="countdown-bar" />
                 <div className="countdown-item-info"><div className="countdown-item-name">{c.emoji} {c.name}</div><div className="countdown-item-date">{c.targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div></div>
@@ -813,8 +864,6 @@ function TodayPage() {
           ))}
         </div>
       )}
-
-      {showAddDate && <AddDateModal onClose={() => setShowAddDate(false)} onSave={addImportantDate} />}
     </div>
   )
 }
@@ -839,10 +888,14 @@ function SettingsPage({ onBack }) {
   if (subPage === 'skin') return (
     <div className="settings-page" {...swipe}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Theme</h1></div>
+      <div className="card-title-outer">Color Theme</div>
       <div className="card settings-card">
         <div className="setting-item"><span>Claude (current)</span><span className="setting-value">✓</span></div>
         <div className="setting-item"><span>Pink & Blue</span><span className="setting-value dim">Coming soon</span></div>
-        <div className="setting-item"><span>Dark mode follows system</span><span className="setting-value">✓</span></div>
+      </div>
+      <div className="card-title-outer">Appearance</div>
+      <div className="card settings-card">
+        <div className="setting-item"><span>Follow system</span><span className="setting-value">✓</span></div>
       </div>
     </div>
   )
@@ -857,7 +910,7 @@ function SettingsPage({ onBack }) {
         <div className="setting-item" onClick={() => setSubPage('mcp')}><span>MCP</span>{I.chevron}</div>
       </div>
       <div className="card settings-card">
-        <div className="setting-item"><span>Version</span><span className="setting-value dim">0.6.0</span></div>
+        <div className="setting-item"><span>Version</span><span className="setting-value dim">0.6.1</span></div>
       </div>
     </div>
   )
@@ -899,13 +952,7 @@ function App() {
   const [inRoom, setInRoom] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
 
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    const onResize = () => setKeyboardOpen(vv.height < window.innerHeight * 0.75)
-    vv.addEventListener('resize', onResize)
-    return () => vv.removeEventListener('resize', onResize)
-  }, [])
+  useKeyboardOpen(setKeyboardOpen)
 
   // Hide tab bar when in chat room, keyboard open, or in More sub-pages
   const showTab = !inRoom && !keyboardOpen
