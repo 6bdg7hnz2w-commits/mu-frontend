@@ -157,6 +157,7 @@ const I = {
   heart: <svg width="24" height="24" viewBox="0 0 24 24" fill="#e8707e"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   game: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>,
   book: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+  brain: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2a2.5 2.5 0 0 0-2.5 2.5v.5A2.5 2.5 0 0 0 4.5 7.5v.5A2.5 2.5 0 0 0 2 10.5v0A2.5 2.5 0 0 0 4.5 13v0a2.5 2.5 0 0 0 0 5v0a2.5 2.5 0 0 0 2.5 2.5v0A2.5 2.5 0 0 0 9.5 23"/><path d="M14.5 2a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1 0 5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5"/></svg>,
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
 }
 
@@ -225,10 +226,10 @@ function AvatarUploadModal({ sessionId, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={e => e.stopPropagation()}>
         <h3>Set Session Avatar</h3>
-        <div className="avatar-preview-lg">{preview ? <img src={preview} alt="" /> : '沐'}</div>
+        <div className="avatar-preview-lg">{preview && <img src={preview} alt="" />}</div>
         <div className="modal-actions-col">
           <label className="btn-primary-full">Choose Image<input type="file" accept="image/*" onChange={handleFile} hidden /></label>
-          {preview && <button className="btn-danger-text" onClick={removeAvatar}>Remove</button>}
+          {preview && <button className="btn-danger-text-centered" onClick={removeAvatar}>Remove</button>}
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
         </div>
       </div>
@@ -964,6 +965,41 @@ function SettingsPage({ onBack }) {
   )
 }
 
+// ─── MemoryImportPage ────────────────────────────────
+function MemoryImportPage({ onBack }) {
+  const [text, setText] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+  const swipe = useSwipeBack(onBack)
+
+  const submit = async () => {
+    if (!text.trim() || submitting) return
+    setSubmitting(true)
+    try {
+      await fetch(`${API}/api/memories/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text.trim() }) })
+      setText('')
+      setJustSaved(true)
+      setTimeout(() => setJustSaved(false), 2000)
+    } catch {}
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="more-sub-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>Import Memory</h1></div>
+      <div className="card">
+        <div className="card-title">Paste from claude.ai</div>
+        <div className="import-hint">Copy a conversation or note from the official Claude app, paste it below, and it'll be added to 沐's shared memory.</div>
+        <textarea className="write-area import-textarea" value={text} onChange={e => setText(e.target.value)} placeholder="Paste text here..." rows={10} />
+        <div className="write-actions">
+          {justSaved && <span className="import-saved-hint">Saved</span>}
+          <button className="btn-primary" onClick={submit} disabled={!text.trim() || submitting}>{submitting ? '...' : 'Add to Memory'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MorePage ───────────────────────────────────────
 function MorePage() {
   const [subPage, setSubPage] = useState(null)
@@ -971,6 +1007,7 @@ function MorePage() {
   const swipeReading = useSwipeBack(() => setSubPage(null))
 
   if (subPage === 'settings') return <SettingsPage onBack={() => setSubPage(null)} />
+  if (subPage === 'memory') return <MemoryImportPage onBack={() => setSubPage(null)} />
   if (subPage === 'games') return (
     <div className="more-sub-page" {...swipeGames}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Games</h1></div>
@@ -990,6 +1027,7 @@ function MorePage() {
       <div className="more-grid">
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
         <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
+        <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>
     </div>
