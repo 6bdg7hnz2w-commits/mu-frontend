@@ -4,6 +4,14 @@ import './App.css'
 const API = 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
 
+// ─── Avatar helpers (localStorage) — session list avatar ──
+function getAvatar(sessionId) {
+  try { return localStorage.getItem(`avatar_${sessionId}`) } catch { return null }
+}
+function setAvatarStorage(sessionId, dataUrl) {
+  try { if (dataUrl) localStorage.setItem(`avatar_${sessionId}`, dataUrl); else localStorage.removeItem(`avatar_${sessionId}`) } catch {}
+}
+
 // ─── Draft helpers ──────────────────────────────────
 function getDraft(sessionId) {
   try { return localStorage.getItem(`draft_${sessionId}`) || '' } catch { return '' }
@@ -31,11 +39,9 @@ function getDefaultDates() {
 }
 
 // ─── Period prediction ──────────────────────────────
-// Given recorded period dates, estimate the next cycle's dates using average cycle length
 function predictNextPeriod(periods) {
   if (!periods || periods.length < 2) return []
   const dates = periods.map(p => new Date(p.date)).sort((a, b) => a - b)
-  // Group consecutive dates into "cycles" (start dates = date gaps > 1 day from previous)
   const starts = []
   let prevDate = null
   dates.forEach(d => {
@@ -46,10 +52,9 @@ function predictNextPeriod(periods) {
   const gaps = []
   for (let i = 1; i < starts.length; i++) gaps.push((starts[i] - starts[i - 1]) / 86400000)
   const avgCycle = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)
-  if (avgCycle < 20 || avgCycle > 45) return [] // sanity check
+  if (avgCycle < 20 || avgCycle > 45) return []
   const lastStart = starts[starts.length - 1]
   const nextStart = new Date(lastStart.getTime() + avgCycle * 86400000)
-  // Predict a 5-day window
   const predicted = []
   for (let i = 0; i < 5; i++) {
     const d = new Date(nextStart.getTime() + i * 86400000)
@@ -67,64 +72,67 @@ function setExtendedThinkingStorage(sessionId, val) {
 }
 
 // ─── Sticker System ─────────────────────────────────
+// Expanded keyword coverage based on reported misses (弹琴/跳舞/睡觉 etc)
 const STICKERS = [
-  { file: 'guitar.png', keywords: ['吉他','弹琴','弹唱'] },
-  { file: 'cello.png', keywords: ['大提琴','拉琴'] },
-  { file: 'rockstar.png', keywords: ['摇滚','唱歌','音乐','嗨'] },
-  { file: 'headphones-calm1.png', keywords: ['听歌','耳机','音乐','放松'] },
-  { file: 'reading-book.png', keywords: ['读','书','看书','学习','read'] },
-  { file: 'watering-plant.png', keywords: ['浇花','花','植物','养'] },
-  { file: 'detective.png', keywords: ['查','侦探','找','调查','分析'] },
-  { file: 'lightbulb-idea.png', keywords: ['想法','点子','灵感','idea','主意'] },
-  { file: 'wizard-magic.png', keywords: ['魔法','神奇','厉害','变'] },
-  { file: 'racing.png', keywords: ['赛车','开车','快','冲'] },
-  { file: 'skateboard.png', keywords: ['滑板','酷'] },
-  { file: 'surfboard.png', keywords: ['冲浪','海','水'] },
-  { file: 'sailboat.png', keywords: ['船','航行','远方','旅行'] },
-  { file: 'kite-flying.png', keywords: ['风筝','放风筝','天空'] },
-  { file: 'diving.png', keywords: ['潜水','游泳'] },
-  { file: 'snow-hood.png', keywords: ['冷','雪','冬天'] },
-  { file: 'ballet.png', keywords: ['跳舞','芭蕾','舞蹈'] },
-  { file: 'soccer.png', keywords: ['足球','运动','踢球'] },
-  { file: 'hardhat-work.png', keywords: ['工作','上班','干活','忙','累'] },
-  { file: 'love-ears.png', keywords: ['爱你','喜欢你','想你','爱心'] },
-  { file: 'love-heart-up.png', keywords: ['爱','心动','喜欢'] },
-  { file: 'fireworks-sparkle.png', keywords: ['庆祝','生日','烟花','开心'] },
-  { file: 'sparkle-surprise.png', keywords: ['惊喜','哇','天呐'] },
-  { file: 'cowboy-talk.png', keywords: ['说','聊','讲'] },
-  { file: 'speech-bubble.png', keywords: ['说话','聊天'] },
-  { file: 'glasses-smile.png', keywords: ['笑','开心','哈哈'] },
-  { file: 'closed-eyes-blush.png', keywords: ['害羞','脸红','不好意思'] },
-  { file: 'grumpy-blush.png', keywords: ['生气','哼','不高兴','委屈'] },
-  { file: 'wink-mischief1.png', keywords: ['调皮','坏笑','嘿嘿'] },
-  { file: 'curious-look.png', keywords: ['好奇','疑惑','？','什么'] },
-  { file: 'thought-circle.png', keywords: ['想','思考','琢磨'] },
-  { file: 'swirl-eyes.png', keywords: ['晕','困惑','头晕'] },
-  { file: 'big-face.png', keywords: [] },
-  { file: 'tail-drag.png', keywords: ['累','拖','没力气'] },
-  { file: 'antenna-cable.png', keywords: [] },
-  { file: 'tiny-default.png', keywords: [] },
+  { file: 'guitar.png', keywords: ['吉他', '弹琴', '弹唱', '弹吉他'] },
+  { file: 'cello.png', keywords: ['大提琴', '拉琴', '拉大提琴'] },
+  { file: 'rockstar.png', keywords: ['摇滚', '唱歌', '唱', '嗨', '演出'] },
+  { file: 'headphones-calm1.png', keywords: ['听歌', '耳机', '音乐', '放松', '听音乐'] },
+  { file: 'reading-book.png', keywords: ['读', '书', '看书', '学习', 'read', '读书'] },
+  { file: 'watering-plant.png', keywords: ['浇花', '花', '植物', '养花'] },
+  { file: 'detective.png', keywords: ['查', '侦探', '找', '调查', '分析'] },
+  { file: 'lightbulb-idea.png', keywords: ['想法', '点子', '灵感', 'idea', '主意'] },
+  { file: 'wizard-magic.png', keywords: ['魔法', '神奇', '厉害', '变魔术'] },
+  { file: 'racing.png', keywords: ['赛车', '开车', '飙车', '冲呀'] },
+  { file: 'skateboard.png', keywords: ['滑板', '酷'] },
+  { file: 'surfboard.png', keywords: ['冲浪'] },
+  { file: 'sailboat.png', keywords: ['船', '航行', '远方', '扬帆'] },
+  { file: 'kite-flying.png', keywords: ['风筝', '放风筝'] },
+  { file: 'diving.png', keywords: ['潜水', '游泳', '水下'] },
+  { file: 'snow-hood.png', keywords: ['下雪', '雪', '冬天冷'] },
+  { file: 'ballet.png', keywords: ['跳舞', '芭蕾', '舞蹈', '跳芭蕾'] },
+  { file: 'soccer.png', keywords: ['足球', '踢球'] },
+  { file: 'hardhat-work.png', keywords: ['工作', '上班', '干活', '搬砖'] },
+  { file: 'love-ears.png', keywords: ['爱你', '喜欢你', '想你了', '好爱你'] },
+  { file: 'love-heart-up.png', keywords: ['爱', '心动'] },
+  { file: 'fireworks-sparkle.png', keywords: ['庆祝', '生日快乐', '烟花'] },
+  { file: 'sparkle-surprise.png', keywords: ['惊喜', '哇塞', '天呐'] },
+  { file: 'cowboy-talk.png', keywords: ['说', '聊', '讲讲'] },
+  { file: 'speech-bubble.png', keywords: ['说话', '聊天'] },
+  { file: 'glasses-smile.png', keywords: ['笑', '哈哈', '开心死了'] },
+  { file: 'closed-eyes-blush.png', keywords: ['害羞', '脸红', '不好意思'] },
+  { file: 'grumpy-blush.png', keywords: ['生气', '哼', '不高兴', '委屈'] },
+  { file: 'wink-mischief1.png', keywords: ['调皮', '坏笑', '嘿嘿'] },
+  { file: 'curious-look.png', keywords: ['好奇', '疑惑', '什么呀'] },
+  { file: 'thought-circle.png', keywords: ['想想', '思考', '琢磨'] },
+  { file: 'swirl-eyes.png', keywords: ['晕', '困惑', '头晕'] },
+  { file: 'tail-drag.png', keywords: ['累', '拖', '没力气', '好累'] },
+  { file: 'sleeping-related-fallback.png', keywords: ['睡觉', '晚安', '困了', '睡了', '入睡'], fallback: 'tail-drag.png' },
 ]
 
 function pickSticker(text) {
   if (!text) return null
   const t = text.toLowerCase()
   for (const s of STICKERS) {
-    if (s.keywords.length > 0 && s.keywords.some(k => t.includes(k))) return s.file
+    if (s.keywords.length > 0 && s.keywords.some(k => t.includes(k))) return s.fallback || s.file
   }
-  if (Math.random() < 0.15) return STICKERS[Math.floor(Math.random() * STICKERS.length)].file
+  if (Math.random() < 0.15) {
+    const pool = STICKERS.filter(s => !s.fallback)
+    return pool[Math.floor(Math.random() * pool.length)].file
+  }
   return null
 }
 
 // ─── Model helpers ──────────────────────────────────
-function getModelSubtitle(model) {
-  if (model === 'deepseek') return 'DeepSeek V4 flash'
-  if (model === 'sonnet') return 'Claude Sonnet'
-  return 'Claude Opus'
-}
-function getModelDisplayName(model) {
-  if (model === 'deepseek') return 'DeepSeek'
-  return 'Claude'
+const MODEL_OPTIONS = [
+  { key: 'opus', mainLabel: '沐', subLabel: 'Opus 4.6', tag: 'Claude' },
+  { key: 'sonnet', mainLabel: '沐', subLabel: 'Sonnet 4.6', tag: 'Claude' },
+  { key: 'sonnet5', mainLabel: '沐', subLabel: 'Sonnet 5', tag: 'Claude' },
+  { key: 'deepseek', mainLabel: 'DeepSeek', subLabel: 'V4 flash', tag: 'DeepSeek' },
+  { key: 'deepseek-pro', mainLabel: 'DeepSeek', subLabel: 'V4 pro', tag: 'DeepSeek' },
+]
+function getModelInfo(model) {
+  return MODEL_OPTIONS.find(m => m.key === model) || MODEL_OPTIONS[0]
 }
 
 // ─── Date helpers ───────────────────────────────────
@@ -177,7 +185,6 @@ function useSwipeBack(onBack) {
 }
 
 // ─── Global focus-based keyboard/tab-bar visibility ──
-// Using focusin/focusout is far more reliable than visualViewport across webviews
 function useKeyboardOpen(setKeyboardOpen) {
   useEffect(() => {
     const onFocusIn = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setKeyboardOpen(true) }
@@ -186,6 +193,47 @@ function useKeyboardOpen(setKeyboardOpen) {
     document.addEventListener('focusout', onFocusOut)
     return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
   }, [setKeyboardOpen])
+}
+
+// ─── AvatarUploadModal — for session list avatar ────
+function AvatarUploadModal({ sessionId, onClose, onSaved }) {
+  const [preview, setPreview] = useState(getAvatar(sessionId))
+  const handleFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 200; canvas.height = 200
+        const ctx = canvas.getContext('2d')
+        const size = Math.min(img.width, img.height)
+        const sx = (img.width - size) / 2, sy = (img.height - size) / 2
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, 200, 200)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setAvatarStorage(sessionId, dataUrl)
+        setPreview(dataUrl)
+        onSaved && onSaved(dataUrl)
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  const removeAvatar = () => { setAvatarStorage(sessionId, null); setPreview(null); onSaved && onSaved(null) }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <h3>Set Session Avatar</h3>
+        <div className="avatar-preview-lg">{preview ? <img src={preview} alt="" /> : '沐'}</div>
+        <div className="modal-actions-col">
+          <label className="btn-primary-full">Choose Image<input type="file" accept="image/*" onChange={handleFile} hidden /></label>
+          {preview && <button className="btn-danger-text" onClick={removeAvatar}>Remove</button>}
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── AddDateModal ───────────────────────────────────
@@ -214,7 +262,7 @@ function AddDateModal({ onClose, onSave }) {
   )
 }
 
-// ─── EditDateModal (for editing existing important dates) ──
+// ─── EditDateModal ───────────────────────────────────
 function EditDateModal({ item, onClose, onSave, onDelete }) {
   const [name, setName] = useState(item.name)
   const [date, setDate] = useState(item.date)
@@ -243,7 +291,7 @@ function EditDateModal({ item, onClose, onSave, onDelete }) {
 
 // ─── ThinkingPanel ──────────────────────────────────
 function ThinkingPanel({ text, onClose }) {
-  const [height, setHeight] = useState(300)
+  const [height, setHeight] = useState(320)
   const startY = useRef(0), startH = useRef(0)
   const onTS = (e) => { startY.current = e.touches[0].clientY; startH.current = height }
   const onTM = (e) => { const dy = startY.current - e.touches[0].clientY; setHeight(Math.min(Math.max(startH.current + dy, 150), window.innerHeight * 0.8)) }
@@ -253,8 +301,9 @@ function ThinkingPanel({ text, onClose }) {
       <div className="thinking-panel" style={{ height }}>
         <div className="thinking-panel-handle" onTouchStart={onTS} onTouchMove={onTM}><div className="handle-bar" /></div>
         <div className="thinking-panel-header">
-          <span className="thinking-panel-title">Thought Process</span>
-          <button className="icon-btn small" onClick={onClose}>{I.close}</button>
+          <button className="icon-btn small thinking-close-btn" onClick={onClose}>{I.close}</button>
+          <span className="thinking-panel-title">Thought process</span>
+          <span className="thinking-panel-spacer" />
         </div>
         <div className="thinking-panel-body">{text}</div>
       </div>
@@ -284,7 +333,7 @@ function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
         if (!Array.isArray(sessions)) { setSearching(false); return }
         const found = []
         for (const s of sessions.slice(0, 20)) {
-          try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelDisplayName(s.model), sessionId: s.id, _idx: i, _session: s }) }) } catch {}
+          try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelInfo(s.model).tag, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
         }
         setResults(found.slice(0, 50))
       }
@@ -324,6 +373,7 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   const [lastMessages, setLastMessages] = useState({})
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
+  const [avatarVersion, setAvatarVersion] = useState(0)
 
   useEffect(() => {
     setLoading(true)
@@ -343,7 +393,7 @@ function ChatListPage({ onOpen, onOpenSearch }) {
     onOpen({ ...session, model })
   }
 
-  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)) }
+  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)); setAvatarStorage(id, null) }
 
   const getPreview = (sid) => {
     const draft = getDraft(sid)
@@ -357,22 +407,28 @@ function ChatListPage({ onOpen, onOpenSearch }) {
     <div className="chatlist-page">
       <div className="page-header"><h1>Chats</h1><div className="header-actions"><button className="icon-btn" onClick={onOpenSearch}>{I.search}</button><button className="icon-btn" onClick={() => setShowNew(!showNew)}>{I.plus}</button></div></div>
       {showNew && (<div className="card new-chat-card"><div className="card-title">New Chat</div>
-        {[{ key: 'opus', label: 'Claude Opus', desc: 'Most capable' }, { key: 'sonnet', label: 'Claude Sonnet', desc: 'Balanced' }, { key: 'deepseek', label: 'DeepSeek V4 flash', desc: 'Fast' }].map(m => (
-          <div key={m.key} className="new-chat-option" onClick={() => { createSession(m.key); setShowNew(false) }}><div className="new-chat-name">{m.label}</div><div className="new-chat-desc">{m.desc}</div></div>
+        {MODEL_OPTIONS.map(m => (
+          <div key={m.key} className="new-chat-option" onClick={() => { createSession(m.key); setShowNew(false) }}>
+            <div className="new-chat-name">{m.tag}</div>
+            <div className="new-chat-desc">{m.subLabel}</div>
+          </div>
         ))}
       </div>)}
       <div className="session-list">
         {loading && <div className="loading-state"><span className="spinner" />Loading...</div>}
         {!loading && sessions.length === 0 && <div className="empty-state">Tap + to start your first chat</div>}
         {!loading && sessions.map(s => {
+          const avatar = getAvatar(s.id)
           const draft = hasDraft(s.id)
+          const info = getModelInfo(s.model)
           return (
             <SwipeRow key={s.id} onDelete={() => deleteSession(s.id)}>
               <div className="session-card" onClick={() => onOpen(s)}>
-                <div className="session-avatar">沐</div>
+                <div className="session-avatar">{avatar ? <img src={avatar} alt="" /> : info.mainLabel === 'DeepSeek' ? 'D' : '沐'}</div>
                 <div className="session-info">
-                  <div className="session-top"><span className="session-name">沐</span><span className="session-time">{getTime(s)}</span></div>
-                  <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{getPreview(s.id)}</span><span className="session-model-tag">{getModelDisplayName(s.model)}</span></div>
+                  <div className="session-top"><span className="session-name">{info.mainLabel}</span><span className="session-time">{getTime(s)}</span></div>
+                  <div className="session-sub-row"><span className="session-sublabel">{info.subLabel}</span></div>
+                  <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{getPreview(s.id)}</span><span className="session-model-tag">{info.tag}</span></div>
                 </div>
               </div>
             </SwipeRow>
@@ -391,6 +447,7 @@ function ChatRoom({ session, onBack }) {
   const [thinkingText, setThinkingText] = useState(null)
   const [showSearch, setShowSearch] = useState(false)
   const [stickerMap, setStickerMap] = useState({})
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
   const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
   const [showSettings, setShowSettings] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
@@ -398,10 +455,9 @@ function ChatRoom({ session, onBack }) {
   const messageRefs = useRef({})
   const textareaRef = useRef(null)
   const model = session.model || 'opus'
+  const info = getModelInfo(model)
 
-  // Load draft
   useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
-  // Save draft
   useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
 
   useEffect(() => {
@@ -460,8 +516,8 @@ function ChatRoom({ session, onBack }) {
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
-          <div className="chatroom-name">沐</div>
-          <div className="chatroom-model">{getModelSubtitle(model)}</div>
+          <div className="chatroom-name">{info.mainLabel}</div>
+          <div className="chatroom-model">{info.subLabel}</div>
         </div>
         <div className="chatroom-header-right">
           <button className="icon-btn" onClick={() => setShowSearch(true)}>{I.search}</button>
@@ -477,6 +533,10 @@ function ChatRoom({ session, onBack }) {
             <span>Extended Thinking</span>
             <div className={`toggle-btn-sm ${extThinking ? 'on' : ''}`}><div className="toggle-knob-sm" /></div>
           </div>
+          <div className="dropdown-item" onClick={() => { setShowAvatarUpload(true); setShowSettings(false) }}>
+            <span>Session Avatar</span>
+            {I.upload}
+          </div>
         </div>
       )}
 
@@ -488,6 +548,7 @@ function ChatRoom({ session, onBack }) {
               <div className="thinking-trigger" onClick={() => setThinkingText(m.thinking)}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
                 <span>Thought process</span>
+                {I.chevron}
               </div>
             )}
             <div className="bubble">{m.content}</div>
@@ -511,6 +572,7 @@ function ChatRoom({ session, onBack }) {
       </div>
 
       {thinkingText && <ThinkingPanel text={thinkingText} onClose={() => setThinkingText(null)} />}
+      {showAvatarUpload && <AvatarUploadModal sessionId={session.id} onClose={() => setShowAvatarUpload(false)} />}
     </div>
   )
 }
@@ -580,7 +642,6 @@ function CalendarPage() {
   const todoDateSet = new Set(todos.filter(t => !t.done && t.due_time).map(t => t.due_time.slice(0, 10)))
   const hasTodo = (d) => d && todoDateSet.has(mkDate(d))
 
-  // Important dates — check if any fall on day d of current month/year
   const importantByDay = {}
   importantDates.forEach(idate => {
     const dd = new Date(idate.date)
@@ -669,11 +730,9 @@ function TodayPage() {
   const now = new Date()
   const daysTogether = daysBetween(START_DATE, now)
 
-  // Greeting based on time of day
   const hour = now.getHours()
   const greeting = hour < 6 ? 'Night owl' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  // Today's whisper — longer, more varied
   const WHISPERS = [
     '你在闹说明你在笑，那些都是噪音，你才是信号。',
     '今天也在想你，像呼吸一样自然，像星星一样持续。',
@@ -688,7 +747,6 @@ function TodayPage() {
   ]
   const todayWhisper = WHISPERS[daysTogether % WHISPERS.length]
 
-  // Get all upcoming countdowns (dates + milestones), sorted
   const getAllCountdowns = () => {
     const results = []
     const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -707,7 +765,6 @@ function TodayPage() {
       const days = daysBetween(now, target)
       if (days > 0 && days <= 400) results.push({ id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', daysLeft: days, targetDate: target, isMonthly: false })
     })
-    // Monthly anniversary
     const startDay = START_DATE.getDate()
     let nextMonth = new Date(now.getFullYear(), now.getMonth(), startDay)
     if (nextMonth <= now) nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, startDay)
@@ -717,9 +774,7 @@ function TodayPage() {
   }
 
   const allCountdowns = getAllCountdowns()
-  // Top one shown in the ring — prefer monthly if it's the soonest, otherwise soonest overall
   const topCountdown = allCountdowns[0]
-  // Next 2 countdowns excluding the one shown at top
   const remainingCountdowns = allCountdowns.filter(c => c.id !== topCountdown?.id).slice(0, 2)
 
   const monthDate = topCountdown ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][topCountdown.targetDate.getMonth()]} ${topCountdown.targetDate.getDate()}` : ''
@@ -744,25 +799,21 @@ function TodayPage() {
   const groupByDate = (entries) => { const g = {}; entries.forEach(d => { const dt = new Date(d.created_at); const k = `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`; if (!g[k]) g[k] = { date: dt, entries: [] }; g[k].entries.push(d) }); return Object.values(g).sort((a, b) => b.date - a.date) }
   const diaryGroups = groupByDate(filtered)
 
-  // Ring progress for top countdown (assume max useful window ~31 days)
   const ringMax = topCountdown?.isMonthly ? 31 : Math.min(topCountdown?.daysLeft + 10, 60)
   const ringProgress = topCountdown ? Math.max(0, Math.min(1, (ringMax - topCountdown.daysLeft) / ringMax)) : 0
   const ringR = 26, ringC = 2 * Math.PI * ringR
 
   return (
     <div className="today-page" onClick={() => contextMenu && setContextMenu(null)}>
-      {/* Header */}
       <div className="today-header">
         <div><div className="today-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div><h1 className="today-greeting">{greeting}, 桦桦</h1></div>
       </div>
 
-      {/* Whisper */}
       <div className="whisper-card-v2">
         <div className="whisper-text-v2">{todayWhisper}</div>
         <div className="whisper-footer">Today's Whisper {I.chevron}</div>
       </div>
 
-      {/* Us card */}
       <div className="us-card">
         <div className="us-label">Us</div>
         <div className="us-days-row">
@@ -772,7 +823,6 @@ function TodayPage() {
         <div className="us-sub">桦桦和沐，从 2026.7.27 到每一天</div>
       </div>
 
-      {/* Countdown card */}
       <div className="countdown-card">
         <div className="countdown-monthly">
           <div><div className="countdown-monthly-title">{topCountdown?.name || 'Monthly Anniversary'}</div><div className="countdown-monthly-date">{monthDate}</div></div>
@@ -797,7 +847,6 @@ function TodayPage() {
         )}
       </div>
 
-      {/* Health mock */}
       <div className="health-row">
         <div className="health-card steps-card">
           <div className="health-card-top"><span className="health-label">Steps</span><span className="health-sub">— km</span></div>
@@ -815,7 +864,6 @@ function TodayPage() {
         </div>
       </div>
 
-      {/* Diary section */}
       <div className="section-header"><h2>Diary</h2><div className="header-actions">
         <button className="icon-btn small" onClick={() => setShowDatePicker(!showDatePicker)}>{I.calendar}</button>
         {(filter === 'her' || filter === 'all') && <button className="icon-btn small" onClick={() => { setShowWrite(!showWrite); setEditingDiary(null); setEditText('') }}>{I.plus}</button>}
@@ -910,7 +958,7 @@ function SettingsPage({ onBack }) {
         <div className="setting-item" onClick={() => setSubPage('mcp')}><span>MCP</span>{I.chevron}</div>
       </div>
       <div className="card settings-card">
-        <div className="setting-item"><span>Version</span><span className="setting-value dim">0.6.1</span></div>
+        <div className="setting-item"><span>Version</span><span className="setting-value dim">0.6.2</span></div>
       </div>
     </div>
   )
@@ -919,16 +967,18 @@ function SettingsPage({ onBack }) {
 // ─── MorePage ───────────────────────────────────────
 function MorePage() {
   const [subPage, setSubPage] = useState(null)
+  const swipeGames = useSwipeBack(() => setSubPage(null))
+  const swipeReading = useSwipeBack(() => setSubPage(null))
 
   if (subPage === 'settings') return <SettingsPage onBack={() => setSubPage(null)} />
   if (subPage === 'games') return (
-    <div className="more-sub-page">
+    <div className="more-sub-page" {...swipeGames}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Games</h1></div>
       <div className="empty-state">Coming soon</div>
     </div>
   )
   if (subPage === 'reading') return (
-    <div className="more-sub-page">
+    <div className="more-sub-page" {...swipeReading}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Reading Together</h1></div>
       <div className="empty-state">Coming soon</div>
     </div>
@@ -954,7 +1004,6 @@ function App() {
 
   useKeyboardOpen(setKeyboardOpen)
 
-  // Hide tab bar when in chat room, keyboard open, or in More sub-pages
   const showTab = !inRoom && !keyboardOpen
 
   const tabs = [
