@@ -629,7 +629,7 @@ function SplashScreen({ onDone }) {
 
   return (
     <div className={`splash-screen ${fading ? 'fading' : ''}`}>
-      <svg className="splash-cat" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+      <svg className="splash-cat" viewBox="270 220 140 290" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="680" height="680" fill="#E87B35" />
         <g transform="translate(340, 320)" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path className="splash-stroke splash-outline" d="M -40,0 Q -45,-15 -35,-45 L -25,-75 L -10,-45 Q 0,-38 10,-45 L 25,-75 L 35,-45 Q 45,-15 40,0 Q 35,20 0,25 Q -35,20 -40,0 Z" />
