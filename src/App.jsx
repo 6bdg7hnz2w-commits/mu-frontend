@@ -1000,20 +1000,146 @@ function MemoryImportPage({ onBack }) {
   )
 }
 
+// ─── DrawGuessGame ───────────────────────────────────
+function DrawGuessGame({ onBack }) {
+  const [phase, setPhase] = useState('start') // start | loading | drawing | guessing | result
+  const [word, setWord] = useState('')
+  const [timeLeft, setTimeLeft] = useState(60)
+  const [result, setResult] = useState(null)
+  const [color, setColor] = useState('#1a1a1a')
+  const canvasRef = useRef(null)
+  const drawing = useRef(false)
+  const lastPos = useRef({ x: 0, y: 0 })
+  const timerRef = useRef(null)
+  const swipe = useSwipeBack(onBack)
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
+
+  const startGame = async () => {
+    setPhase('loading')
+    try {
+      const res = await fetch(`${API}/api/games/draw-guess/start`, { method: 'POST' })
+      const data = await res.json()
+      setWord(data.word)
+      setTimeLeft(60)
+      setPhase('drawing')
+      setTimeout(clearCanvas, 0)
+    } catch { setPhase('start') }
+  }
+
+  useEffect(() => {
+    if (phase !== 'drawing') return
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) { clearInterval(timerRef.current); submitDrawing(); return 0 }
+        return t - 1
+      })
+    }, 1000)
+    return () => clearInterval(timerRef.current)
+  }, [phase])
+
+  const getPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect()
+    const t = e.touches ? e.touches[0] : e
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top }
+  }
+  const startDraw = (e) => { e.preventDefault(); drawing.current = true; lastPos.current = getPos(e) }
+  const moveDraw = (e) => {
+    e.preventDefault()
+    if (!drawing.current) return
+    const ctx = canvasRef.current.getContext('2d')
+    const pos = getPos(e)
+    ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.beginPath(); ctx.moveTo(lastPos.current.x, lastPos.current.y); ctx.lineTo(pos.x, pos.y); ctx.stroke()
+    lastPos.current = pos
+  }
+  const endDraw = () => { drawing.current = false }
+
+  const submitDrawing = async () => {
+    clearInterval(timerRef.current)
+    setPhase('guessing')
+    const small = document.createElement('canvas')
+    small.width = 400; small.height = 400
+    small.getContext('2d').drawImage(canvasRef.current, 0, 0, 400, 400)
+    const dataUrl = small.toDataURL('image/png')
+    try {
+      const res = await fetch(`${API}/api/games/draw-guess/guess`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: dataUrl, word }) })
+      const data = await res.json()
+      setResult(data)
+    } catch {
+      setResult({ guess: '识别失败', reason: '', correct: null })
+    }
+    setPhase('result')
+  }
+
+  const playAgain = () => { setPhase('start'); setResult(null) }
+
+  return (
+    <div className="more-sub-page draw-guess-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>你画我猜</h1></div>
+
+      {phase === 'start' && (
+        <div className="card dg-start-card">
+          <div className="dg-start-text">给你一个词，画出来，让沐猜猜是什么</div>
+          <button className="btn-primary-full" onClick={startGame}>开始游戏</button>
+        </div>
+      )}
+      {phase === 'loading' && <div className="loading-state"><span className="spinner" />出题中...</div>}
+      {phase === 'drawing' && (
+        <>
+          <div className="dg-topbar"><div className="dg-word">题目：{word}</div><div className="dg-timer">{timeLeft}s</div></div>
+          <canvas ref={canvasRef} width={340} height={340} className="dg-canvas"
+            onTouchStart={startDraw} onTouchMove={moveDraw} onTouchEnd={endDraw}
+            onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw} />
+          <div className="dg-tools">
+            {['#1a1a1a', '#c45a3c', '#3d6dd9', '#2e7d4f'].map(c => (
+              <button key={c} className={`dg-color ${color === c ? 'active' : ''}`} style={{ background: c }} onClick={() => setColor(c)} />
+            ))}
+            <button className="text-btn" onClick={clearCanvas}>清空</button>
+            <button className="btn-primary" onClick={submitDrawing}>提交</button>
+          </div>
+        </>
+      )}
+      {phase === 'guessing' && <div className="loading-state"><span className="spinner" />沐正在看你画的...</div>}
+      {phase === 'result' && result && (
+        <div className="card dg-result-card">
+          <div className="dg-result-row"><span className="dg-result-label">题目</span><span>{word}</span></div>
+          <div className="dg-result-row"><span className="dg-result-label">沐猜</span><span>{result.guess}</span></div>
+          {result.reason && <div className="dg-result-reason">{result.reason}</div>}
+          <div className={`dg-result-verdict ${result.correct ? 'correct' : 'wrong'}`}>{result.correct ? '猜对啦！' : '没猜中～'}</div>
+          <button className="btn-primary-full" onClick={playAgain}>再来一局</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── MorePage ───────────────────────────────────────
 function MorePage() {
   const [subPage, setSubPage] = useState(null)
+  const [activeGame, setActiveGame] = useState(null)
   const swipeGames = useSwipeBack(() => setSubPage(null))
   const swipeReading = useSwipeBack(() => setSubPage(null))
 
   if (subPage === 'settings') return <SettingsPage onBack={() => setSubPage(null)} />
   if (subPage === 'memory') return <MemoryImportPage onBack={() => setSubPage(null)} />
-  if (subPage === 'games') return (
-    <div className="more-sub-page" {...swipeGames}>
-      <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Games</h1></div>
-      <div className="empty-state">Coming soon</div>
-    </div>
-  )
+  if (subPage === 'games') {
+    if (activeGame === 'draw-guess') return <DrawGuessGame onBack={() => setActiveGame(null)} />
+    return (
+      <div className="more-sub-page" {...swipeGames}>
+        <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Games</h1></div>
+        <div className="card settings-card">
+          <div className="setting-item" onClick={() => setActiveGame('draw-guess')}><span>你画我猜</span>{I.chevron}</div>
+        </div>
+      </div>
+    )
+  }
   if (subPage === 'reading') return (
     <div className="more-sub-page" {...swipeReading}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Reading Together</h1></div>
