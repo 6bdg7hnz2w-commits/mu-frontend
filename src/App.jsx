@@ -603,18 +603,27 @@ function SplashScreen({ onDone }) {
     return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
   }, [onDone])
 
-  // Force html/body/#root to the splash color so nothing but orange can ever show behind it,
-  // regardless of viewport-height quirks or the app's own light/dark background. Reverted on unmount.
+  // Force html/body/#root and the browser-chrome theme-color to the splash color together, on the
+  // same mount/unmount trigger, so nothing but orange can ever show behind it (or in the status bar)
+  // and the two never drift out of sync by being driven off separate timers.
   useEffect(() => {
     const root = document.getElementById('root')
-    const prev = { html: document.documentElement.style.backgroundColor, body: document.body.style.backgroundColor, root: root ? root.style.backgroundColor : '' }
+    const meta = document.querySelector('meta[name="theme-color"]')
+    const prev = {
+      html: document.documentElement.style.backgroundColor,
+      body: document.body.style.backgroundColor,
+      root: root ? root.style.backgroundColor : '',
+      theme: meta ? meta.getAttribute('content') : null,
+    }
     document.documentElement.style.backgroundColor = '#E87B35'
     document.body.style.backgroundColor = '#E87B35'
     if (root) root.style.backgroundColor = '#E87B35'
+    if (meta) meta.setAttribute('content', '#E87B35')
     return () => {
       document.documentElement.style.backgroundColor = prev.html
       document.body.style.backgroundColor = prev.body
       if (root) root.style.backgroundColor = prev.root
+      if (meta && prev.theme !== null) meta.setAttribute('content', prev.theme)
     }
   }, [])
 
