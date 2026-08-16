@@ -56,7 +56,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:90}
 
 /* 鈹€鈹€鈹€ Modal 鈥� properly centered via fixed inset flex 鈹€鈹€鈹€ */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-overlay{position:fixed;inset:0;width:100%;height:100dvh;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal-card{background:var(--surface);border-radius:var(--radius);padding:24px;width:300px;max-width:calc(100vw - 40px);margin:0 auto}
 .modal-card h3{font-size:17px;font-weight:600;margin-bottom:16px;text-align:center}
 .modal-input{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:15px;font-family:inherit;color:var(--text);background:var(--card);outline:none;margin-bottom:10px}
@@ -377,6 +377,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .dg-tools{display:flex;align-items:center;gap:10px;padding:14px 20px;flex-wrap:wrap}
 .dg-color{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .dg-color.active{border-color:var(--text)}
+.dg-tools .text-btn.active{color:var(--accent);font-weight:600}
 .dg-result-card{text-align:center;padding:20px}
 .dg-result-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:15px}
 .dg-result-reason{font-size:13px;color:var(--text-secondary);margin:10px 0;line-height:1.5}

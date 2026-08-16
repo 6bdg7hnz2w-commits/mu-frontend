@@ -1001,12 +1001,24 @@ function MemoryImportPage({ onBack }) {
 }
 
 // ─── DrawGuessGame ───────────────────────────────────
+const DG_COLORS = [
+  '#1a1a1a', '#666666', '#b3b3b3', '#ffffff',
+  '#8b1a1a', '#e8534a',
+  '#c45a2c', '#f0904a',
+  '#d4a017', '#f2d94e',
+  '#2d6a3e', '#5cb96e',
+  '#1a6b7a', '#5cc9d9',
+  '#1a3d8f', '#4a7fd9',
+  '#5a2d8f', '#9c5fd9',
+  '#6b3a1f', '#a8703f',
+]
 function DrawGuessGame({ onBack }) {
   const [phase, setPhase] = useState('start') // start | loading | drawing | guessing | result
   const [word, setWord] = useState('')
   const [timeLeft, setTimeLeft] = useState(60)
   const [result, setResult] = useState(null)
   const [color, setColor] = useState('#1a1a1a')
+  const [erasing, setErasing] = useState(false)
   const canvasRef = useRef(null)
   const drawing = useRef(false)
   const lastPos = useRef({ x: 0, y: 0 })
@@ -1055,11 +1067,13 @@ function DrawGuessGame({ onBack }) {
     if (!drawing.current) return
     const ctx = canvasRef.current.getContext('2d')
     const pos = getPos(e)
-    ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'
+    ctx.strokeStyle = color; ctx.lineWidth = erasing ? 16 : 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
     ctx.beginPath(); ctx.moveTo(lastPos.current.x, lastPos.current.y); ctx.lineTo(pos.x, pos.y); ctx.stroke()
     lastPos.current = pos
   }
   const endDraw = () => { drawing.current = false }
+  const pickColor = (c) => { setColor(c); setErasing(false) }
 
   const submitDrawing = async () => {
     clearInterval(timerRef.current)
@@ -1098,9 +1112,10 @@ function DrawGuessGame({ onBack }) {
             onTouchStart={startDraw} onTouchMove={moveDraw} onTouchEnd={endDraw}
             onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw} />
           <div className="dg-tools">
-            {['#1a1a1a', '#c45a3c', '#3d6dd9', '#2e7d4f'].map(c => (
-              <button key={c} className={`dg-color ${color === c ? 'active' : ''}`} style={{ background: c }} onClick={() => setColor(c)} />
+            {DG_COLORS.map(c => (
+              <button key={c} className={`dg-color ${!erasing && color === c ? 'active' : ''}`} style={{ background: c, ...(c === '#ffffff' ? { boxShadow: 'inset 0 0 0 1px var(--border)' } : {}) }} onClick={() => pickColor(c)} />
             ))}
+            <button className={`text-btn ${erasing ? 'active' : ''}`} onClick={() => setErasing(e => !e)}>橡皮</button>
             <button className="text-btn" onClick={clearCanvas}>清空</button>
             <button className="btn-primary" onClick={submitDrawing}>提交</button>
           </div>
