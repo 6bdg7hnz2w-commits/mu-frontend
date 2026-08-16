@@ -598,23 +598,22 @@ function ChatPage({ onEnterRoom }) {
 function SplashScreen({ onDone }) {
   const [fading, setFading] = useState(false)
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), 2200)
-    const doneTimer = setTimeout(() => onDone(), 2600)
+    const fadeTimer = setTimeout(() => setFading(true), 2400)
+    const doneTimer = setTimeout(() => onDone(), 2800)
     return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
   }, [onDone])
 
   return (
     <div className={`splash-screen ${fading ? 'fading' : ''}`}>
-      <svg className="splash-cat" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
-        <path className="splash-stroke s1" d="M60 70 L45 25 L80 55 Z" />
-        <path className="splash-stroke s1" d="M140 70 L155 25 L120 55 Z" />
-        <path className="splash-stroke s2" d="M60 70 Q40 110 55 150 Q70 185 100 185 Q130 185 145 150 Q160 110 140 70 Q100 45 60 70 Z" />
-        <path className="splash-stroke s3" d="M140 150 Q175 155 180 130 Q182 115 165 118" />
-        <path className="splash-stroke s4" d="M75 100 L55 95 M75 105 L52 105 M75 110 L55 115" />
-        <path className="splash-stroke s4" d="M125 100 L145 95 M125 105 L148 105 M125 110 L145 115" />
-        <circle className="splash-dot" cx="80" cy="100" r="4" />
-        <circle className="splash-dot" cx="120" cy="100" r="4" />
+      <svg className="splash-cat" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <path className="splash-stroke splash-outline" d="M60 25 L100 75 L140 25 Q168 55 168 95 Q168 145 130 170 Q100 178 70 170 Q32 145 32 95 Q32 55 60 25 Z" />
+        <circle className="splash-dot splash-eye-l" cx="78" cy="108" r="7" />
+        <circle className="splash-dot splash-eye-r" cx="122" cy="108" r="7" />
+        <path className="splash-stroke splash-nose" d="M92 128 L102 138 M102 128 L92 138" />
+        <path className="splash-stroke splash-whisker-l" d="M75 132 L40 122 M75 137 L38 137 M75 142 L40 150" />
+        <path className="splash-stroke splash-whisker-r" d="M125 132 L160 122 M125 137 L162 137 M125 142 L160 150" />
       </svg>
+      <div className="splash-word">mu</div>
     </div>
   )
 }
