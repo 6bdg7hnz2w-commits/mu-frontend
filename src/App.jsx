@@ -645,10 +645,10 @@ function CalendarPage() {
 
   const importantByDay = {}
   importantDates.forEach(idate => {
-    const dd = new Date(idate.date)
+    const [dy, dm, dday] = idate.date.split('-').map(Number)
     let showDay = null
-    if (idate.recurring === 'yearly') { if (dd.getMonth() === month) showDay = dd.getDate() }
-    else { if (dd.getMonth() === month && dd.getFullYear() === year) showDay = dd.getDate() }
+    if (idate.recurring === 'yearly') { if (dm - 1 === month) showDay = dday }
+    else { if (dm - 1 === month && dy === year) showDay = dday }
     if (showDay) { if (!importantByDay[showDay]) importantByDay[showDay] = []; importantByDay[showDay].push(idate) }
   })
   const isImportant = (d) => d && importantByDay[d] && importantByDay[d].length > 0
