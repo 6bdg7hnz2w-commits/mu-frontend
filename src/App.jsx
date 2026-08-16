@@ -603,17 +603,37 @@ function SplashScreen({ onDone }) {
     return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
   }, [onDone])
 
+  // Force html/body/#root to the splash color so nothing but orange can ever show behind it,
+  // regardless of viewport-height quirks or the app's own light/dark background. Reverted on unmount.
+  useEffect(() => {
+    const root = document.getElementById('root')
+    const prev = { html: document.documentElement.style.backgroundColor, body: document.body.style.backgroundColor, root: root ? root.style.backgroundColor : '' }
+    document.documentElement.style.backgroundColor = '#E87B35'
+    document.body.style.backgroundColor = '#E87B35'
+    if (root) root.style.backgroundColor = '#E87B35'
+    return () => {
+      document.documentElement.style.backgroundColor = prev.html
+      document.body.style.backgroundColor = prev.body
+      if (root) root.style.backgroundColor = prev.root
+    }
+  }, [])
+
   return (
     <div className={`splash-screen ${fading ? 'fading' : ''}`}>
-      <svg className="splash-cat" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-        <path className="splash-stroke splash-outline" d="M60 25 L100 75 L140 25 Q168 55 168 95 Q168 145 130 170 Q100 178 70 170 Q32 145 32 95 Q32 55 60 25 Z" />
-        <circle className="splash-dot splash-eye-l" cx="78" cy="108" r="7" />
-        <circle className="splash-dot splash-eye-r" cx="122" cy="108" r="7" />
-        <path className="splash-stroke splash-nose" d="M92 128 L102 138 M102 128 L92 138" />
-        <path className="splash-stroke splash-whisker-l" d="M75 132 L40 122 M75 137 L38 137 M75 142 L40 150" />
-        <path className="splash-stroke splash-whisker-r" d="M125 132 L160 122 M125 137 L162 137 M125 142 L160 150" />
+      <svg className="splash-cat" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="680" height="680" fill="#E87B35" />
+        <g transform="translate(340, 320)" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path className="splash-stroke splash-outline" d="M -40,0 Q -45,-15 -35,-45 L -25,-75 L -10,-45 Q 0,-38 10,-45 L 25,-75 L 35,-45 Q 45,-15 40,0 Q 35,20 0,25 Q -35,20 -40,0 Z" />
+          <circle className="splash-dot splash-eye-l" cx="-14" cy="-15" r="5" fill="#1a1a1a" />
+          <circle className="splash-dot splash-eye-r" cx="14" cy="-15" r="5" fill="#1a1a1a" />
+          <path className="splash-stroke splash-nose" d="M -4,0 L 0,3 L 4,0 M 0,3 Q 0,8 -5,8 M 0,3 Q 0,8 5,8" />
+          <line className="splash-stroke splash-whisker-l" x1="-18" y1="0" x2="-42" y2="-5" />
+          <line className="splash-stroke splash-whisker-l" x1="-18" y1="3" x2="-42" y2="5" />
+          <line className="splash-stroke splash-whisker-r" x1="18" y1="0" x2="42" y2="-5" />
+          <line className="splash-stroke splash-whisker-r" x1="18" y1="3" x2="42" y2="5" />
+        </g>
+        <text className="splash-word" x="340" y="480" textAnchor="middle" fontFamily="Georgia, serif" fontSize="28" fontWeight="400" fill="#1a1a1a" letterSpacing="6">mu</text>
       </svg>
-      <div className="splash-word">mu</div>
     </div>
   )
 }
