@@ -377,7 +377,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .dg-tools{display:flex;align-items:center;gap:10px;padding:14px 20px;flex-wrap:wrap}
 .dg-color{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .dg-color.active{border-color:var(--text)}
-.dg-tools .text-btn.active{color:var(--accent);font-weight:600}
+.dg-color-white{border:1px solid var(--border)}
+.dg-color-white.active{border-color:var(--text);box-shadow:0 0 0 2px var(--accent-light)}
+.dg-eraser{padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:var(--text-secondary);cursor:pointer}
+.dg-eraser.active{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
 .dg-result-card{text-align:center;padding:20px}
 .dg-result-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:15px}
 .dg-result-reason{font-size:13px;color:var(--text-secondary);margin:10px 0;line-height:1.5}

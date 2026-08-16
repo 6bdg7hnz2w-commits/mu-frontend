@@ -1113,9 +1113,14 @@ function DrawGuessGame({ onBack }) {
             onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw} />
           <div className="dg-tools">
             {DG_COLORS.map(c => (
-              <button key={c} className={`dg-color ${!erasing && color === c ? 'active' : ''}`} style={{ background: c, ...(c === '#ffffff' ? { boxShadow: 'inset 0 0 0 1px var(--border)' } : {}) }} onClick={() => pickColor(c)} />
+              <button
+                key={c}
+                className={`dg-color ${c === '#ffffff' ? 'dg-color-white' : ''} ${!erasing && color === c ? 'active' : ''}`}
+                style={{ background: c }}
+                onClick={() => pickColor(c)}
+              />
             ))}
-            <button className={`text-btn ${erasing ? 'active' : ''}`} onClick={() => setErasing(e => !e)}>橡皮</button>
+            <button className={`dg-eraser ${erasing ? 'active' : ''}`} onClick={() => setErasing(true)}>橡皮</button>
             <button className="text-btn" onClick={clearCanvas}>清空</button>
             <button className="btn-primary" onClick={submitDrawing}>提交</button>
           </div>
