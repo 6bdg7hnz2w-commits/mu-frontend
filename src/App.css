@@ -70,7 +70,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .btn-ghost{padding:10px 16px;border:none;background:none;color:var(--text-secondary);font-size:14px;font-weight:500;cursor:pointer}
 .btn-danger-text{padding:10px 4px;border:none;background:none;font-size:14px;color:var(--danger);cursor:pointer;margin-right:auto}
 .btn-danger-text-centered{padding:10px 4px;border:none;background:none;font-size:14px;color:var(--danger);cursor:pointer;text-align:center;width:100%}
-.emoji-picker-row{display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap}
+.emoji-picker-row{display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap;justify-content:center}
 .emoji-btn{width:36px;height:36px;border:1.5px solid var(--border);border-radius:8px;background:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .emoji-btn.active{border-color:var(--accent);background:var(--accent-light)}
 
