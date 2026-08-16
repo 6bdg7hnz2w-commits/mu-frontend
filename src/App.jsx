@@ -594,6 +594,31 @@ function ChatPage({ onEnterRoom }) {
   return <ChatListPage onOpen={setOpenSession} onOpenSearch={() => setShowSearch(true)} />
 }
 
+// ─── SplashScreen ────────────────────────────────────
+function SplashScreen({ onDone }) {
+  const [fading, setFading] = useState(false)
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFading(true), 2200)
+    const doneTimer = setTimeout(() => onDone(), 2600)
+    return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer) }
+  }, [onDone])
+
+  return (
+    <div className={`splash-screen ${fading ? 'fading' : ''}`}>
+      <svg className="splash-cat" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
+        <path className="splash-stroke s1" d="M60 70 L45 25 L80 55 Z" />
+        <path className="splash-stroke s1" d="M140 70 L155 25 L120 55 Z" />
+        <path className="splash-stroke s2" d="M60 70 Q40 110 55 150 Q70 185 100 185 Q130 185 145 150 Q160 110 140 70 Q100 45 60 70 Z" />
+        <path className="splash-stroke s3" d="M140 150 Q175 155 180 130 Q182 115 165 118" />
+        <path className="splash-stroke s4" d="M75 100 L55 95 M75 105 L52 105 M75 110 L55 115" />
+        <path className="splash-stroke s4" d="M125 100 L145 95 M125 105 L148 105 M125 110 L145 115" />
+        <circle className="splash-dot" cx="80" cy="100" r="4" />
+        <circle className="splash-dot" cx="120" cy="100" r="4" />
+      </svg>
+    </div>
+  )
+}
+
 // ─── CalendarPage ───────────────────────────────────
 function CalendarPage() {
   const today = new Date()
@@ -1213,6 +1238,7 @@ function MorePage() {
 
 // ─── App ────────────────────────────────────────────
 function App() {
+  const [showSplash, setShowSplash] = useState(true)
   const [tab, setTab] = useState('today')
   const [inRoom, setInRoom] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
@@ -1227,6 +1253,8 @@ function App() {
     { key: 'calendar', label: 'Calendar', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> },
     { key: 'more', label: 'More', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg> },
   ]
+
+  if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />
 
   return (
     <div className="app">
