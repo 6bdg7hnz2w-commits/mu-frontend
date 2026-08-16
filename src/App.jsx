@@ -607,6 +607,7 @@ function CalendarPage() {
   const [importantDates, setImportantDates] = useState(getImportantDates())
   const [showAddDate, setShowAddDate] = useState(false)
   const [editingDate, setEditingDate] = useState(null)
+  const [showMonthPicker, setShowMonthPicker] = useState(false)
 
   const year = currentDate.getFullYear(), month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -626,6 +627,9 @@ function CalendarPage() {
   const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null) }
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null) }
   const goToday = () => { setCurrentDate(new Date()); setSelectedDay(today.getDate()) }
+  const goToMonth = (y, m) => { setCurrentDate(new Date(y, m, 1)); setSelectedDay(null) }
+  const yearOptions = []; for (let y = today.getFullYear() - 10; y <= today.getFullYear() + 10; y++) yearOptions.push(y)
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
   const addImportantDate = (d) => { const nd = [...importantDates, d]; setImportantDates(nd); saveImportantDates(nd) }
   const updateImportantDate = (updated) => { const nd = importantDates.map(d => d.id === updated.id ? updated : d); setImportantDates(nd); saveImportantDates(nd) }
@@ -663,7 +667,7 @@ function CalendarPage() {
     <div className="calendar-page">
       <div className="page-header"><div><h1>Calendar</h1><div className="page-subtitle">{year}</div></div><div className="header-actions"><button className="text-btn" onClick={goToday}>Today</button><button className="icon-btn" onClick={() => setShowAddDate(true)}>{I.plus}</button></div></div>
       <div className="card cal-card">
-        <div className="cal-nav"><button className="icon-btn small" onClick={prevMonth}>{I.back}</button><span className="cal-month">{['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month]} {year}</span><button className="icon-btn small" onClick={nextMonth}>{I.chevron}</button></div>
+        <div className="cal-nav"><button className="icon-btn small" onClick={prevMonth}>{I.back}</button><button className="cal-month" onClick={() => setShowMonthPicker(true)}>{monthNames[month]} {year}</button><button className="icon-btn small" onClick={nextMonth}>{I.chevron}</button></div>
         <div className="cal-grid">
           {dayLabels.map((d, i) => <div key={i} className="cal-head">{d}</div>)}
           {cells.map((d, i) => (
@@ -709,6 +713,24 @@ function CalendarPage() {
 
       {showAddDate && <AddDateModal onClose={() => setShowAddDate(false)} onSave={addImportantDate} />}
       {editingDate && <EditDateModal item={editingDate} onClose={() => setEditingDate(null)} onSave={updateImportantDate} onDelete={deleteImportantDate} />}
+      {showMonthPicker && (
+        <div className="modal-overlay" onClick={() => setShowMonthPicker(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>Jump to Month</h3>
+            <div className="month-picker-row">
+              <select className="month-picker-select" value={month} onChange={e => goToMonth(year, Number(e.target.value))}>
+                {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+              <select className="month-picker-select" value={year} onChange={e => goToMonth(Number(e.target.value), month)}>
+                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <div className="modal-actions-row">
+              <button className="btn-primary-full" onClick={() => setShowMonthPicker(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
