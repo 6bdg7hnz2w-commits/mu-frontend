@@ -648,12 +648,21 @@ function CalendarPage() {
   const hasTodo = (d) => d && todoDateSet.has(mkDate(d))
 
   const importantByDay = {}
+  const pushImportant = (day, idate) => { if (!importantByDay[day]) importantByDay[day] = []; importantByDay[day].push(idate) }
   importantDates.forEach(idate => {
     const [dy, dm, dday] = idate.date.split('-').map(Number)
     let showDay = null
     if (idate.recurring === 'yearly') { if (dm - 1 === month) showDay = dday }
     else { if (dm - 1 === month && dy === year) showDay = dday }
-    if (showDay) { if (!importantByDay[showDay]) importantByDay[showDay] = []; importantByDay[showDay].push(idate) }
+    if (showDay) pushImportant(showDay, idate)
+  })
+  // Monthly + milestone-day anniversaries (same source as the Today page countdowns)
+  pushImportant(START_DATE.getDate(), { id: `monthly_${year}_${month}`, name: 'Monthly Anniversary', emoji: '💗', derived: true })
+  ;[50, 100, 200, 365, 500, 730, 1000].forEach(m => {
+    const target = new Date(START_DATE.getTime() + m * 86400000)
+    if (target.getFullYear() === year && target.getMonth() === month) {
+      pushImportant(target.getDate(), { id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', derived: true })
+    }
   })
   const isImportant = (d) => d && importantByDay[d] && importantByDay[d].length > 0
 
@@ -689,7 +698,7 @@ function CalendarPage() {
         <div className="card important-day-card">
           <div className="card-title">Important Dates</div>
           {selectedDayImportantDates.map(idate => (
-            <div key={idate.id} className="important-day-item" onTouchStart={() => { const timer = setTimeout(() => setEditingDate(idate), 500); const clear = () => { clearTimeout(timer); document.removeEventListener('touchend', clear) }; document.addEventListener('touchend', clear) }} onContextMenu={e => { e.preventDefault(); setEditingDate(idate) }}>
+            <div key={idate.id} className="important-day-item" onTouchStart={() => { if (idate.derived) return; const timer = setTimeout(() => setEditingDate(idate), 500); const clear = () => { clearTimeout(timer); document.removeEventListener('touchend', clear) }; document.addEventListener('touchend', clear) }} onContextMenu={e => { e.preventDefault(); if (!idate.derived) setEditingDate(idate) }}>
               <span className="important-day-emoji">{idate.emoji}</span>
               <span className="important-day-name">{idate.name}</span>
             </div>
