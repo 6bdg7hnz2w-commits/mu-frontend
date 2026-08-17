@@ -461,6 +461,19 @@ function ChatRoom({ session, onBack }) {
   useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
   useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
 
+  // ─── fingertips 打字节奏探针 ─────────────────────────
+  // 只上报"正在打字"这个事实，4秒节流，不携带任何内容。
+  const lastPingRef = useRef(0)
+  const handleInputChange = (e) => {
+    const value = e.target.value
+    setInput(value)
+    const now = Date.now()
+    if (value.trim() && now - lastPingRef.current >= 4000) {
+      lastPingRef.current = now
+      fetch(`${API}/api/typing/ping`, { method: 'POST', keepalive: true }).catch(() => {})
+    }
+  }
+
   useEffect(() => {
     fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
@@ -567,7 +580,7 @@ function ChatRoom({ session, onBack }) {
             <button className="attach-btn">{I.camera}</button>
             <button className="attach-btn">{I.photo}</button>
           </div>
-          <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} />
+          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} />
           <button className="send-btn" onClick={sendMessage} disabled={loading || !input.trim()}>{I.send}</button>
         </div>
       </div>
