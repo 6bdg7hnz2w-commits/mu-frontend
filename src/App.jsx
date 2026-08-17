@@ -1067,7 +1067,12 @@ function MemoryImportPage({ onBack }) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
+  const [memories, setMemories] = useState([])
   const swipe = useSwipeBack(onBack)
+
+  useEffect(() => {
+    fetch(`${API}/api/memories`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMemories(d) }).catch(() => {})
+  }, [justSaved])
 
   const submit = async () => {
     if (!text.trim() || submitting) return
@@ -1081,6 +1086,13 @@ function MemoryImportPage({ onBack }) {
     setSubmitting(false)
   }
 
+  const deleteMemory = async (id) => {
+    try {
+      await fetch(`${API}/api/memories/${id}`, { method: 'DELETE' })
+      setMemories(prev => prev.filter(m => m.id !== id))
+    } catch {}
+  }
+
   return (
     <div className="more-sub-page" {...swipe}>
       <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>Import Memory</h1></div>
@@ -1092,6 +1104,17 @@ function MemoryImportPage({ onBack }) {
           {justSaved && <span className="import-saved-hint">Saved</span>}
           <button className="btn-primary" onClick={submit} disabled={!text.trim() || submitting}>{submitting ? '...' : 'Add to Memory'}</button>
         </div>
+      </div>
+
+      <div className="card-title-outer">已保存的记忆</div>
+      <div className="card">
+        {memories.length === 0 && <div className="empty-state-sm">还没有保存的记忆</div>}
+        {memories.map(m => (
+          <div key={m.id} className="important-day-item" style={{ justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.summary}</span>
+            <button className="text-btn danger" onClick={() => deleteMemory(m.id)}>删除</button>
+          </div>
+        ))}
       </div>
     </div>
   )
