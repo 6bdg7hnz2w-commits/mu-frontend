@@ -1068,6 +1068,9 @@ function MemoryImportPage({ onBack }) {
   const [submitting, setSubmitting] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
   const [memories, setMemories] = useState([])
+  const [selectedMemory, setSelectedMemory] = useState(null)
+  const [editText, setEditText] = useState('')
+  const [editing, setEditing] = useState(false)
   const swipe = useSwipeBack(onBack)
 
   useEffect(() => {
@@ -1090,7 +1093,45 @@ function MemoryImportPage({ onBack }) {
     try {
       await fetch(`${API}/api/memories/${id}`, { method: 'DELETE' })
       setMemories(prev => prev.filter(m => m.id !== id))
+      setSelectedMemory(null)
     } catch {}
+  }
+
+  const updateMemory = async () => {
+    if (!editText.trim() || !selectedMemory) return
+    try {
+      await fetch(`${API}/api/memories/${selectedMemory.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: editText.trim() }) })
+      setMemories(prev => prev.map(m => m.id === selectedMemory.id ? { ...m, summary: editText.trim() } : m))
+      setSelectedMemory(prev => ({ ...prev, summary: editText.trim() }))
+      setEditing(false)
+    } catch {}
+  }
+
+  if (selectedMemory) {
+    return (
+      <div className="more-sub-page">
+        <div className="page-header"><button className="icon-btn" onClick={() => { setSelectedMemory(null); setEditing(false) }}>{I.back}</button><h1>Memory Detail</h1></div>
+        <div className="card">
+          {editing ? (
+            <>
+              <textarea className="write-area" value={editText} onChange={e => setEditText(e.target.value)} rows={8} />
+              <div className="write-actions">
+                <button className="btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+                <button className="btn-primary" onClick={updateMemory} disabled={!editText.trim()}>Save</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px', lineHeight: 1.6 }}>{selectedMemory.summary}</div>
+              <div className="write-actions">
+                <button className="text-btn danger" onClick={() => deleteMemory(selectedMemory.id)}>Delete</button>
+                <button className="btn-primary" onClick={() => { setEditText(selectedMemory.summary); setEditing(true) }}>Edit</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1106,13 +1147,13 @@ function MemoryImportPage({ onBack }) {
         </div>
       </div>
 
-      <div className="card-title-outer">已保存的记忆</div>
+      <div className="card-title-outer">Saved Memories</div>
       <div className="card">
-        {memories.length === 0 && <div className="empty-state-sm">还没有保存的记忆</div>}
+        {memories.length === 0 && <div className="empty-state-sm">No saved memories yet</div>}
         {memories.map(m => (
-          <div key={m.id} className="important-day-item" style={{ justifyContent: 'space-between' }}>
+          <div key={m.id} className="important-day-item" onClick={() => setSelectedMemory(m)} style={{ cursor: 'pointer' }}>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.summary}</span>
-            <button className="text-btn danger" onClick={() => deleteMemory(m.id)}>删除</button>
+            {I.chevron}
           </div>
         ))}
       </div>
