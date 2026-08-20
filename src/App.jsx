@@ -159,6 +159,8 @@ const I = {
   book: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
   brain: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2a2.5 2.5 0 0 0-2.5 2.5v.5A2.5 2.5 0 0 0 4.5 7.5v.5A2.5 2.5 0 0 0 2 10.5v0A2.5 2.5 0 0 0 4.5 13v0a2.5 2.5 0 0 0 0 5v0a2.5 2.5 0 0 0 2.5 2.5v0A2.5 2.5 0 0 0 9.5 23"/><path d="M14.5 2a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1 0 5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5"/></svg>,
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+  speaker: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
+  pause: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
 }
 
 // ─── SwipeRow ───────────────────────────────────────
@@ -440,6 +442,23 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   )
 }
 
+// ─── TtsButton ──────────────────────────────────────
+function TtsButton({ status, progress, onToggle }) {
+  const r = 9, c = 2 * Math.PI * r
+  const pct = Math.min(Math.max(progress || 0, 0), 1)
+  return (
+    <button className={`tts-btn ${status}`} onClick={onToggle} aria-label={status === 'playing' ? 'Pause voice' : status === 'loading' ? 'Loading voice' : 'Play voice'}>
+      {status === 'playing' && (
+        <svg className="tts-progress" width="24" height="24" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
+          <circle cx="12" cy="12" r={r} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} strokeLinecap="round" transform="rotate(-90 12 12)" />
+        </svg>
+      )}
+      <span className="tts-icon">{status === 'loading' ? <span className="spinner tiny" /> : status === 'playing' ? I.pause : I.speaker}</span>
+    </button>
+  )
+}
+
 // ─── ChatRoom ───────────────────────────────────────
 function ChatRoom({ session, onBack }) {
   const [messages, setMessages] = useState([])
@@ -452,11 +471,65 @@ function ChatRoom({ session, onBack }) {
   const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
   const [showSettings, setShowSettings] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
+  const [ttsState, setTtsState] = useState({})
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
   const textareaRef = useRef(null)
   const model = session.model || 'opus'
   const info = getModelInfo(model)
+
+  // ─── TTS playback (speaker button on assistant messages) ──
+  const ttsAudioRef = useRef(null)
+  const ttsUrlRef = useRef(null)
+  const ttsAbortRef = useRef(null)
+  const ttsIdxRef = useRef(null)
+
+  const stopTts = useCallback(() => {
+    if (ttsAbortRef.current) { ttsAbortRef.current.abort(); ttsAbortRef.current = null }
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause()
+      ttsAudioRef.current.ontimeupdate = null
+      ttsAudioRef.current.onended = null
+      ttsAudioRef.current.onerror = null
+      ttsAudioRef.current.src = ''
+      ttsAudioRef.current = null
+    }
+    if (ttsUrlRef.current) { URL.revokeObjectURL(ttsUrlRef.current); ttsUrlRef.current = null }
+    const prevIdx = ttsIdxRef.current
+    ttsIdxRef.current = null
+    if (prevIdx != null) setTtsState(prev => { const n = { ...prev }; delete n[prevIdx]; return n })
+  }, [])
+
+  const toggleTts = useCallback(async (idx, text) => {
+    if (ttsIdxRef.current === idx) { stopTts(); return }
+    stopTts()
+    ttsIdxRef.current = idx
+    setTtsState(prev => ({ ...prev, [idx]: { status: 'loading', progress: 0 } }))
+    const controller = new AbortController()
+    ttsAbortRef.current = controller
+    try {
+      const res = await fetch(`${API}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal: controller.signal })
+      if (!res.ok) throw new Error('tts failed')
+      const blob = await res.blob()
+      if (ttsIdxRef.current !== idx) return
+      const url = URL.createObjectURL(blob)
+      ttsUrlRef.current = url
+      const audio = new Audio(url)
+      ttsAudioRef.current = audio
+      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: audio.currentTime / audio.duration } })) }
+      audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
+      audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
+      await audio.play()
+      if (ttsIdxRef.current === idx) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: 0 } }))
+    } catch (err) {
+      if (err.name !== 'AbortError' && ttsIdxRef.current === idx) {
+        ttsIdxRef.current = null
+        setTtsState(prev => { const n = { ...prev }; delete n[idx]; return n })
+      }
+    }
+  }, [stopTts])
+
+  useEffect(() => () => stopTts(), [stopTts])
 
   useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
   useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
@@ -475,6 +548,7 @@ function ChatRoom({ session, onBack }) {
   }
 
   useEffect(() => {
+    stopTts()
     fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setMessages(data)
@@ -483,7 +557,7 @@ function ChatRoom({ session, onBack }) {
         setStickerMap(map)
       }
     })
-  }, [session.id])
+  }, [session.id, stopTts])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px' } }, [input])
@@ -566,7 +640,12 @@ function ChatRoom({ session, onBack }) {
               </div>
             )}
             <div className="bubble">{m.content}</div>
-            <div className="msg-time">{fmtShortTime(m.created_at)}</div>
+            <div className="msg-meta">
+              {m.role === 'assistant' && m.content && (
+                <TtsButton status={(ttsState[i] || {}).status || 'idle'} progress={(ttsState[i] || {}).progress || 0} onToggle={() => toggleTts(i, m.content)} />
+              )}
+              <span className="msg-time">{fmtShortTime(m.created_at)}</span>
+            </div>
           </div>
         ))}
         {loading && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}

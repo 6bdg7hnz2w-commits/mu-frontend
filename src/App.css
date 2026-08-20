@@ -152,7 +152,14 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .msg .bubble{display:inline-block;max-width:78%;min-width:0;width:fit-content;padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-break:normal;overflow-wrap:break-word}
 .msg.user .bubble{background:var(--bubble-user);color:var(--text);border-bottom-right-radius:6px;text-align:left}
 .msg.assistant .bubble{background:var(--bubble-assistant);color:var(--text);border-bottom-left-radius:6px}
-.msg-time{font-size:11px;color:var(--text-dim);margin-top:2px;padding:0 4px}
+.msg-meta{display:flex;align-items:center;gap:4px;margin-top:2px;padding:0 4px}
+.msg-time{font-size:11px;color:var(--text-dim)}
+.tts-btn{position:relative;width:24px;height:24px;border-radius:50%;border:none;background:none;color:var(--text-dim);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0}
+.tts-btn:active{opacity:.6}
+.tts-btn.playing{color:var(--accent)}
+.tts-btn .tts-icon{display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.tts-progress{position:absolute;top:0;left:0}
+.spinner.tiny{width:12px;height:12px;border-width:1.5px;margin:0}
 .thinking-trigger{display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:4px;font-size:13px;color:var(--text-secondary);cursor:pointer}
 .thinking-trigger:active{opacity:.6}
 .thinking-trigger svg:last-child{color:var(--text-dim)}
