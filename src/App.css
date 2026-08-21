@@ -376,6 +376,19 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .setting-value{font-size:14px;color:var(--text-secondary);flex-shrink:0}
 .setting-value.dim{color:var(--text-dim)}
 
+.mcp-card{padding-top:14px}
+.mcp-status-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.mcp-status-dot{width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
+.mcp-status-dot.connected{background:var(--green)}
+.mcp-status-dot.connecting{background:var(--accent);animation:pulse 1s ease-in-out infinite}
+.mcp-status-dot.error{background:var(--danger)}
+.mcp-status-label{font-size:14px;color:var(--text-secondary)}
+.mcp-url-input{margin-bottom:8px}
+.mcp-error{font-size:13px;color:var(--danger);background:var(--accent-light);border-radius:8px;padding:8px 10px;margin-bottom:4px;word-break:break-word}
+.mcp-tool-item{flex-direction:column;align-items:flex-start;gap:2px}
+.mcp-tool-desc{font-size:12px;white-space:normal;text-align:left}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
 ::-webkit-scrollbar{width:0}
 
 /* 鈹€鈹€鈹€ 浣犵敾鎴戠寽 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */

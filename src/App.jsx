@@ -20,6 +20,33 @@ function setDraftStorage(sessionId, text) {
   try { if (text) localStorage.setItem(`draft_${sessionId}`, text); else localStorage.removeItem(`draft_${sessionId}`) } catch {}
 }
 
+// ─── MCP server URL (localStorage) ──────────────────
+function getMcpUrl() {
+  try { return localStorage.getItem('mcp_server_url') || '' } catch { return '' }
+}
+function setMcpUrlStorage(url) {
+  try { if (url) localStorage.setItem('mcp_server_url', url); else localStorage.removeItem('mcp_server_url') } catch {}
+}
+// Minimal MCP (Model Context Protocol) JSON-RPC call over Streamable HTTP.
+// Servers may reply as plain JSON or as an SSE "data: {...}" frame — handle both.
+async function mcpRequest(url, method, params) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params: params || {} }),
+  })
+  const raw = await res.text()
+  let payload
+  try { payload = JSON.parse(raw) } catch {
+    const m = raw.match(/data:\s*(\{[\s\S]*\})/)
+    if (!m) throw new Error(`Invalid response from MCP server (HTTP ${res.status})`)
+    payload = JSON.parse(m[1])
+  }
+  if (!res.ok) throw new Error(payload?.error?.message || `HTTP ${res.status}`)
+  if (payload.error) throw new Error(payload.error.message || 'MCP server returned an error')
+  return payload.result
+}
+
 // ─── Important dates (localStorage) ─────────────────
 function getImportantDates() {
   try {
@@ -1098,10 +1125,79 @@ function SettingsPage({ onBack }) {
   const [subPage, setSubPage] = useState(null)
   const swipe = useSwipeBack(() => subPage ? setSubPage(null) : onBack())
 
+  // ─── MCP server connection ──────────────────────────
+  const [mcpUrl, setMcpUrl] = useState(getMcpUrl())
+  const [mcpStatus, setMcpStatus] = useState('idle') // idle | connecting | connected | error
+  const [mcpTools, setMcpTools] = useState([])
+  const [mcpError, setMcpError] = useState('')
+
+  const connectMcp = async () => {
+    const url = mcpUrl.trim()
+    if (!url || mcpStatus === 'connecting') return
+    setMcpStatus('connecting')
+    setMcpError('')
+    try {
+      await mcpRequest(url, 'initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'mu', version: '1.0' } })
+      const result = await mcpRequest(url, 'tools/list', {})
+      setMcpTools(Array.isArray(result?.tools) ? result.tools : [])
+      setMcpStatus('connected')
+      setMcpUrlStorage(url)
+    } catch (err) {
+      setMcpStatus('error')
+      setMcpError(err.message || 'Connection failed')
+      setMcpTools([])
+    }
+  }
+
+  const disconnectMcp = () => {
+    setMcpStatus('idle')
+    setMcpTools([])
+    setMcpError('')
+  }
+
   if (subPage === 'mcp') return (
     <div className="settings-page" {...swipe}>
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>MCP</h1></div>
-      <div className="card"><div className="empty-state-sm">No connected MCP services</div></div>
+
+      <div className="card-title-outer">MCP Server</div>
+      <div className="card mcp-card">
+        <div className="mcp-status-row">
+          <span className={`mcp-status-dot ${mcpStatus}`} />
+          <span className="mcp-status-label">
+            {mcpStatus === 'connected' ? 'Connected' : mcpStatus === 'connecting' ? 'Connecting…' : mcpStatus === 'error' ? 'Not connected' : 'Not connected'}
+          </span>
+        </div>
+        <input
+          className="modal-input mcp-url-input"
+          placeholder="https://your-mcp-server.com"
+          value={mcpUrl}
+          onChange={e => setMcpUrl(e.target.value)}
+          disabled={mcpStatus === 'connected' || mcpStatus === 'connecting'}
+        />
+        {mcpStatus === 'error' && mcpError && <div className="mcp-error">{mcpError}</div>}
+        <div className="write-actions">
+          {mcpStatus === 'connected'
+            ? <button className="btn-danger-text" onClick={disconnectMcp}>Disconnect</button>
+            : <button className="btn-primary" onClick={connectMcp} disabled={!mcpUrl.trim() || mcpStatus === 'connecting'}>{mcpStatus === 'connecting' ? 'Connecting…' : 'Connect'}</button>}
+        </div>
+      </div>
+
+      {mcpStatus === 'connected' && (
+        <>
+          <div className="card-title-outer">Available Tools ({mcpTools.length})</div>
+          <div className="card settings-card">
+            {mcpTools.length === 0 && <div className="empty-state-sm">Server exposes no tools</div>}
+            {mcpTools.map(t => (
+              <div key={t.name} className="setting-item mcp-tool-item">
+                <span>{t.name}</span>
+                {t.description && <span className="setting-value dim mcp-tool-desc">{t.description}</span>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="card-title-outer">Integrations</div>
       <div className="card settings-card">
         {['HealthKit', 'Apple Calendar', 'Reminders', 'ElevenLabs TTS'].map(n => (
           <div key={n} className="setting-item"><span>{n}</span><span className="setting-value dim">Coming soon</span></div>
