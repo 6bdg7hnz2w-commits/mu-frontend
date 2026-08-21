@@ -1120,6 +1120,16 @@ function TodayPage() {
   )
 }
 
+// ─── VoiceSlider ────────────────────────────────────
+function VoiceSlider({ label, value, min, max, step, onChange }) {
+  return (
+    <div className="voice-slider-row">
+      <div className="voice-slider-label"><span>{label}</span><span className="voice-slider-value">{Number(value).toFixed(2)}</span></div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} />
+    </div>
+  )
+}
+
 // ─── SettingsPage ───────────────────────────────────
 function SettingsPage({ onBack }) {
   const [subPage, setSubPage] = useState(null)
@@ -1153,6 +1163,36 @@ function SettingsPage({ onBack }) {
     setMcpStatus('idle')
     setMcpTools([])
     setMcpError('')
+  }
+
+  // ─── ElevenLabs voice settings ──────────────────────
+  const [elevenExpanded, setElevenExpanded] = useState(false)
+  const [voiceSettings, setVoiceSettings] = useState({ stability: 0.65, similarity_boost: 0.8, speed: 0.85 })
+  const [voiceLoading, setVoiceLoading] = useState(false)
+  const [voiceSaving, setVoiceSaving] = useState(false)
+  const [voiceToast, setVoiceToast] = useState('')
+
+  useEffect(() => {
+    if (subPage !== 'mcp') return
+    setVoiceLoading(true)
+    fetch(`${API}/api/settings/voice`).then(r => r.json()).then(d => {
+      if (d && typeof d === 'object') setVoiceSettings(prev => ({ ...prev, ...d }))
+    }).catch(() => {}).finally(() => setVoiceLoading(false))
+  }, [subPage])
+
+  const saveVoiceSettings = async () => {
+    if (voiceSaving) return
+    setVoiceSaving(true)
+    try {
+      const res = await fetch(`${API}/api/settings/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(voiceSettings) })
+      if (!res.ok) throw new Error('save failed')
+      setVoiceToast('Saved')
+      setTimeout(() => setVoiceToast(''), 2000)
+    } catch {
+      setVoiceToast('Save failed')
+      setTimeout(() => setVoiceToast(''), 2000)
+    }
+    setVoiceSaving(false)
   }
 
   if (subPage === 'mcp') return (
@@ -1198,11 +1238,36 @@ function SettingsPage({ onBack }) {
       )}
 
       <div className="card-title-outer">Integrations</div>
+      <div className="card settings-card elevenlabs-card">
+        <div className="setting-item" onClick={() => setElevenExpanded(v => !v)}>
+          <span>ElevenLabs TTS</span>
+          <span className="setting-value elevenlabs-status">已连接</span>
+          {I.chevron}
+        </div>
+        {elevenExpanded && (
+          <div className="elevenlabs-panel">
+            {voiceLoading ? (
+              <div className="loading-state"><span className="spinner" />Loading...</div>
+            ) : (
+              <>
+                <VoiceSlider label="Stability" value={voiceSettings.stability} min={0} max={1} step={0.05} onChange={v => setVoiceSettings(s => ({ ...s, stability: v }))} />
+                <VoiceSlider label="Similarity Boost" value={voiceSettings.similarity_boost} min={0} max={1} step={0.05} onChange={v => setVoiceSettings(s => ({ ...s, similarity_boost: v }))} />
+                <VoiceSlider label="Speed" value={voiceSettings.speed} min={0.5} max={1.5} step={0.05} onChange={v => setVoiceSettings(s => ({ ...s, speed: v }))} />
+                <div className="write-actions">
+                  <button className="btn-primary" onClick={saveVoiceSettings} disabled={voiceSaving}>{voiceSaving ? 'Saving…' : 'Save'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
       <div className="card settings-card">
-        {['HealthKit', 'Apple Calendar', 'Reminders', 'ElevenLabs TTS'].map(n => (
+        {['HealthKit', 'Apple Calendar', 'Reminders'].map(n => (
           <div key={n} className="setting-item"><span>{n}</span><span className="setting-value dim">Coming soon</span></div>
         ))}
       </div>
+
+      {voiceToast && <div className="toast">{voiceToast}</div>}
     </div>
   )
 
