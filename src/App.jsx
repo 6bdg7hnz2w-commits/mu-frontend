@@ -164,6 +164,7 @@ function getModelInfo(model) {
 
 // ─── Date helpers ───────────────────────────────────
 function daysBetween(a, b) { return Math.floor((b - a) / (1000 * 60 * 60 * 24)) }
+function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24)) }
 function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
 function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
 
@@ -960,19 +961,19 @@ function TodayPage() {
         targetDate = new Date(now.getFullYear(), targetDate.getMonth(), targetDate.getDate())
         if (targetDate.getTime() < todayMs) targetDate = new Date(now.getFullYear() + 1, targetDate.getMonth(), targetDate.getDate())
       }
-      const days = daysBetween(now, targetDate)
+      const days = daysUntilCeil(now, targetDate)
       if (days >= 0) results.push({ ...d, daysLeft: days, targetDate, isMonthly: false })
     })
     const milestones = [50, 100, 200, 365, 500, 730, 1000]
     milestones.forEach(m => {
       const target = new Date(START_DATE.getTime() + m * 86400000)
-      const days = daysBetween(now, target)
+      const days = daysUntilCeil(now, target)
       if (days > 0 && days <= 400) results.push({ id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', daysLeft: days, targetDate: target, isMonthly: false })
     })
     const startDay = START_DATE.getDate()
     let nextMonth = new Date(now.getFullYear(), now.getMonth(), startDay)
     if (nextMonth <= now) nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, startDay)
-    const monthlyDays = daysBetween(now, nextMonth)
+    const monthlyDays = daysUntilCeil(now, nextMonth)
     results.push({ id: 'monthly', name: 'Monthly Anniversary', emoji: '💗', daysLeft: monthlyDays, targetDate: nextMonth, isMonthly: true })
     return results.sort((a, b) => a.daysLeft - b.daysLeft)
   }
