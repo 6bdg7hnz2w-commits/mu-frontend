@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
@@ -166,17 +166,6 @@ function getModelInfo(model) {
 function daysBetween(a, b) { return Math.floor((b - a) / (1000 * 60 * 60 * 24)) }
 function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24)) }
 
-// 按「轮」分组：每条 role=user 消息开启新一轮，开头若有连续的 assistant 消息
-// （比如意识循环插的话），归入最开始那一轮。跟后端 lib/forge.js 的分组逻辑保持一致。
-function groupIntoRounds(messages) {
-  const rounds = []
-  let current = null
-  for (const m of messages) {
-    if (m.role === 'user' || !current) { current = []; rounds.push(current) }
-    current.push(m)
-  }
-  return rounds
-}
 function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
 function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
 
@@ -499,139 +488,8 @@ function TtsButton({ status, progress, onToggle }) {
   )
 }
 
-// ─── ForgePreviewModal — POST /api/sessions/forge/preview result ──
-function ForgePreviewModal({ loading, error, data, onClose }) {
-  const swipe = useSwipeBack(onClose)
-  return (
-    <div className="forge-preview-page" {...swipe}>
-      <div className="forge-header">
-        <button className="icon-btn" onClick={onClose}>{I.back}</button>
-        <div className="forge-title">预览</div>
-      </div>
-      {loading && <div className="loading-state"><span className="spinner" />生成预览中...</div>}
-      {!loading && error && <div className="empty-state">{error}</div>}
-      {!loading && data && (
-        <>
-          <div className="forge-preview-summary">
-            <div className="forge-preview-stat"><span className="forge-preview-num">{data.rounds}</span><span>轮</span></div>
-            <div className="forge-preview-stat"><span className="forge-preview-num">{data.messages_kept}</span><span>条带走</span></div>
-            <div className="forge-preview-stat"><span className="forge-preview-num">{data.messages_skipped}</span><span>条留下</span></div>
-            <div className="forge-preview-stat"><span className="forge-preview-num">{data.gaps}</span><span>处断口</span></div>
-          </div>
-          <div className="forge-preview-messages">
-            {data.preview_messages.map((m, i) => (
-              <div key={m.id || i}>
-                {m.gap_before && <div className="forge-gap-divider"><span>{m.gap_before}</span></div>}
-                <div className={`msg ${m.role}`}><div className="bubble">{m.content}</div></div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ─── ForgePickerPanel — 搬家到新窗口：挑选式换窗 ──────
-function ForgePickerPanel({ session, messages, onClose, onMoved }) {
-  // 未持久化（没有 id）的本地临时消息不能拿去跟后端 keep_message_ids 匹配，直接排除
-  const persistedMessages = useMemo(() => messages.filter(m => m.id != null), [messages])
-  const rounds = useMemo(() => groupIntoRounds(persistedMessages), [persistedMessages])
-  const [selectedIdx, setSelectedIdx] = useState(() => {
-    const n = Math.min(20, rounds.length)
-    const set = new Set()
-    for (let i = rounds.length - n; i < rounds.length; i++) set.add(i)
-    return set
-  })
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewData, setPreviewData] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState('')
-  const [executing, setExecuting] = useState(false)
-  const [execError, setExecError] = useState('')
-
-  const toggleRound = (idx) => setSelectedIdx(prev => { const n = new Set(prev); if (n.has(idx)) n.delete(idx); else n.add(idx); return n })
-
-  const keepMessageIds = useMemo(() => {
-    const ids = []
-    rounds.forEach((round, i) => { if (selectedIdx.has(i)) round.forEach(m => ids.push(m.id)) })
-    return ids
-  }, [rounds, selectedIdx])
-
-  const estimatedTokens = useMemo(() => {
-    let chars = 0
-    rounds.forEach((round, i) => { if (selectedIdx.has(i)) round.forEach(m => { chars += (m.content || '').length }) })
-    return (chars / 2 / 1000).toFixed(1)
-  }, [rounds, selectedIdx])
-
-  const segmentCount = useMemo(() => {
-    let segs = 0, prevSelected = false
-    for (let i = 0; i < rounds.length; i++) {
-      const sel = selectedIdx.has(i)
-      if (sel && !prevSelected) segs++
-      prevSelected = sel
-    }
-    return segs
-  }, [rounds, selectedIdx])
-
-  const openPreview = async () => {
-    if (keepMessageIds.length === 0) return
-    setShowPreview(true); setPreviewLoading(true); setPreviewError(''); setPreviewData(null)
-    try {
-      const res = await fetch(`${API}/api/sessions/forge/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_session_id: session.id, keep_message_ids: keepMessageIds }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '预览失败')
-      setPreviewData(data)
-    } catch (e) { setPreviewError(e.message || '预览失败') }
-    setPreviewLoading(false)
-  }
-
-  const doExecute = async () => {
-    if (keepMessageIds.length === 0 || executing) return
-    setExecuting(true); setExecError('')
-    try {
-      const res = await fetch(`${API}/api/sessions/forge/execute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_session_id: session.id, keep_message_ids: keepMessageIds }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '搬家失败')
-      onMoved({ id: data.id, name: data.name, model: session.model })
-    } catch (e) { setExecError(e.message || '搬家失败'); setExecuting(false) }
-  }
-
-  const swipe = useSwipeBack(onClose)
-
-  if (showPreview) return <ForgePreviewModal loading={previewLoading} error={previewError} data={previewData} onClose={() => setShowPreview(false)} />
-
-  return (
-    <div className="forge-page" {...swipe}>
-      <div className="forge-header">
-        <button className="icon-btn" onClick={onClose}>{I.back}</button>
-        <div className="forge-title">搬家到新窗口</div>
-      </div>
-      <div className="forge-statusbar">已选 {selectedIdx.size} 轮 · 约 {estimatedTokens}k token · 分 {segmentCount || 0} 段带走</div>
-      <div className="forge-messages">
-        {rounds.length === 0 && <div className="empty-state">没有可挑选的消息</div>}
-        {rounds.map((round, i) => (
-          <div key={round[0]?.id || i} className={`forge-round ${selectedIdx.has(i) ? 'selected' : ''}`} onClick={() => toggleRound(i)}>
-            <div className="forge-round-check">{selectedIdx.has(i) && I.check}</div>
-            <div className="forge-round-messages">
-              {round.map((m, j) => (
-                <div key={m.id || j} className={`msg ${m.role}`}><div className="bubble">{m.content}</div></div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      {execError && <div className="forge-error">{execError}</div>}
-      <div className="forge-footer">
-        <button className="btn-secondary-full" onClick={openPreview} disabled={selectedIdx.size === 0}>预览</button>
-        <button className="btn-primary-full" onClick={doExecute} disabled={selectedIdx.size === 0 || executing}>{executing ? '搬家中...' : '确认搬家'}</button>
-      </div>
-    </div>
-  )
-}
-
 // ─── ChatRoom ───────────────────────────────────────
-function ChatRoom({ session, onBack, onMoved }) {
+function ChatRoom({ session, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -641,7 +499,6 @@ function ChatRoom({ session, onBack, onMoved }) {
   const [showAvatarUpload, setShowAvatarUpload] = useState(false)
   const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
   const [showSettings, setShowSettings] = useState(false)
-  const [showForgePicker, setShowForgePicker] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
   const [ttsState, setTtsState] = useState({})
   const messagesEndRef = useRef(null)
@@ -770,7 +627,6 @@ function ChatRoom({ session, onBack, onMoved }) {
   const swipe = useSwipeBack(onBack)
 
   if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} sessionId={session.id} onJumpToMessage={jumpToMessage} />
-  if (showForgePicker) return <ForgePickerPanel session={session} messages={messages} onClose={() => setShowForgePicker(false)} onMoved={(s) => { setShowForgePicker(false); onMoved && onMoved(s) }} />
 
   return (
     <div className="chatroom" {...swipe}>
@@ -797,10 +653,6 @@ function ChatRoom({ session, onBack, onMoved }) {
           <div className="dropdown-item" onClick={() => { setShowAvatarUpload(true); setShowSettings(false) }}>
             <span>Session Avatar</span>
             {I.upload}
-          </div>
-          <div className="dropdown-item" onClick={() => { setShowForgePicker(true); setShowSettings(false) }}>
-            <span>搬家到新窗口</span>
-            {I.chevron}
           </div>
         </div>
       )}
@@ -859,7 +711,7 @@ function ChatPage({ onEnterRoom }) {
   }
 
   if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} onJumpToMessage={handleSearchJump} />
-  if (openSession) return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} onMoved={setOpenSession} />
+  if (openSession) return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
   return <ChatListPage onOpen={setOpenSession} onOpenSearch={() => setShowSearch(true)} />
 }
 
