@@ -10,6 +10,7 @@ input,textarea { -webkit-user-select:text;user-select:text }
   --bubble-user:#e5e5e5;--bubble-assistant:#f9f5f0;
   --heart:#e8707e;--important-dot:#e8883c;
   --health-card-bg:#f5f0ea;--health-card-bg2:#f0ece6;
+  --nook-highlight:#f5e6a8;
   color-scheme:light dark;
 }
 
@@ -22,6 +23,7 @@ input,textarea { -webkit-user-select:text;user-select:text }
     --bubble-user:#333;--bubble-assistant:#2a2420;
     --health-card-bg:#2a2420;--health-card-bg2:#252220;
     --period-light:#302020;--predicted:#5a3540;
+    --nook-highlight:#4a3f1f;
   }
 }
 
@@ -440,3 +442,37 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 @keyframes dot-appear{to{opacity:1}}
 
 .btn-primary-full:disabled{opacity:.5;cursor:default}
+
+/* ─── Nook (共读) ────────────────────────────────── */
+.nook-page{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.nook-shelf{padding:0 16px 16px}
+.nook-book-card{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:pointer}
+.nook-book-card:active{opacity:.8}
+.nook-book-cover{width:52px;height:72px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600;text-align:center;padding:4px;flex-shrink:0;line-height:1.3}
+.nook-book-info{flex:1;min-width:0}
+.nook-book-title{font-size:16px;font-weight:600}
+.nook-book-author{font-size:12px;color:var(--text-secondary);margin-top:2px}
+.nook-book-progress{display:flex;gap:12px;font-size:12px;color:var(--text-dim);margin-top:6px}
+.nook-chapter-badges{display:flex;gap:4px;align-items:center;margin-right:4px}
+.nook-badge{font-size:10px;padding:1px 5px;border-radius:6px;color:#fff;flex-shrink:0}
+.nook-badge.hua{background:var(--accent)}
+.nook-badge.mu{background:#5a8fd9}
+
+.nook-reader{height:100%;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+.nook-reader-header{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 4px;gap:4px}
+.nook-reader-title{flex:1;text-align:center;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nook-identity-btn{border:none;background:var(--card);color:var(--text-secondary);font-size:12px;padding:6px 10px;border-radius:12px;cursor:pointer;flex-shrink:0}
+.nook-reader-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 22px 24px}
+.nook-reader-content p{font-size:17px;line-height:2.0;margin-bottom:1.4em;color:var(--text);-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.nook-highlight{background:var(--nook-highlight);cursor:pointer;border-radius:2px;padding:0 1px}
+.nook-select-btn{position:fixed;transform:translate(-50%,-120%);background:var(--text);color:var(--bg);border:none;padding:8px 14px;border-radius:20px;font-size:13px;z-index:150;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer}
+.nook-reader-footer{display:flex;justify-content:space-between;padding:10px 20px calc(10px + var(--safe-bottom));border-top:1px solid var(--border);background:var(--surface)}
+.nook-reader-footer .text-btn:disabled{opacity:.3;cursor:default}
+.nook-annotation-modal{width:320px;max-height:80vh;display:flex;flex-direction:column}
+.nook-annotation-quote{font-size:14px;color:var(--text-secondary);font-style:italic;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.nook-floor-list{max-height:200px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.nook-floor{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;background:var(--card);max-width:85%}
+.nook-floor.mu{align-self:flex-end;background:var(--mu-bg)}
+.nook-floor.hua{align-self:flex-start;background:var(--her-bg)}
+.nook-floor-who{font-size:11px;color:var(--text-dim);font-weight:600}
+.nook-floor-text{font-size:14px;line-height:1.5;white-space:pre-wrap}
