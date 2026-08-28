@@ -596,48 +596,29 @@ function ChatRoom({ session, onBack }) {
   const ttsAbortRef = useRef(null)
   const ttsIdxRef = useRef(null)
   const ttsStatusRef = useRef(null)
-  // Background-prefetched { audio, url } per message index, so a bubble
-  // can show its real duration before it's ever been played, and so the
-  // first click reuses the already-downloaded audio instead of re-fetching.
-  // Requests are queued with a small concurrency cap rather than all fired
-  // at once on chat load — the backend/ElevenLabs call returns transient
-  // 500s under a burst of simultaneous requests.
+  // Audio kept alive (not revoked) after a message finishes playing, or when
+  // switching away to play a different message, so replaying the same
+  // message reuses it instead of re-fetching from /api/tts.
   const ttsCacheRef = useRef({})
-  const ttsPrefetchStartedRef = useRef(new Set())
-  const ttsPrefetchQueueRef = useRef([])
-  const ttsPrefetchActiveRef = useRef(0)
-  const TTS_PREFETCH_CONCURRENCY = 2
+  const ttsDurationsRef = useRef({})
+  useEffect(() => { ttsDurationsRef.current = ttsDurations }, [ttsDurations])
 
-  const runTtsPrefetchQueue = useCallback(() => {
-    while (ttsPrefetchActiveRef.current < TTS_PREFETCH_CONCURRENCY && ttsPrefetchQueueRef.current.length > 0) {
-      const { idx, text } = ttsPrefetchQueueRef.current.shift()
-      ttsPrefetchActiveRef.current++
-      fetch(`${API}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, preset: 'calm' }) })
-        .then(res => { if (!res.ok) throw new Error('tts failed'); return res.blob() })
-        .then(blob => {
-          const url = URL.createObjectURL(blob)
-          const audio = new Audio(url)
-          resolveAudioDuration(audio, dur => setTtsDurations(prev => ({ ...prev, [idx]: dur })))
-          ttsCacheRef.current[idx] = { audio, url }
-        })
-        .catch(() => { ttsPrefetchStartedRef.current.delete(idx) })
-        .finally(() => { ttsPrefetchActiveRef.current--; runTtsPrefetchQueue() })
-    }
-  }, [])
-
-  const prefetchTts = useCallback((idx, text) => {
+  const fetchDurationEstimate = useCallback((idx, text) => {
     if (!text || !text.trim()) return
-    if (ttsPrefetchStartedRef.current.has(idx)) return
-    ttsPrefetchStartedRef.current.add(idx)
-    ttsPrefetchQueueRef.current.push({ idx, text })
-    runTtsPrefetchQueue()
-  }, [runTtsPrefetchQueue])
+    const params = new URLSearchParams({ text, preset: 'calm' })
+    fetch(`${API}/api/tts/duration?${params}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && isFinite(data.duration)) {
+          setTtsDurations(prev => (prev[idx] != null ? prev : { ...prev, [idx]: data.duration }))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const clearTtsCache = useCallback(() => {
     Object.values(ttsCacheRef.current).forEach(({ url }) => URL.revokeObjectURL(url))
     ttsCacheRef.current = {}
-    ttsPrefetchStartedRef.current = new Set()
-    ttsPrefetchQueueRef.current = []
   }, [])
 
   const stopTts = useCallback(() => {
@@ -658,6 +639,26 @@ function ChatRoom({ session, onBack }) {
     if (prevIdx != null) setTtsState(prev => { const n = { ...prev }; delete n[prevIdx]; return n })
   }, [])
 
+  // Keeps the currently-active audio alive in ttsCacheRef instead of
+  // discarding it — used when a message finishes naturally or when
+  // switching to play a different message, so it can be replayed later
+  // without a new fetch. Contrast with stopTts, which really discards.
+  const stashTts = useCallback(() => {
+    const idx = ttsIdxRef.current
+    const audio = ttsAudioRef.current
+    if (idx == null || !audio) return
+    audio.pause()
+    audio.currentTime = 0
+    audio.ontimeupdate = null
+    audio.onended = null
+    audio.onerror = null
+    ttsCacheRef.current[idx] = { audio, url: ttsUrlRef.current }
+    ttsIdxRef.current = null
+    ttsStatusRef.current = null
+    ttsUrlRef.current = null
+    setTtsState(prev => { const n = { ...prev }; delete n[idx]; return n })
+  }, [])
+
   const pauseTts = useCallback(() => {
     const idx = ttsIdxRef.current
     if (idx == null || !ttsAudioRef.current) return
@@ -675,20 +676,24 @@ function ChatRoom({ session, onBack }) {
   }, [])
 
   const activateCachedTts = useCallback((idx, cached, atRatio) => {
-    if (ttsIdxRef.current !== null && ttsIdxRef.current !== idx) stopTts()
+    if (ttsIdxRef.current !== null && ttsIdxRef.current !== idx) stashTts()
     delete ttsCacheRef.current[idx]
     const { audio, url } = cached
     ttsIdxRef.current = idx
     ttsStatusRef.current = 'playing'
     ttsUrlRef.current = url
     ttsAudioRef.current = audio
-    audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / audio.duration } })) }
-    audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
+    audio.ontimeupdate = () => {
+      const dur = ttsDurationsRef.current[idx] ?? audio.duration
+      if (dur && isFinite(dur)) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / dur } }))
+    }
+    audio.onended = () => { if (ttsIdxRef.current === idx) stashTts() }
     audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
-    if (atRatio && isFinite(audio.duration) && audio.duration) audio.currentTime = atRatio * audio.duration
+    const knownDur = ttsDurationsRef.current[idx] ?? audio.duration
+    if (atRatio && isFinite(knownDur) && knownDur) audio.currentTime = atRatio * knownDur
     audio.play().catch(() => {})
     setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: atRatio || 0 } }))
-  }, [stopTts])
+  }, [stashTts, stopTts])
 
   const toggleTts = useCallback(async (idx, text) => {
     if (ttsIdxRef.current === idx) {
@@ -698,7 +703,7 @@ function ChatRoom({ session, onBack }) {
     }
     const cached = ttsCacheRef.current[idx]
     if (cached) { activateCachedTts(idx, cached, 0); return }
-    stopTts()
+    stashTts()
     ttsIdxRef.current = idx
     ttsStatusRef.current = 'loading'
     setTtsState(prev => ({ ...prev, [idx]: { status: 'loading', progress: 0 } }))
@@ -707,15 +712,23 @@ function ChatRoom({ session, onBack }) {
     try {
       const res = await fetch(`${API}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, preset: 'calm' }), signal: controller.signal })
       if (!res.ok) throw new Error('tts failed')
+      const headerDuration = Number(res.headers.get('X-Audio-Duration'))
       const blob = await res.blob()
       if (ttsIdxRef.current !== idx) return
       const url = URL.createObjectURL(blob)
       ttsUrlRef.current = url
       const audio = new Audio(url)
       ttsAudioRef.current = audio
-      resolveAudioDuration(audio, dur => setTtsDurations(prev => ({ ...prev, [idx]: dur })))
-      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / audio.duration } })) }
-      audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
+      if (isFinite(headerDuration) && headerDuration > 0) {
+        setTtsDurations(prev => ({ ...prev, [idx]: headerDuration }))
+      } else {
+        resolveAudioDuration(audio, dur => setTtsDurations(prev => ({ ...prev, [idx]: dur })))
+      }
+      audio.ontimeupdate = () => {
+        const dur = ttsDurationsRef.current[idx] ?? audio.duration
+        if (dur && isFinite(dur)) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / dur } }))
+      }
+      audio.onended = () => { if (ttsIdxRef.current === idx) stashTts() }
       audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
       await audio.play()
       if (ttsIdxRef.current === idx) { ttsStatusRef.current = 'playing'; setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: 0 } })) }
@@ -726,14 +739,15 @@ function ChatRoom({ session, onBack }) {
         setTtsState(prev => { const n = { ...prev }; delete n[idx]; return n })
       }
     }
-  }, [stopTts, pauseTts, resumeTts, activateCachedTts])
+  }, [stashTts, stopTts, pauseTts, resumeTts, activateCachedTts])
 
   const seekTts = useCallback((idx, ratio) => {
     const clamped = Math.min(Math.max(ratio, 0), 1)
     if (ttsIdxRef.current === idx) {
       const audio = ttsAudioRef.current
-      if (!audio || !isFinite(audio.duration) || !audio.duration) return
-      audio.currentTime = clamped * audio.duration
+      const dur = ttsDurationsRef.current[idx] ?? audio?.duration
+      if (!audio || !isFinite(dur) || !dur) return
+      audio.currentTime = clamped * dur
       setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: clamped } }))
       return
     }
@@ -769,10 +783,10 @@ function ChatRoom({ session, onBack }) {
         const map = {}
         data.forEach((m, i) => { if (m.role === 'assistant') map[i] = pickSticker(m.content) })
         setStickerMap(map)
-        data.forEach((m, i) => { if (m.role === 'assistant' && m.content) prefetchTts(i, m.content) })
+        data.forEach((m, i) => { if (m.role === 'assistant' && m.content) fetchDurationEstimate(i, m.content) })
       }
     })
-  }, [session.id, stopTts, clearTtsCache, prefetchTts])
+  }, [session.id, stopTts, clearTtsCache, fetchDurationEstimate])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px' } }, [input])
@@ -792,7 +806,7 @@ function ChatRoom({ session, onBack }) {
       const sticker = pickSticker(data.reply)
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString() }])
       setStickerMap(prev => ({ ...prev, [assistIdx]: sticker }))
-      if (data.reply && data.reply.trim()) prefetchTts(assistIdx, data.reply)
+      if (data.reply && data.reply.trim()) fetchDurationEstimate(assistIdx, data.reply)
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
     }
