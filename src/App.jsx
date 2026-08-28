@@ -1710,10 +1710,13 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
   const [activeAnnotation, setActiveAnnotation] = useState(null)
   const [replyText, setReplyText] = useState('')
   const [identity, setIdentity] = useState(getNookIdentity)
+  const [currentPara, setCurrentPara] = useState(0)
   const containerRef = useRef(null)
+  const sheetRef = useRef(null)
   const currentParaRef = useRef(0)
   const dirtyRef = useRef(false)
   const scrolledOnLoad = useRef(false)
+  const dragState = useRef({ startY: 0, dragging: false })
 
   useEffect(() => {
     setLoading(true)
@@ -1736,6 +1739,8 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
     scrolledOnLoad.current = true
     const own = progress?.[identity]
     const startPara = (own && own.chapter === chapterNum) ? own.paragraph : 0
+    currentParaRef.current = startPara
+    setCurrentPara(startPara)
     requestAnimationFrame(() => {
       const el = containerRef.current?.querySelector(`[data-para="${startPara}"]`)
       if (el) el.scrollIntoView({ block: 'start' })
@@ -1766,19 +1771,36 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
       if (p.getBoundingClientRect().top - containerTop <= 60) current = Number(p.dataset.para)
       else break
     }
-    if (current !== currentParaRef.current) { currentParaRef.current = current; dirtyRef.current = true }
+    if (current !== currentParaRef.current) {
+      currentParaRef.current = current
+      dirtyRef.current = true
+      setCurrentPara(current)
+    }
   }
 
+  // 选区可能横跨多个节点（跨段落、包含已有的高亮span），优先用公共祖先定位段落，
+  // 找不到时退化成用选区的可视位置和各段落的位置做几何匹配兜底。
   const handleSelectionEnd = () => {
     const sel = window.getSelection()
-    if (!sel || sel.isCollapsed) return
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
     const text = sel.toString().trim()
     if (!text) return
+    const container = containerRef.current
+    if (!container) return
     const range = sel.getRangeAt(0)
-    let node = range.startContainer
-    if (node.nodeType !== 1) node = node.parentNode
-    const paraEl = node?.closest?.('[data-para]')
-    if (!paraEl || !containerRef.current?.contains(paraEl)) { setSelectionInfo(null); return }
+
+    let node = range.commonAncestorContainer
+    if (node.nodeType !== 1) node = node.parentElement
+    let paraEl = node?.closest?.('[data-para]')
+    if (!paraEl || !container.contains(paraEl)) {
+      const rect = range.getBoundingClientRect()
+      paraEl = null
+      for (const p of container.querySelectorAll('[data-para]')) {
+        const r = p.getBoundingClientRect()
+        if (rect.top < r.bottom && rect.bottom > r.top) { paraEl = p; break }
+      }
+    }
+    if (!paraEl) { setSelectionInfo(null); return }
     const rect = range.getBoundingClientRect()
     setSelectionInfo({ top: rect.top, left: rect.left + rect.width / 2, paraIndex: Number(paraEl.dataset.para), quote: text.slice(0, 60) })
   }
@@ -1812,10 +1834,54 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
     } catch {}
   }
 
+  const deleteAnnotation = async () => {
+    if (!activeAnnotation) return
+    const id = activeAnnotation.id
+    setActiveAnnotation(null)
+    try {
+      await fetch(`${API}/api/nook/annotations/${id}`, { method: 'DELETE' })
+      setAnnotations(prev => prev.filter(a => a.id !== id))
+    } catch {}
+  }
+
   const switchIdentity = () => {
     const next = identity === 'hua' ? 'mu' : 'hua'
     setIdentity(next)
     setNookIdentityStorage(next)
+  }
+
+  // 点击划线、批注卡片以外的任何地方都应关闭当前打开的批注卡片
+  useEffect(() => {
+    if (!activeAnnotation) return
+    const handleOutside = (e) => {
+      if (sheetRef.current && sheetRef.current.contains(e.target)) return
+      if (e.target.closest && e.target.closest('.nook-highlight')) return
+      setActiveAnnotation(null)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('touchstart', handleOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('touchstart', handleOutside)
+    }
+  }, [activeAnnotation])
+
+  // 拖拽把手下拉关闭卡片
+  const handleDragStart = (e) => {
+    dragState.current = { startY: e.clientY, dragging: true }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+  const handleDragMove = (e) => {
+    if (!dragState.current.dragging || !sheetRef.current) return
+    const dy = Math.max(0, e.clientY - dragState.current.startY)
+    sheetRef.current.style.transform = `translateY(${dy}px)`
+  }
+  const handleDragEnd = (e) => {
+    if (!dragState.current.dragging || !sheetRef.current) return
+    dragState.current.dragging = false
+    const dy = Math.max(0, e.clientY - dragState.current.startY)
+    if (dy > 80) setActiveAnnotation(null)
+    else sheetRef.current.style.transform = ''
   }
 
   // 重叠划线只显示先来的：同一段落取最早创建的那条做高亮
@@ -1835,9 +1901,20 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
   return (
     <div className="nook-reader">
       <div className="nook-reader-header">
-        <button className="icon-btn" onClick={onBack}>{I.back}</button>
-        <span className="nook-reader-title">{chapter?.title || ''}</span>
-        <button className="nook-identity-btn" onClick={switchIdentity}>{nookName(identity)}</button>
+        <div className="nook-reader-header-row">
+          <button className="icon-btn nook-icon-btn" onClick={onBack}>{I.back}</button>
+          <div className="nook-reader-titles">
+            <div className="nook-reader-title">{chapter?.title || ''} {String(chapterNum).padStart(2, '0')}</div>
+            <div className="nook-reader-meta">
+              {paragraphs.length ? `${Math.min(currentPara + 1, paragraphs.length)}/${paragraphs.length}` : ''}
+              {annotations.length > 0 && ` · 我们说过 ${annotations.length} 处，点划线的地方看`}
+            </div>
+          </div>
+          <div className="nook-reader-actions">
+            <button className="nook-identity-btn" onClick={switchIdentity}>{nookName(identity)}</button>
+            <button className="nook-toc-btn" onClick={onBack}>目录</button>
+          </div>
+        </div>
       </div>
       {loading ? (
         <div className="loading-state"><span className="spinner" />Loading...</div>
@@ -1865,22 +1942,43 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
         <button className="text-btn" disabled={!nextChapter} onClick={() => nextChapter && onChangeChapter(nextChapter.chapter_number)}>下一章</button>
       </div>
       {activeAnnotation && (
-        <div className="modal-overlay" onClick={() => setActiveAnnotation(null)}>
-          <div className="modal-card nook-annotation-modal" onClick={e => e.stopPropagation()}>
-            <div className="nook-annotation-quote">"{activeAnnotation.anchor_quote}"</div>
-            <div className="nook-floor-list">
-              {activeAnnotation.floors.length === 0 && <div className="empty-state-sm">还没有人回复</div>}
-              {activeAnnotation.floors.map(f => (
-                <div key={f.id} className={`nook-floor ${f.who}`}>
-                  <span className="nook-floor-who">{nookName(f.who)}</span>
-                  <span className="nook-floor-text">{f.text}</span>
-                </div>
-              ))}
+        <div className="nook-sheet-overlay" onClick={() => setActiveAnnotation(null)}>
+          <div className="nook-sheet" ref={sheetRef} onClick={e => e.stopPropagation()}>
+            <div
+              className="nook-sheet-handle-area"
+              onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={handleDragEnd}
+            >
+              <div className="nook-sheet-handle" />
             </div>
-            <textarea className="write-area" rows={2} placeholder="回复..." value={replyText} onChange={e => setReplyText(e.target.value)} />
-            <div className="write-actions">
-              <button className="btn-ghost" onClick={() => setActiveAnnotation(null)}>关闭</button>
-              <button className="btn-primary" onClick={submitFloor} disabled={!replyText.trim()}>发送</button>
+            <div className="nook-sheet-header">
+              <span className="nook-sheet-title">这一句</span>
+              <div className="nook-sheet-header-actions">
+                {activeAnnotation.who === identity && (
+                  <button className="nook-sheet-delete" onClick={deleteAnnotation}>删除划线</button>
+                )}
+                <button className="icon-btn small" onClick={() => setActiveAnnotation(null)}>{I.close}</button>
+              </div>
+            </div>
+            <div className="nook-sheet-quote">{activeAnnotation.anchor_quote}</div>
+            <div className="nook-sheet-floors">
+              {activeAnnotation.floors.length === 0 && <div className="empty-state-sm">还没有人回复</div>}
+              {activeAnnotation.floors.map(f => {
+                const mine = f.who === identity
+                return (
+                  <div key={f.id} className={`nook-bubble-row ${mine ? 'mine' : 'theirs'}`}>
+                    {!mine && <span className="nook-bubble-name">{nookName(f.who)}</span>}
+                    <div className="nook-bubble">{f.text}</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="nook-sheet-input-row">
+              <input
+                className="nook-sheet-input" placeholder="再说一句..." value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submitFloor() }}
+              />
+              <button className="nook-sheet-send" onClick={submitFloor} disabled={!replyText.trim()}>{I.send}</button>
             </div>
           </div>
         </div>
