@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
@@ -1539,12 +1539,342 @@ function DrawGuessGame({ onBack }) {
   )
 }
 
+// ─── Nook (共读) — shared reading identity ───────────
+function getNookIdentity() {
+  try { return localStorage.getItem('nook_identity') === 'mu' ? 'mu' : 'hua' } catch { return 'hua' }
+}
+function setNookIdentityStorage(who) {
+  try { localStorage.setItem('nook_identity', who) } catch {}
+}
+function nookName(who) { return who === 'mu' ? '沐' : '桦桦' }
+function nookBookColor(title) {
+  let hash = 0
+  for (const ch of title || '') hash = (hash * 31 + ch.charCodeAt(0)) % 360
+  return `hsl(${hash}, 42%, 52%)`
+}
+
+// ─── NookReader ──────────────────────────────────────
+function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChapter }) {
+  const [chapter, setChapter] = useState(null)
+  const [annotations, setAnnotations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectionInfo, setSelectionInfo] = useState(null)
+  const [activeAnnotation, setActiveAnnotation] = useState(null)
+  const [replyText, setReplyText] = useState('')
+  const [identity, setIdentity] = useState(getNookIdentity)
+  const containerRef = useRef(null)
+  const currentParaRef = useRef(0)
+  const dirtyRef = useRef(false)
+  const scrolledOnLoad = useRef(false)
+
+  useEffect(() => {
+    setLoading(true)
+    scrolledOnLoad.current = false
+    Promise.all([
+      fetch(`${API}/api/nook/books/${book.id}/chapters/${chapterNum}`).then(r => r.json()),
+      fetch(`${API}/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
+    ]).then(([ch, anns]) => {
+      setChapter(ch)
+      setAnnotations(Array.isArray(anns) ? anns : [])
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [book.id, chapterNum])
+
+  const paragraphs = useMemo(() => (
+    chapter ? chapter.content.split(/\n{2,}/).map(p => p.trim()).filter(Boolean) : []
+  ), [chapter])
+
+  useEffect(() => {
+    if (loading || !paragraphs.length || scrolledOnLoad.current) return
+    scrolledOnLoad.current = true
+    const own = progress?.[identity]
+    const startPara = (own && own.chapter === chapterNum) ? own.paragraph : 0
+    requestAnimationFrame(() => {
+      const el = containerRef.current?.querySelector(`[data-para="${startPara}"]`)
+      if (el) el.scrollIntoView({ block: 'start' })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, paragraphs])
+
+  const reportProgress = useCallback(() => {
+    fetch(`${API}/api/nook/progress`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: book.id, who: identity, chapter: chapterNum, paragraph: currentParaRef.current })
+    }).catch(() => {})
+  }, [book.id, chapterNum, identity])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (dirtyRef.current) { dirtyRef.current = false; reportProgress() }
+    }, 3000)
+    return () => clearInterval(id)
+  }, [reportProgress])
+
+  const handleScroll = () => {
+    const container = containerRef.current
+    if (!container) return
+    const containerTop = container.getBoundingClientRect().top
+    let current = currentParaRef.current
+    for (const p of container.querySelectorAll('[data-para]')) {
+      if (p.getBoundingClientRect().top - containerTop <= 60) current = Number(p.dataset.para)
+      else break
+    }
+    if (current !== currentParaRef.current) { currentParaRef.current = current; dirtyRef.current = true }
+  }
+
+  const handleSelectionEnd = () => {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed) return
+    const text = sel.toString().trim()
+    if (!text) return
+    const range = sel.getRangeAt(0)
+    let node = range.startContainer
+    if (node.nodeType !== 1) node = node.parentNode
+    const paraEl = node?.closest?.('[data-para]')
+    if (!paraEl || !containerRef.current?.contains(paraEl)) { setSelectionInfo(null); return }
+    const rect = range.getBoundingClientRect()
+    setSelectionInfo({ top: rect.top, left: rect.left + rect.width / 2, paraIndex: Number(paraEl.dataset.para), quote: text.slice(0, 60) })
+  }
+
+  const createAnnotation = async () => {
+    if (!selectionInfo) return
+    const { paraIndex, quote } = selectionInfo
+    try {
+      const res = await fetch(`${API}/api/nook/annotations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ book_id: book.id, chapter: chapterNum, anchor_para: paraIndex, anchor_quote: quote, who: identity })
+      })
+      const ann = await res.json()
+      setAnnotations(prev => [...prev, ann])
+    } catch {}
+    setSelectionInfo(null)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const submitFloor = async () => {
+    if (!replyText.trim() || !activeAnnotation) return
+    try {
+      const res = await fetch(`${API}/api/nook/annotations/${activeAnnotation.id}/floors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ who: identity, text: replyText.trim() })
+      })
+      const floor = await res.json()
+      setAnnotations(prev => prev.map(a => a.id === activeAnnotation.id ? { ...a, floors: [...a.floors, floor] } : a))
+      setActiveAnnotation(prev => prev ? { ...prev, floors: [...prev.floors, floor] } : prev)
+      setReplyText('')
+    } catch {}
+  }
+
+  const switchIdentity = () => {
+    const next = identity === 'hua' ? 'mu' : 'hua'
+    setIdentity(next)
+    setNookIdentityStorage(next)
+  }
+
+  // 重叠划线只显示先来的：同一段落取最早创建的那条做高亮
+  const bestAnnotationByPara = useMemo(() => {
+    const map = {}
+    for (const a of annotations) {
+      const existing = map[a.anchor_para]
+      if (!existing || new Date(a.created_at) < new Date(existing.created_at)) map[a.anchor_para] = a
+    }
+    return map
+  }, [annotations])
+
+  const idx = chapters.findIndex(c => c.chapter_number === chapterNum)
+  const prevChapter = idx > 0 ? chapters[idx - 1] : null
+  const nextChapter = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null
+
+  return (
+    <div className="nook-reader">
+      <div className="nook-reader-header">
+        <button className="icon-btn" onClick={onBack}>{I.back}</button>
+        <span className="nook-reader-title">{chapter?.title || ''}</span>
+        <button className="nook-identity-btn" onClick={switchIdentity}>{nookName(identity)}</button>
+      </div>
+      {loading ? (
+        <div className="loading-state"><span className="spinner" />Loading...</div>
+      ) : (
+        <div className="nook-reader-content" ref={containerRef} onScroll={handleScroll} onMouseUp={handleSelectionEnd} onTouchEnd={handleSelectionEnd}>
+          {paragraphs.map((text, i) => {
+            const ann = bestAnnotationByPara[i]
+            const at = ann ? text.indexOf(ann.anchor_quote) : -1
+            if (at === -1) return <p data-para={i} key={i}>{text}</p>
+            return (
+              <p data-para={i} key={i}>
+                {text.slice(0, at)}
+                <mark className="nook-highlight" onClick={() => setActiveAnnotation(ann)}>{text.slice(at, at + ann.anchor_quote.length)}</mark>
+                {text.slice(at + ann.anchor_quote.length)}
+              </p>
+            )
+          })}
+        </div>
+      )}
+      {selectionInfo && (
+        <button className="nook-select-btn" style={{ top: selectionInfo.top, left: selectionInfo.left }} onClick={createAnnotation}>划线</button>
+      )}
+      <div className="nook-reader-footer">
+        <button className="text-btn" disabled={!prevChapter} onClick={() => prevChapter && onChangeChapter(prevChapter.chapter_number)}>上一章</button>
+        <button className="text-btn" disabled={!nextChapter} onClick={() => nextChapter && onChangeChapter(nextChapter.chapter_number)}>下一章</button>
+      </div>
+      {activeAnnotation && (
+        <div className="modal-overlay" onClick={() => setActiveAnnotation(null)}>
+          <div className="modal-card nook-annotation-modal" onClick={e => e.stopPropagation()}>
+            <div className="nook-annotation-quote">"{activeAnnotation.anchor_quote}"</div>
+            <div className="nook-floor-list">
+              {activeAnnotation.floors.length === 0 && <div className="empty-state-sm">还没有人回复</div>}
+              {activeAnnotation.floors.map(f => (
+                <div key={f.id} className={`nook-floor ${f.who}`}>
+                  <span className="nook-floor-who">{nookName(f.who)}</span>
+                  <span className="nook-floor-text">{f.text}</span>
+                </div>
+              ))}
+            </div>
+            <textarea className="write-area" rows={2} placeholder="回复..." value={replyText} onChange={e => setReplyText(e.target.value)} />
+            <div className="write-actions">
+              <button className="btn-ghost" onClick={() => setActiveAnnotation(null)}>关闭</button>
+              <button className="btn-primary" onClick={submitFloor} disabled={!replyText.trim()}>发送</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── NookChapterList ─────────────────────────────────
+function NookChapterList({ book, chapters, loading, progress, onBack, onOpenChapter }) {
+  const swipe = useSwipeBack(onBack)
+  const huaCh = progress?.hua?.chapter
+  const muCh = progress?.mu?.chapter
+  const groups = (book.parts && book.parts.length)
+    ? book.parts.map(part => ({ name: part.name, chapters: chapters.filter(c => part.chapters.includes(c.chapter_number)) }))
+    : [{ name: null, chapters }]
+
+  return (
+    <div className="more-sub-page nook-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>{book.title}</h1></div>
+      {loading ? (
+        <div className="loading-state"><span className="spinner" />Loading...</div>
+      ) : groups.map(g => (
+        <div key={g.name || 'all'}>
+          {g.name && <div className="card-title-outer">{g.name}</div>}
+          <div className="card settings-card">
+            {g.chapters.map(c => (
+              <div key={c.chapter_number} className="setting-item" onClick={() => onOpenChapter(c.chapter_number)}>
+                <span>{c.title}</span>
+                <span className="nook-chapter-badges">
+                  {huaCh === c.chapter_number && <span className="nook-badge hua">桦</span>}
+                  {muCh === c.chapter_number && <span className="nook-badge mu">沐</span>}
+                </span>
+                {I.chevron}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── NookPage (共读书架) ─────────────────────────────
+function NookPage({ onBack }) {
+  const [screen, setScreen] = useState('shelf')
+  const [books, setBooks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [progressByBook, setProgressByBook] = useState({})
+  const [selectedBook, setSelectedBook] = useState(null)
+  const [chapters, setChapters] = useState([])
+  const [chaptersLoading, setChaptersLoading] = useState(false)
+  const [selectedChapter, setSelectedChapter] = useState(null)
+  const swipeShelf = useSwipeBack(onBack)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${API}/api/nook/books`).then(r => r.json()).then(async (data) => {
+      const list = Array.isArray(data) ? data : []
+      setBooks(list)
+      const entries = await Promise.all(list.map(async (b) => {
+        try {
+          const rows = await fetch(`${API}/api/nook/progress/${b.id}`).then(r => r.json())
+          const byWho = {}
+          for (const row of (Array.isArray(rows) ? rows : [])) byWho[row.who] = row
+          return [b.id, byWho]
+        } catch { return [b.id, {}] }
+      }))
+      setProgressByBook(Object.fromEntries(entries))
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  const openBook = async (book) => {
+    setSelectedBook(book)
+    setScreen('chapters')
+    setChaptersLoading(true)
+    try {
+      const data = await fetch(`${API}/api/nook/books/${book.id}/chapters`).then(r => r.json())
+      setChapters(Array.isArray(data) ? data : [])
+    } catch { setChapters([]) }
+    setChaptersLoading(false)
+  }
+
+  const openChapter = (num) => { setSelectedChapter(num); setScreen('reader') }
+
+  if (screen === 'reader' && selectedBook) {
+    return (
+      <NookReader
+        book={selectedBook} chapterNum={selectedChapter} chapters={chapters}
+        progress={progressByBook[selectedBook.id]}
+        onBack={() => setScreen('chapters')} onChangeChapter={openChapter}
+      />
+    )
+  }
+
+  if (screen === 'chapters' && selectedBook) {
+    return (
+      <NookChapterList
+        book={selectedBook} chapters={chapters} loading={chaptersLoading}
+        progress={progressByBook[selectedBook.id]}
+        onBack={() => setScreen('shelf')} onOpenChapter={openChapter}
+      />
+    )
+  }
+
+  return (
+    <div className="more-sub-page nook-page" {...swipeShelf}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>共读</h1></div>
+      {loading ? (
+        <div className="loading-state"><span className="spinner" />Loading...</div>
+      ) : books.length === 0 ? (
+        <div className="empty-state">还没有书</div>
+      ) : (
+        <div className="nook-shelf">
+          {books.map(b => {
+            const p = progressByBook[b.id] || {}
+            return (
+              <div key={b.id} className="nook-book-card" onClick={() => openBook(b)}>
+                <div className="nook-book-cover" style={{ background: nookBookColor(b.title) }}>{b.title}</div>
+                <div className="nook-book-info">
+                  <div className="nook-book-title">{b.title}</div>
+                  <div className="nook-book-author">{b.author}{b.translator ? ` · ${b.translator}译` : ''}</div>
+                  <div className="nook-book-progress">
+                    <span>桦桦：{p.hua ? `第${p.hua.chapter}章` : '未开始'}</span>
+                    <span>沐：{p.mu ? `第${p.mu.chapter}章` : '未开始'}</span>
+                  </div>
+                </div>
+                {I.chevron}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── MorePage ───────────────────────────────────────
 function MorePage() {
   const [subPage, setSubPage] = useState(null)
   const [activeGame, setActiveGame] = useState(null)
   const swipeGames = useSwipeBack(() => setSubPage(null))
-  const swipeReading = useSwipeBack(() => setSubPage(null))
 
   if (subPage === 'settings') return <SettingsPage onBack={() => setSubPage(null)} />
   if (subPage === 'memory') return <MemoryImportPage onBack={() => setSubPage(null)} />
@@ -1559,19 +1889,14 @@ function MorePage() {
       </div>
     )
   }
-  if (subPage === 'reading') return (
-    <div className="more-sub-page" {...swipeReading}>
-      <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Reading Together</h1></div>
-      <div className="empty-state">Coming soon</div>
-    </div>
-  )
+  if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} />
 
   return (
     <div className="more-page">
       <div className="page-header"><h1>More</h1></div>
       <div className="more-grid">
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
-        <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
+        <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>共读</span></div>
         <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>
