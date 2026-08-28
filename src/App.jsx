@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 
 const API = 'https://mu-backend-l0uw.onrender.com'
@@ -472,28 +472,100 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   )
 }
 
+// ─── Voice audio duration resolution ────────────────
+// Blob-sourced MP3s in Chrome often report duration as Infinity until
+// the media element is forced to seek near the end once, a known
+// workaround for the missing/streamed-duration metadata bug.
+function resolveAudioDuration(audio, cb) {
+  const tryFinalize = () => {
+    if (isFinite(audio.duration) && audio.duration > 0) { cb(audio.duration); return true }
+    return false
+  }
+  const onLoaded = () => {
+    audio.removeEventListener('loadedmetadata', onLoaded)
+    if (tryFinalize()) return
+    const onTimeUpdate = () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate)
+      audio.currentTime = 0
+      tryFinalize()
+    }
+    audio.addEventListener('timeupdate', onTimeUpdate)
+    try { audio.currentTime = 1e101 } catch { /* ignore */ }
+  }
+  audio.addEventListener('loadedmetadata', onLoaded)
+}
+
+const VOICE_MIN_WIDTH = 120
+const VOICE_MAX_WIDTH = 320
+function voiceBarWidth(duration) {
+  if (duration == null || !isFinite(duration)) return VOICE_MIN_WIDTH
+  return Math.min(VOICE_MAX_WIDTH, Math.max(VOICE_MIN_WIDTH, VOICE_MIN_WIDTH + duration * 15))
+}
+
 // ─── VoiceMessage (iMessage-style voice bubble) ─────
-function VoiceMessage({ status, progress, duration, onToggle }) {
-  const [dots] = useState(() => Array.from({ length: 24 }, () => 4 + Math.round(Math.random() * 10)))
+function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
+  const [showText, setShowText] = useState(false)
+  const trackRef = useRef(null)
+  const draggingRef = useRef(false)
+  const widthPx = useMemo(() => voiceBarWidth(duration), [duration])
+  const dotCount = useMemo(() => Math.max(10, Math.min(32, Math.round(widthPx / 10))), [widthPx])
+  const dots = useMemo(() => Array.from({ length: dotCount }, () => 4 + Math.round(Math.random() * 10)), [dotCount])
+
   const playing = status === 'playing'
   const paused = status === 'paused'
   const loading = status === 'loading'
+  const seekable = typeof onSeek === 'function' && isFinite(duration) && duration > 0
   const activeCount = (playing || paused) ? Math.round((progress || 0) * dots.length) : 0
   const elapsed = duration ? (progress || 0) * duration : 0
   const displaySeconds = (playing || paused) ? elapsed : duration
   const durationLabel = (displaySeconds != null && isFinite(displaySeconds)) ? `${Math.max(0, Math.round(displaySeconds))}"` : ''
 
+  const ratioFromEvent = (e) => {
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    if (!rect.width) return 0
+    return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+  }
+  const handlePointerDown = (e) => {
+    if (!seekable) return
+    draggingRef.current = true
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+    onSeek(ratioFromEvent(e))
+  }
+  const handlePointerMove = (e) => {
+    if (!draggingRef.current) return
+    onSeek(ratioFromEvent(e))
+  }
+  const endDrag = (e) => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+  }
+
   return (
-    <div className={`voice-bar ${status}`} onClick={onToggle} aria-label={playing ? 'Pause voice' : loading ? 'Loading voice' : 'Play voice'}>
-      <span className="voice-play-btn">
-        {loading ? <span className="spinner tiny light" /> : playing ? I.pause : I.play}
-      </span>
-      <span className="voice-wave">
-        {dots.map((h, di) => (
-          <span key={di} className={`voice-dot ${di < activeCount ? 'active' : ''}`} style={{ height: `${h}px` }} />
-        ))}
-      </span>
-      <span className="voice-duration">{durationLabel}</span>
+    <div className="voice-msg">
+      <div className={`voice-bar ${status}`} style={{ width: `${widthPx}px` }} onClick={onToggle} aria-label={playing ? 'Pause voice' : loading ? 'Loading voice' : 'Play voice'}>
+        <span className="voice-play-btn">
+          {loading ? <span className="spinner tiny light" /> : playing ? I.pause : I.play}
+        </span>
+        <span
+          ref={trackRef}
+          className={`voice-wave ${seekable ? '' : 'disabled'}`}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          {dots.map((h, di) => (
+            <span key={di} className={`voice-dot ${di < activeCount ? 'active' : ''}`} style={{ height: `${h}px` }} />
+          ))}
+        </span>
+        <span className="voice-duration">{durationLabel}</span>
+      </div>
+      <button className="voice-transcript-btn" onClick={() => setShowText(v => !v)}>{showText ? '收起' : '转文字'}</button>
+      {showText && <div className="bubble voice-transcript">{text}</div>}
     </div>
   )
 }
@@ -524,6 +596,49 @@ function ChatRoom({ session, onBack }) {
   const ttsAbortRef = useRef(null)
   const ttsIdxRef = useRef(null)
   const ttsStatusRef = useRef(null)
+  // Background-prefetched { audio, url } per message index, so a bubble
+  // can show its real duration before it's ever been played, and so the
+  // first click reuses the already-downloaded audio instead of re-fetching.
+  // Requests are queued with a small concurrency cap rather than all fired
+  // at once on chat load — the backend/ElevenLabs call returns transient
+  // 500s under a burst of simultaneous requests.
+  const ttsCacheRef = useRef({})
+  const ttsPrefetchStartedRef = useRef(new Set())
+  const ttsPrefetchQueueRef = useRef([])
+  const ttsPrefetchActiveRef = useRef(0)
+  const TTS_PREFETCH_CONCURRENCY = 2
+
+  const runTtsPrefetchQueue = useCallback(() => {
+    while (ttsPrefetchActiveRef.current < TTS_PREFETCH_CONCURRENCY && ttsPrefetchQueueRef.current.length > 0) {
+      const { idx, text } = ttsPrefetchQueueRef.current.shift()
+      ttsPrefetchActiveRef.current++
+      fetch(`${API}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, preset: 'calm' }) })
+        .then(res => { if (!res.ok) throw new Error('tts failed'); return res.blob() })
+        .then(blob => {
+          const url = URL.createObjectURL(blob)
+          const audio = new Audio(url)
+          resolveAudioDuration(audio, dur => setTtsDurations(prev => ({ ...prev, [idx]: dur })))
+          ttsCacheRef.current[idx] = { audio, url }
+        })
+        .catch(() => { ttsPrefetchStartedRef.current.delete(idx) })
+        .finally(() => { ttsPrefetchActiveRef.current--; runTtsPrefetchQueue() })
+    }
+  }, [])
+
+  const prefetchTts = useCallback((idx, text) => {
+    if (!text || !text.trim()) return
+    if (ttsPrefetchStartedRef.current.has(idx)) return
+    ttsPrefetchStartedRef.current.add(idx)
+    ttsPrefetchQueueRef.current.push({ idx, text })
+    runTtsPrefetchQueue()
+  }, [runTtsPrefetchQueue])
+
+  const clearTtsCache = useCallback(() => {
+    Object.values(ttsCacheRef.current).forEach(({ url }) => URL.revokeObjectURL(url))
+    ttsCacheRef.current = {}
+    ttsPrefetchStartedRef.current = new Set()
+    ttsPrefetchQueueRef.current = []
+  }, [])
 
   const stopTts = useCallback(() => {
     if (ttsAbortRef.current) { ttsAbortRef.current.abort(); ttsAbortRef.current = null }
@@ -559,12 +674,30 @@ function ChatRoom({ session, onBack }) {
     setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], status: 'playing' } }))
   }, [])
 
+  const activateCachedTts = useCallback((idx, cached, atRatio) => {
+    if (ttsIdxRef.current !== null && ttsIdxRef.current !== idx) stopTts()
+    delete ttsCacheRef.current[idx]
+    const { audio, url } = cached
+    ttsIdxRef.current = idx
+    ttsStatusRef.current = 'playing'
+    ttsUrlRef.current = url
+    ttsAudioRef.current = audio
+    audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / audio.duration } })) }
+    audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
+    audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
+    if (atRatio && isFinite(audio.duration) && audio.duration) audio.currentTime = atRatio * audio.duration
+    audio.play().catch(() => {})
+    setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: atRatio || 0 } }))
+  }, [stopTts])
+
   const toggleTts = useCallback(async (idx, text) => {
     if (ttsIdxRef.current === idx) {
       if (ttsStatusRef.current === 'playing') { pauseTts(); return }
       if (ttsStatusRef.current === 'paused') { resumeTts(); return }
       return
     }
+    const cached = ttsCacheRef.current[idx]
+    if (cached) { activateCachedTts(idx, cached, 0); return }
     stopTts()
     ttsIdxRef.current = idx
     ttsStatusRef.current = 'loading'
@@ -580,8 +713,8 @@ function ChatRoom({ session, onBack }) {
       ttsUrlRef.current = url
       const audio = new Audio(url)
       ttsAudioRef.current = audio
-      audio.onloadedmetadata = () => { if (isFinite(audio.duration)) setTtsDurations(prev => ({ ...prev, [idx]: audio.duration })) }
-      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], status: 'playing', progress: audio.currentTime / audio.duration } })) }
+      resolveAudioDuration(audio, dur => setTtsDurations(prev => ({ ...prev, [idx]: dur })))
+      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: audio.currentTime / audio.duration } })) }
       audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
       audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
       await audio.play()
@@ -593,9 +726,22 @@ function ChatRoom({ session, onBack }) {
         setTtsState(prev => { const n = { ...prev }; delete n[idx]; return n })
       }
     }
-  }, [stopTts, pauseTts, resumeTts])
+  }, [stopTts, pauseTts, resumeTts, activateCachedTts])
 
-  useEffect(() => () => stopTts(), [stopTts])
+  const seekTts = useCallback((idx, ratio) => {
+    const clamped = Math.min(Math.max(ratio, 0), 1)
+    if (ttsIdxRef.current === idx) {
+      const audio = ttsAudioRef.current
+      if (!audio || !isFinite(audio.duration) || !audio.duration) return
+      audio.currentTime = clamped * audio.duration
+      setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], progress: clamped } }))
+      return
+    }
+    const cached = ttsCacheRef.current[idx]
+    if (cached) activateCachedTts(idx, cached, clamped)
+  }, [activateCachedTts])
+
+  useEffect(() => () => { stopTts(); clearTtsCache() }, [stopTts, clearTtsCache])
 
   useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
   useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
@@ -615,6 +761,7 @@ function ChatRoom({ session, onBack }) {
 
   useEffect(() => {
     stopTts()
+    clearTtsCache()
     setTtsDurations({})
     fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
@@ -622,9 +769,10 @@ function ChatRoom({ session, onBack }) {
         const map = {}
         data.forEach((m, i) => { if (m.role === 'assistant') map[i] = pickSticker(m.content) })
         setStickerMap(map)
+        data.forEach((m, i) => { if (m.role === 'assistant' && m.content) prefetchTts(i, m.content) })
       }
     })
-  }, [session.id, stopTts])
+  }, [session.id, stopTts, clearTtsCache, prefetchTts])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px' } }, [input])
@@ -644,6 +792,7 @@ function ChatRoom({ session, onBack }) {
       const sticker = pickSticker(data.reply)
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString() }])
       setStickerMap(prev => ({ ...prev, [assistIdx]: sticker }))
+      if (data.reply && data.reply.trim()) prefetchTts(assistIdx, data.reply)
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
     }
@@ -711,7 +860,9 @@ function ChatRoom({ session, onBack }) {
                 status={(ttsState[i] || {}).status || 'idle'}
                 progress={(ttsState[i] || {}).progress || 0}
                 duration={ttsDurations[i]}
+                text={m.content}
                 onToggle={() => toggleTts(i, m.content)}
+                onSeek={ratio => seekTts(i, ratio)}
               />
             ) : (
               <div className="bubble">{m.content}</div>
