@@ -465,23 +465,23 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
   color:#eae8e3;
 }
 .nook-reader-header{
-  position:sticky;top:0;z-index:20;padding:10px 10px 10px 6px;
+  position:sticky;top:0;z-index:20;padding:10px;
   background:rgba(25,25,27,0.72);
   -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
   border-bottom:1px solid rgba(255,255,255,0.07);
 }
-.nook-reader-header-row{display:flex;align-items:center;gap:6px}
+.nook-reader-header-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}
+.nook-reader-header-row>.icon-btn{justify-self:start}
 .nook-icon-btn{color:#eae8e3}
 .nook-icon-btn:active{background:rgba(255,255,255,0.1)}
-.nook-reader-titles{flex:1;min-width:0;text-align:center}
+.nook-reader-titles{grid-column:2;min-width:0;text-align:center}
 .nook-reader-title{font-size:15px;font-weight:600;color:#f2f0ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nook-reader-meta{font-size:11px;color:rgba(234,232,227,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nook-reader-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.nook-identity-btn{border:none;background:rgba(255,255,255,0.1);color:#eae8e3;font-size:12px;padding:6px 10px;border-radius:12px;cursor:pointer;flex-shrink:0}
-.nook-toc-btn{border:none;background:rgba(255,255,255,0.1);color:#eae8e3;font-size:12px;padding:6px 12px;border-radius:12px;cursor:pointer;flex-shrink:0}
 .nook-reader-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 22px 24px}
 .nook-reader-content p{font-size:17px;line-height:2.0;margin-bottom:1.4em;color:#e4e2dc;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
-.nook-highlight{background:rgba(255,255,255,0.16);cursor:pointer;border-radius:2px;padding:0 1px;color:#fff}
+.nook-highlight{cursor:pointer;border-radius:2px;padding:0 1px;color:#fff}
+.nook-highlight.hua{background:rgba(90,150,220,.4)}
+.nook-highlight.mu{background:rgba(224,160,90,.42)}
 .nook-select-btn{position:fixed;transform:translate(-50%,-120%);background:#f2f0ea;color:#19191b;border:none;padding:8px 14px;border-radius:20px;font-size:13px;z-index:150;box-shadow:0 4px 12px rgba(0,0,0,.4);cursor:pointer}
 .nook-reader-footer{display:flex;justify-content:space-between;padding:10px 20px calc(10px + var(--safe-bottom));border-top:1px solid rgba(255,255,255,0.07);background:rgba(25,25,27,0.85)}
 .nook-reader-footer .text-btn{color:var(--accent)}
@@ -514,6 +514,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .nook-bubble{padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 .nook-bubble-row.mine .nook-bubble{background:#1a1a1a;color:#fff;border-bottom-right-radius:5px}
 .nook-bubble-row.theirs .nook-bubble{background:#f0efe9;color:#1a1a1a;border-bottom-left-radius:5px}
+.nook-bubble-time{font-size:10px;color:#b3b3b3;margin-top:3px;padding:0 4px}
 .nook-sheet-input-row{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid #eee}
 .nook-sheet-input{flex:1;border:1px solid #e5e3dd;border-radius:20px;padding:10px 16px;font-size:14px;font-family:inherit;background:#f7f6f2;color:#1a1a1a;outline:none}
 .nook-sheet-input::placeholder{color:#b3b3b3}

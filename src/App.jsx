@@ -1687,36 +1687,66 @@ function DrawGuessGame({ onBack }) {
   )
 }
 
-// ─── Nook (共读) — shared reading identity ───────────
-function getNookIdentity() {
-  try { return localStorage.getItem('nook_identity') === 'mu' ? 'mu' : 'hua' } catch { return 'hua' }
-}
-function setNookIdentityStorage(who) {
-  try { localStorage.setItem('nook_identity', who) } catch {}
-}
+// ─── Nook (共读) ──────────────────────────────────────
 function nookName(who) { return who === 'mu' ? '沐' : '桦桦' }
 function nookBookColor(title) {
   let hash = 0
   for (const ch of title || '') hash = (hash * 31 + ch.charCodeAt(0)) % 360
   return `hsl(${hash}, 42%, 52%)`
 }
+function nookRelativeTime(iso) {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (diffSec < 60) return 'just now'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay === 1) return 'yesterday'
+  if (diffDay < 7) return `${diffDay}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 // ─── NookReader ──────────────────────────────────────
-function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChapter }) {
+// 阅读器里没有身份切换：打开阅读器就是桦桦（user）的视角，
+// 沐的划线/回复只在数据里已经存在时才会出现，颜色区分开就够了。
+const NOOK_READER_IDENTITY = 'hua'
+
+function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnterRoom }) {
   const [chapter, setChapter] = useState(null)
   const [annotations, setAnnotations] = useState([])
   const [loading, setLoading] = useState(true)
+  const [progress, setProgress] = useState(null)
   const [selectionInfo, setSelectionInfo] = useState(null)
   const [activeAnnotation, setActiveAnnotation] = useState(null)
   const [replyText, setReplyText] = useState('')
-  const [identity, setIdentity] = useState(getNookIdentity)
   const [currentPara, setCurrentPara] = useState(0)
+  const identity = NOOK_READER_IDENTITY
   const containerRef = useRef(null)
   const sheetRef = useRef(null)
   const currentParaRef = useRef(0)
   const dirtyRef = useRef(false)
   const scrolledOnLoad = useRef(false)
   const dragState = useRef({ startY: 0, dragging: false })
+
+  // 阅读器全屏沉浸，进来的时候把底部tab栏藏起来，离开时恢复
+  useEffect(() => {
+    onEnterRoom(true)
+    return () => onEnterRoom(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 每次点进书本都重新读一遍进度，不用父组件里可能已经过期的缓存
+  // （比如刚在这本书里滚动过、上报过新进度，又退回章节列表再点进来）
+  useEffect(() => {
+    fetch(`${API}/api/nook/progress/${book.id}`).then(r => r.json()).then(rows => {
+      const byWho = {}
+      for (const row of (Array.isArray(rows) ? rows : [])) byWho[row.who] = row
+      setProgress(byWho)
+    }).catch(() => setProgress({}))
+  }, [book.id])
 
   useEffect(() => {
     setLoading(true)
@@ -1735,9 +1765,9 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
   ), [chapter])
 
   useEffect(() => {
-    if (loading || !paragraphs.length || scrolledOnLoad.current) return
+    if (loading || !progress || !paragraphs.length || scrolledOnLoad.current) return
     scrolledOnLoad.current = true
-    const own = progress?.[identity]
+    const own = progress[identity]
     const startPara = (own && own.chapter === chapterNum) ? own.paragraph : 0
     currentParaRef.current = startPara
     setCurrentPara(startPara)
@@ -1746,7 +1776,7 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
       if (el) el.scrollIntoView({ block: 'start' })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, paragraphs])
+  }, [loading, progress, paragraphs])
 
   const reportProgress = useCallback(() => {
     fetch(`${API}/api/nook/progress`, {
@@ -1801,6 +1831,12 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
       }
     }
     if (!paraEl) { setSelectionInfo(null); return }
+
+    // 划过线的文字不能再被重复划线：选区碰到已有的高亮就不弹按钮
+    for (const markEl of paraEl.querySelectorAll('.nook-highlight')) {
+      if (range.intersectsNode(markEl)) { setSelectionInfo(null); return }
+    }
+
     const rect = range.getBoundingClientRect()
     setSelectionInfo({ top: rect.top, left: rect.left + rect.width / 2, paraIndex: Number(paraEl.dataset.para), quote: text.slice(0, 60) })
   }
@@ -1842,12 +1878,6 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
       await fetch(`${API}/api/nook/annotations/${id}`, { method: 'DELETE' })
       setAnnotations(prev => prev.filter(a => a.id !== id))
     } catch {}
-  }
-
-  const switchIdentity = () => {
-    const next = identity === 'hua' ? 'mu' : 'hua'
-    setIdentity(next)
-    setNookIdentityStorage(next)
   }
 
   // 点击划线、批注卡片以外的任何地方都应关闭当前打开的批注卡片
@@ -1907,12 +1937,8 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
             <div className="nook-reader-title">{chapter?.title || ''} {String(chapterNum).padStart(2, '0')}</div>
             <div className="nook-reader-meta">
               {paragraphs.length ? `${Math.min(currentPara + 1, paragraphs.length)}/${paragraphs.length}` : ''}
-              {annotations.length > 0 && ` · 我们说过 ${annotations.length} 处，点划线的地方看`}
+              {annotations.length > 0 && ` · ${annotations.length} note${annotations.length === 1 ? '' : 's'} — tap a highlight to read`}
             </div>
-          </div>
-          <div className="nook-reader-actions">
-            <button className="nook-identity-btn" onClick={switchIdentity}>{nookName(identity)}</button>
-            <button className="nook-toc-btn" onClick={onBack}>目录</button>
           </div>
         </div>
       </div>
@@ -1927,7 +1953,7 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
             return (
               <p data-para={i} key={i}>
                 {text.slice(0, at)}
-                <mark className="nook-highlight" onClick={() => setActiveAnnotation(ann)}>{text.slice(at, at + ann.anchor_quote.length)}</mark>
+                <mark className={`nook-highlight ${ann.who === 'mu' ? 'mu' : 'hua'}`} onClick={() => setActiveAnnotation(ann)}>{text.slice(at, at + ann.anchor_quote.length)}</mark>
                 {text.slice(at + ann.anchor_quote.length)}
               </p>
             )
@@ -1935,11 +1961,11 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
         </div>
       )}
       {selectionInfo && (
-        <button className="nook-select-btn" style={{ top: selectionInfo.top, left: selectionInfo.left }} onClick={createAnnotation}>划线</button>
+        <button className="nook-select-btn" style={{ top: selectionInfo.top, left: selectionInfo.left }} onClick={createAnnotation}>Highlight</button>
       )}
       <div className="nook-reader-footer">
-        <button className="text-btn" disabled={!prevChapter} onClick={() => prevChapter && onChangeChapter(prevChapter.chapter_number)}>上一章</button>
-        <button className="text-btn" disabled={!nextChapter} onClick={() => nextChapter && onChangeChapter(nextChapter.chapter_number)}>下一章</button>
+        <button className="text-btn" disabled={!prevChapter} onClick={() => prevChapter && onChangeChapter(prevChapter.chapter_number)}>Previous</button>
+        <button className="text-btn" disabled={!nextChapter} onClick={() => nextChapter && onChangeChapter(nextChapter.chapter_number)}>Next</button>
       </div>
       {activeAnnotation && (
         <div className="nook-sheet-overlay" onClick={() => setActiveAnnotation(null)}>
@@ -1951,30 +1977,31 @@ function NookReader({ book, chapterNum, chapters, progress, onBack, onChangeChap
               <div className="nook-sheet-handle" />
             </div>
             <div className="nook-sheet-header">
-              <span className="nook-sheet-title">这一句</span>
+              <span className="nook-sheet-title">This line</span>
               <div className="nook-sheet-header-actions">
                 {activeAnnotation.who === identity && (
-                  <button className="nook-sheet-delete" onClick={deleteAnnotation}>删除划线</button>
+                  <button className="nook-sheet-delete" onClick={deleteAnnotation}>Remove highlight</button>
                 )}
                 <button className="icon-btn small" onClick={() => setActiveAnnotation(null)}>{I.close}</button>
               </div>
             </div>
             <div className="nook-sheet-quote">{activeAnnotation.anchor_quote}</div>
             <div className="nook-sheet-floors">
-              {activeAnnotation.floors.length === 0 && <div className="empty-state-sm">还没有人回复</div>}
+              {activeAnnotation.floors.length === 0 && <div className="empty-state-sm">No replies yet</div>}
               {activeAnnotation.floors.map(f => {
                 const mine = f.who === identity
                 return (
                   <div key={f.id} className={`nook-bubble-row ${mine ? 'mine' : 'theirs'}`}>
                     {!mine && <span className="nook-bubble-name">{nookName(f.who)}</span>}
                     <div className="nook-bubble">{f.text}</div>
+                    <span className="nook-bubble-time">{nookRelativeTime(f.created_at)}</span>
                   </div>
                 )
               })}
             </div>
             <div className="nook-sheet-input-row">
               <input
-                className="nook-sheet-input" placeholder="再说一句..." value={replyText}
+                className="nook-sheet-input" placeholder="Say something..." value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') submitFloor() }}
               />
@@ -2009,7 +2036,7 @@ function NookChapterList({ book, chapters, loading, progress, onBack, onOpenChap
               <div key={c.chapter_number} className="setting-item" onClick={() => onOpenChapter(c.chapter_number)}>
                 <span>{c.title}</span>
                 <span className="nook-chapter-badges">
-                  {huaCh === c.chapter_number && <span className="nook-badge hua">桦</span>}
+                  {huaCh === c.chapter_number && <span className="nook-badge hua">You</span>}
                   {muCh === c.chapter_number && <span className="nook-badge mu">沐</span>}
                 </span>
                 {I.chevron}
@@ -2023,7 +2050,7 @@ function NookChapterList({ book, chapters, loading, progress, onBack, onOpenChap
 }
 
 // ─── NookPage (共读书架) ─────────────────────────────
-function NookPage({ onBack }) {
+function NookPage({ onBack, onEnterRoom }) {
   const [screen, setScreen] = useState('shelf')
   const [books, setBooks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2068,8 +2095,7 @@ function NookPage({ onBack }) {
     return (
       <NookReader
         book={selectedBook} chapterNum={selectedChapter} chapters={chapters}
-        progress={progressByBook[selectedBook.id]}
-        onBack={() => setScreen('chapters')} onChangeChapter={openChapter}
+        onBack={() => setScreen('chapters')} onChangeChapter={openChapter} onEnterRoom={onEnterRoom}
       />
     )
   }
@@ -2086,11 +2112,11 @@ function NookPage({ onBack }) {
 
   return (
     <div className="more-sub-page nook-page" {...swipeShelf}>
-      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>共读</h1></div>
+      <div className="page-header"><button className="icon-btn" onClick={onBack}>{I.back}</button><h1>Reading</h1></div>
       {loading ? (
         <div className="loading-state"><span className="spinner" />Loading...</div>
       ) : books.length === 0 ? (
-        <div className="empty-state">还没有书</div>
+        <div className="empty-state">No books yet</div>
       ) : (
         <div className="nook-shelf">
           {books.map(b => {
@@ -2100,10 +2126,10 @@ function NookPage({ onBack }) {
                 <div className="nook-book-cover" style={{ background: nookBookColor(b.title) }}>{b.title}</div>
                 <div className="nook-book-info">
                   <div className="nook-book-title">{b.title}</div>
-                  <div className="nook-book-author">{b.author}{b.translator ? ` · ${b.translator}译` : ''}</div>
+                  <div className="nook-book-author">{b.author}{b.translator ? ` · trans. ${b.translator}` : ''}</div>
                   <div className="nook-book-progress">
-                    <span>桦桦：{p.hua ? `第${p.hua.chapter}章` : '未开始'}</span>
-                    <span>沐：{p.mu ? `第${p.mu.chapter}章` : '未开始'}</span>
+                    <span>You: {p.hua ? `Ch. ${p.hua.chapter}` : 'Not started'}</span>
+                    <span>沐: {p.mu ? `Ch. ${p.mu.chapter}` : 'Not started'}</span>
                   </div>
                 </div>
                 {I.chevron}
@@ -2117,7 +2143,7 @@ function NookPage({ onBack }) {
 }
 
 // ─── MorePage ───────────────────────────────────────
-function MorePage() {
+function MorePage({ onEnterRoom }) {
   const [subPage, setSubPage] = useState(null)
   const [activeGame, setActiveGame] = useState(null)
   const swipeGames = useSwipeBack(() => setSubPage(null))
@@ -2135,14 +2161,14 @@ function MorePage() {
       </div>
     )
   }
-  if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} />
+  if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
 
   return (
     <div className="more-page">
       <div className="page-header"><h1>More</h1></div>
       <div className="more-grid">
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
-        <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>共读</span></div>
+        <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
         <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>
@@ -2176,7 +2202,7 @@ function App() {
         {tab === 'today' && <TodayPage />}
         {tab === 'chat' && <ChatPage onEnterRoom={setInRoom} />}
         {tab === 'calendar' && <CalendarPage />}
-        {tab === 'more' && <MorePage />}
+        {tab === 'more' && <MorePage onEnterRoom={setInRoom} />}
       </div>
       {showTab && <nav className="tab-bar">{tabs.map(t => <button key={t.key} className={`tab-item ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>{t.icon}<span>{t.label}</span></button>)}</nav>}
     </div>
