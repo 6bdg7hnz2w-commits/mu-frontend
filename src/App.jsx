@@ -168,6 +168,7 @@ function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24))
 
 function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
 function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
+function fmtDuration(sec) { if (!sec || !isFinite(sec) || sec <= 0) return '0:00'; const s = Math.round(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
 // ─── Icons ──────────────────────────────────────────
 const I = {
@@ -471,20 +472,63 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   )
 }
 
-// ─── TtsButton ──────────────────────────────────────
-function TtsButton({ status, progress, onToggle }) {
-  const r = 9, c = 2 * Math.PI * r
+// ─── VoiceMessage (WeChat-style voice bubble) ───────
+function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
+  const [showText, setShowText] = useState(false)
+  const trackRef = useRef(null)
+  const draggingRef = useRef(false)
   const pct = Math.min(Math.max(progress || 0, 0), 1)
+  const seekable = status === 'playing'
+
+  const ratioFromEvent = (e) => {
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    if (!rect.width) return 0
+    return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+  }
+
+  const handlePointerDown = (e) => {
+    if (!seekable) return
+    draggingRef.current = true
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+    onSeek(ratioFromEvent(e))
+  }
+  const handlePointerMove = (e) => {
+    if (!draggingRef.current) return
+    onSeek(ratioFromEvent(e))
+  }
+  const endDrag = (e) => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
+  }
+
   return (
-    <button className={`tts-btn ${status}`} onClick={onToggle} aria-label={status === 'playing' ? 'Pause voice' : status === 'loading' ? 'Loading voice' : 'Play voice'}>
-      {status === 'playing' && (
-        <svg className="tts-progress" width="24" height="24" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
-          <circle cx="12" cy="12" r={r} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} strokeLinecap="round" transform="rotate(-90 12 12)" />
-        </svg>
-      )}
-      <span className="tts-icon">{status === 'loading' ? <span className="spinner tiny" /> : status === 'playing' ? I.pause : I.speaker}</span>
-    </button>
+    <div className="voice-msg">
+      <div className={`voice-bar ${status}`} onClick={onToggle} aria-label={status === 'playing' ? 'Pause voice' : status === 'loading' ? 'Loading voice' : 'Play voice'}>
+        <span className="voice-speaker">
+          {status === 'loading' ? <span className="spinner tiny" /> : status === 'playing' ? I.pause : I.speaker}
+          {status === 'playing' && (<><span className="voice-ring" /><span className="voice-ring d2" /></>)}
+        </span>
+        <span
+          ref={trackRef}
+          className={`voice-track ${seekable ? '' : 'disabled'}`}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <span className="voice-track-bg" />
+          <span className="voice-track-fill" style={{ width: `${pct * 100}%` }} />
+          {seekable && <span className="voice-track-thumb" style={{ left: `${pct * 100}%` }} />}
+        </span>
+        <span className="voice-duration">{fmtDuration(duration)}</span>
+      </div>
+      <button className="voice-transcript-btn" onClick={() => setShowText(v => !v)}>{showText ? '收起' : '转文字'}</button>
+      {showText && <div className="bubble voice-transcript">{text}</div>}
+    </div>
   )
 }
 
@@ -545,7 +589,7 @@ function ChatRoom({ session, onBack }) {
       ttsUrlRef.current = url
       const audio = new Audio(url)
       ttsAudioRef.current = audio
-      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: audio.currentTime / audio.duration } })) }
+      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: audio.currentTime / audio.duration, duration: audio.duration } })) }
       audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
       audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
       await audio.play()
@@ -557,6 +601,15 @@ function ChatRoom({ session, onBack }) {
       }
     }
   }, [stopTts])
+
+  const seekTts = useCallback((idx, ratio) => {
+    if (ttsIdxRef.current !== idx) return
+    const audio = ttsAudioRef.current
+    if (!audio || !isFinite(audio.duration) || !audio.duration) return
+    const clamped = Math.min(Math.max(ratio, 0), 1)
+    audio.currentTime = clamped * audio.duration
+    setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: clamped, duration: audio.duration } }))
+  }, [])
 
   useEffect(() => () => stopTts(), [stopTts])
 
@@ -668,11 +721,19 @@ function ChatRoom({ session, onBack }) {
                 {I.chevron}
               </div>
             )}
-            <div className="bubble">{m.content}</div>
+            {m.role === 'assistant' && m.content ? (
+              <VoiceMessage
+                status={(ttsState[i] || {}).status || 'idle'}
+                progress={(ttsState[i] || {}).progress || 0}
+                duration={(ttsState[i] || {}).duration || 0}
+                text={m.content}
+                onToggle={() => toggleTts(i, m.content)}
+                onSeek={ratio => seekTts(i, ratio)}
+              />
+            ) : (
+              <div className="bubble">{m.content}</div>
+            )}
             <div className="msg-meta">
-              {m.role === 'assistant' && m.content && (
-                <TtsButton status={(ttsState[i] || {}).status || 'idle'} progress={(ttsState[i] || {}).progress || 0} onToggle={() => toggleTts(i, m.content)} />
-              )}
               <span className="msg-time">{fmtShortTime(m.created_at)}</span>
             </div>
           </div>
