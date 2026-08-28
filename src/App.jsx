@@ -168,7 +168,6 @@ function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24))
 
 function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
 function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
-function fmtDuration(sec) { if (!sec || !isFinite(sec) || sec <= 0) return '0:00'; const s = Math.round(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
 // ─── Icons ──────────────────────────────────────────
 const I = {
@@ -191,6 +190,7 @@ const I = {
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   speaker: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
   pause: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
+  play: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
 }
 
 // ─── SwipeRow ───────────────────────────────────────
@@ -472,62 +472,28 @@ function ChatListPage({ onOpen, onOpenSearch }) {
   )
 }
 
-// ─── VoiceMessage (WeChat-style voice bubble) ───────
-function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
-  const [showText, setShowText] = useState(false)
-  const trackRef = useRef(null)
-  const draggingRef = useRef(false)
-  const pct = Math.min(Math.max(progress || 0, 0), 1)
-  const seekable = status === 'playing'
-
-  const ratioFromEvent = (e) => {
-    const el = trackRef.current
-    if (!el) return 0
-    const rect = el.getBoundingClientRect()
-    if (!rect.width) return 0
-    return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
-  }
-
-  const handlePointerDown = (e) => {
-    if (!seekable) return
-    draggingRef.current = true
-    try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
-    onSeek(ratioFromEvent(e))
-  }
-  const handlePointerMove = (e) => {
-    if (!draggingRef.current) return
-    onSeek(ratioFromEvent(e))
-  }
-  const endDrag = (e) => {
-    if (!draggingRef.current) return
-    draggingRef.current = false
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-  }
+// ─── VoiceMessage (iMessage-style voice bubble) ─────
+function VoiceMessage({ status, progress, duration, onToggle }) {
+  const [dots] = useState(() => Array.from({ length: 24 }, () => 4 + Math.round(Math.random() * 10)))
+  const playing = status === 'playing'
+  const paused = status === 'paused'
+  const loading = status === 'loading'
+  const activeCount = (playing || paused) ? Math.round((progress || 0) * dots.length) : 0
+  const elapsed = duration ? (progress || 0) * duration : 0
+  const displaySeconds = (playing || paused) ? elapsed : duration
+  const durationLabel = (displaySeconds != null && isFinite(displaySeconds)) ? `${Math.max(0, Math.round(displaySeconds))}"` : ''
 
   return (
-    <div className="voice-msg">
-      <div className={`voice-bar ${status}`} onClick={onToggle} aria-label={status === 'playing' ? 'Pause voice' : status === 'loading' ? 'Loading voice' : 'Play voice'}>
-        <span className="voice-speaker">
-          {status === 'loading' ? <span className="spinner tiny" /> : status === 'playing' ? I.pause : I.speaker}
-          {status === 'playing' && (<><span className="voice-ring" /><span className="voice-ring d2" /></>)}
-        </span>
-        <span
-          ref={trackRef}
-          className={`voice-track ${seekable ? '' : 'disabled'}`}
-          onClick={e => e.stopPropagation()}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        >
-          <span className="voice-track-bg" />
-          <span className="voice-track-fill" style={{ width: `${pct * 100}%` }} />
-          {seekable && <span className="voice-track-thumb" style={{ left: `${pct * 100}%` }} />}
-        </span>
-        <span className="voice-duration">{fmtDuration(duration)}</span>
-      </div>
-      <button className="voice-transcript-btn" onClick={() => setShowText(v => !v)}>{showText ? '收起' : '转文字'}</button>
-      {showText && <div className="bubble voice-transcript">{text}</div>}
+    <div className={`voice-bar ${status}`} onClick={onToggle} aria-label={playing ? 'Pause voice' : loading ? 'Loading voice' : 'Play voice'}>
+      <span className="voice-play-btn">
+        {loading ? <span className="spinner tiny light" /> : playing ? I.pause : I.play}
+      </span>
+      <span className="voice-wave">
+        {dots.map((h, di) => (
+          <span key={di} className={`voice-dot ${di < activeCount ? 'active' : ''}`} style={{ height: `${h}px` }} />
+        ))}
+      </span>
+      <span className="voice-duration">{durationLabel}</span>
     </div>
   )
 }
@@ -545,17 +511,19 @@ function ChatRoom({ session, onBack }) {
   const [showSettings, setShowSettings] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
   const [ttsState, setTtsState] = useState({})
+  const [ttsDurations, setTtsDurations] = useState({})
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
   const textareaRef = useRef(null)
   const model = session.model || 'opus'
   const info = getModelInfo(model)
 
-  // ─── TTS playback (speaker button on assistant messages) ──
+  // ─── TTS playback (voice bubble on assistant messages) ──
   const ttsAudioRef = useRef(null)
   const ttsUrlRef = useRef(null)
   const ttsAbortRef = useRef(null)
   const ttsIdxRef = useRef(null)
+  const ttsStatusRef = useRef(null)
 
   const stopTts = useCallback(() => {
     if (ttsAbortRef.current) { ttsAbortRef.current.abort(); ttsAbortRef.current = null }
@@ -564,19 +532,42 @@ function ChatRoom({ session, onBack }) {
       ttsAudioRef.current.ontimeupdate = null
       ttsAudioRef.current.onended = null
       ttsAudioRef.current.onerror = null
+      ttsAudioRef.current.onloadedmetadata = null
       ttsAudioRef.current.src = ''
       ttsAudioRef.current = null
     }
     if (ttsUrlRef.current) { URL.revokeObjectURL(ttsUrlRef.current); ttsUrlRef.current = null }
     const prevIdx = ttsIdxRef.current
     ttsIdxRef.current = null
+    ttsStatusRef.current = null
     if (prevIdx != null) setTtsState(prev => { const n = { ...prev }; delete n[prevIdx]; return n })
   }, [])
 
+  const pauseTts = useCallback(() => {
+    const idx = ttsIdxRef.current
+    if (idx == null || !ttsAudioRef.current) return
+    ttsAudioRef.current.pause()
+    ttsStatusRef.current = 'paused'
+    setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], status: 'paused' } }))
+  }, [])
+
+  const resumeTts = useCallback(() => {
+    const idx = ttsIdxRef.current
+    if (idx == null || !ttsAudioRef.current) return
+    ttsAudioRef.current.play()
+    ttsStatusRef.current = 'playing'
+    setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], status: 'playing' } }))
+  }, [])
+
   const toggleTts = useCallback(async (idx, text) => {
-    if (ttsIdxRef.current === idx) { stopTts(); return }
+    if (ttsIdxRef.current === idx) {
+      if (ttsStatusRef.current === 'playing') { pauseTts(); return }
+      if (ttsStatusRef.current === 'paused') { resumeTts(); return }
+      return
+    }
     stopTts()
     ttsIdxRef.current = idx
+    ttsStatusRef.current = 'loading'
     setTtsState(prev => ({ ...prev, [idx]: { status: 'loading', progress: 0 } }))
     const controller = new AbortController()
     ttsAbortRef.current = controller
@@ -589,27 +580,20 @@ function ChatRoom({ session, onBack }) {
       ttsUrlRef.current = url
       const audio = new Audio(url)
       ttsAudioRef.current = audio
-      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: audio.currentTime / audio.duration, duration: audio.duration } })) }
+      audio.onloadedmetadata = () => { if (isFinite(audio.duration)) setTtsDurations(prev => ({ ...prev, [idx]: audio.duration })) }
+      audio.ontimeupdate = () => { if (audio.duration) setTtsState(prev => ({ ...prev, [idx]: { ...prev[idx], status: 'playing', progress: audio.currentTime / audio.duration } })) }
       audio.onended = () => { if (ttsIdxRef.current === idx) stopTts() }
       audio.onerror = () => { if (ttsIdxRef.current === idx) stopTts() }
       await audio.play()
-      if (ttsIdxRef.current === idx) setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: 0 } }))
+      if (ttsIdxRef.current === idx) { ttsStatusRef.current = 'playing'; setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: 0 } })) }
     } catch (err) {
       if (err.name !== 'AbortError' && ttsIdxRef.current === idx) {
         ttsIdxRef.current = null
+        ttsStatusRef.current = null
         setTtsState(prev => { const n = { ...prev }; delete n[idx]; return n })
       }
     }
-  }, [stopTts])
-
-  const seekTts = useCallback((idx, ratio) => {
-    if (ttsIdxRef.current !== idx) return
-    const audio = ttsAudioRef.current
-    if (!audio || !isFinite(audio.duration) || !audio.duration) return
-    const clamped = Math.min(Math.max(ratio, 0), 1)
-    audio.currentTime = clamped * audio.duration
-    setTtsState(prev => ({ ...prev, [idx]: { status: 'playing', progress: clamped, duration: audio.duration } }))
-  }, [])
+  }, [stopTts, pauseTts, resumeTts])
 
   useEffect(() => () => stopTts(), [stopTts])
 
@@ -631,6 +615,7 @@ function ChatRoom({ session, onBack }) {
 
   useEffect(() => {
     stopTts()
+    setTtsDurations({})
     fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setMessages(data)
@@ -725,10 +710,8 @@ function ChatRoom({ session, onBack }) {
               <VoiceMessage
                 status={(ttsState[i] || {}).status || 'idle'}
                 progress={(ttsState[i] || {}).progress || 0}
-                duration={(ttsState[i] || {}).duration || 0}
-                text={m.content}
+                duration={ttsDurations[i]}
                 onToggle={() => toggleTts(i, m.content)}
-                onSeek={ratio => seekTts(i, ratio)}
               />
             ) : (
               <div className="bubble">{m.content}</div>
