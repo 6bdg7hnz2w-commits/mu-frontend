@@ -479,9 +479,21 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .nook-reader-meta{font-size:11px;color:rgba(234,232,227,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nook-reader-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 22px 24px}
 .nook-reader-content p{font-size:17px;line-height:2.0;margin-bottom:1.4em;color:#e4e2dc;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
-.nook-highlight{cursor:pointer;border-radius:2px;padding:0 1px;color:#fff}
-.nook-highlight.hua{background:rgba(90,150,220,.4)}
-.nook-highlight.mu{background:rgba(224,160,90,.42)}
+/* 荧光笔质感：垂直渐变上下浅、中间深，模拟笔触的厚薄变化 */
+.nook-highlight{
+  cursor:pointer;border-radius:2px;padding:2px 0;color:#f5f0ea;
+  box-decoration-break:clone;-webkit-box-decoration-break:clone;
+}
+.nook-highlight.hua{
+  background:linear-gradient(to bottom,
+    rgba(255,167,120,0.15) 0%, rgba(255,140,90,0.45) 15%,
+    rgba(255,140,90,0.45) 85%, rgba(255,167,120,0.15) 100%);
+}
+.nook-highlight.mu{
+  background:linear-gradient(to bottom,
+    rgba(160,150,255,0.15) 0%, rgba(140,130,255,0.45) 15%,
+    rgba(140,130,255,0.45) 85%, rgba(160,150,255,0.15) 100%);
+}
 .nook-select-btn{position:fixed;transform:translate(-50%,-120%);background:#f2f0ea;color:#19191b;border:none;padding:8px 14px;border-radius:20px;font-size:13px;z-index:150;box-shadow:0 4px 12px rgba(0,0,0,.4);cursor:pointer}
 .nook-reader-footer{display:flex;justify-content:space-between;padding:10px 20px calc(10px + var(--safe-bottom));border-top:1px solid rgba(255,255,255,0.07);background:rgba(25,25,27,0.85)}
 .nook-reader-footer .text-btn{color:var(--accent)}
@@ -515,6 +527,19 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .nook-bubble-row.mine .nook-bubble{background:#1a1a1a;color:#fff;border-bottom-right-radius:5px}
 .nook-bubble-row.theirs .nook-bubble{background:#f0efe9;color:#1a1a1a;border-bottom-left-radius:5px}
 .nook-bubble-time{font-size:10px;color:#b3b3b3;margin-top:3px;padding:0 4px}
+.nook-bubble-wrap{display:flex;align-items:center;gap:4px}
+.nook-bubble-more{border:none;background:none;color:#b3b3b3;padding:4px;cursor:pointer;display:flex;align-items:center;flex-shrink:0}
+.nook-bubble-menu{display:flex;gap:6px;flex-shrink:0}
+.nook-bubble-menu button{border:none;background:#f0efe9;color:#1a1a1a;font-size:11px;padding:4px 9px;border-radius:10px;cursor:pointer}
+.nook-bubble-menu button.danger{color:#d94444}
+
+.nook-confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
+.nook-confirm-card{background:#fff;color:#1a1a1a;border-radius:16px;padding:20px;width:280px;max-width:calc(100vw - 40px);text-align:center}
+.nook-confirm-card p{font-size:14px;color:#1a1a1a;margin-bottom:16px}
+.nook-confirm-actions{display:flex;justify-content:center;gap:10px}
+.nook-confirm-actions button{padding:9px 18px;border-radius:10px;border:none;font-size:14px;cursor:pointer}
+.nook-confirm-cancel{background:#f0efe9;color:#1a1a1a}
+.nook-confirm-delete{background:#d94444;color:#fff}
 .nook-sheet-input-row{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid #eee}
 .nook-sheet-input{flex:1;border:1px solid #e5e3dd;border-radius:20px;padding:10px 16px;font-size:14px;font-family:inherit;background:#f7f6f2;color:#1a1a1a;outline:none}
 .nook-sheet-input::placeholder{color:#b3b3b3}

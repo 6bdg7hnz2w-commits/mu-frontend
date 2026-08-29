@@ -190,6 +190,7 @@ const I = {
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   speaker: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
   pause: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
+  more: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
   play: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
 }
 
@@ -1722,6 +1723,9 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
   const [selectionInfo, setSelectionInfo] = useState(null)
   const [activeAnnotation, setActiveAnnotation] = useState(null)
   const [replyText, setReplyText] = useState('')
+  const [editingFloorId, setEditingFloorId] = useState(null)
+  const [floorMenu, setFloorMenu] = useState(null)
+  const [confirmDeleteFloor, setConfirmDeleteFloor] = useState(null)
   const [currentPara, setCurrentPara] = useState(0)
   const identity = NOOK_READER_IDENTITY
   const containerRef = useRef(null)
@@ -1758,6 +1762,20 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
       setChapter(ch)
       setAnnotations(Array.isArray(anns) ? anns : [])
     }).catch(() => {}).finally(() => setLoading(false))
+  }, [book.id, chapterNum])
+
+  // 沐第一次读到这一章时自己划几处线；后端用 ai_annotated 字段保证只跑一次，
+  // 这里每次开章节都调用没关系，跑过的会立刻原样返回。跑完了才有新划线，重新拉一次。
+  useEffect(() => {
+    fetch(`${API}/api/nook/books/${book.id}/chapters/${chapterNum}/ai-annotate`, { method: 'POST' })
+      .then(r => r.json())
+      .then(result => {
+        if (result && !result.skipped) {
+          return fetch(`${API}/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
+        }
+      })
+      .then(anns => { if (Array.isArray(anns)) setAnnotations(anns) })
+      .catch(() => {})
   }, [book.id, chapterNum])
 
   const paragraphs = useMemo(() => (
@@ -1841,6 +1859,18 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     setSelectionInfo({ top: rect.top, left: rect.left + rect.width / 2, paraIndex: Number(paraEl.dataset.para), quote: text.slice(0, 60) })
   }
 
+  // 点击空白处会让浏览器的选区变空，但之前的写法只在 reader-content 上监听
+  // mouseup/touchend，点在别处（比如页头、页脚）时划线气泡不会消失。
+  // selectionchange 是全局事件，选区一变空就能兜住所有情况。
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed) setSelectionInfo(null)
+    }
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => document.removeEventListener('selectionchange', handleSelectionChange)
+  }, [])
+
   const createAnnotation = async () => {
     if (!selectionInfo) return
     const { paraIndex, quote } = selectionInfo
@@ -1858,6 +1888,22 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
 
   const submitFloor = async () => {
     if (!replyText.trim() || !activeAnnotation) return
+    if (editingFloorId) {
+      const id = editingFloorId
+      try {
+        const res = await fetch(`${API}/api/nook/floors/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: replyText.trim() })
+        })
+        const floor = await res.json()
+        const patch = (a) => ({ ...a, floors: a.floors.map(f => f.id === id ? floor : f) })
+        setAnnotations(prev => prev.map(a => a.id === activeAnnotation.id ? patch(a) : a))
+        setActiveAnnotation(prev => prev ? patch(prev) : prev)
+      } catch {}
+      setEditingFloorId(null)
+      setReplyText('')
+      return
+    }
     try {
       const res = await fetch(`${API}/api/nook/annotations/${activeAnnotation.id}/floors`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1867,6 +1913,29 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
       setAnnotations(prev => prev.map(a => a.id === activeAnnotation.id ? { ...a, floors: [...a.floors, floor] } : a))
       setActiveAnnotation(prev => prev ? { ...prev, floors: [...prev.floors, floor] } : prev)
       setReplyText('')
+    } catch {}
+  }
+
+  const startEditFloor = (f) => {
+    setEditingFloorId(f.id)
+    setReplyText(f.text)
+    setFloorMenu(null)
+  }
+
+  const cancelEditFloor = () => {
+    setEditingFloorId(null)
+    setReplyText('')
+  }
+
+  const deleteFloor = async () => {
+    if (!confirmDeleteFloor || !activeAnnotation) return
+    const id = confirmDeleteFloor.id
+    setConfirmDeleteFloor(null)
+    const patch = (a) => ({ ...a, floors: a.floors.filter(f => f.id !== id) })
+    setAnnotations(prev => prev.map(a => a.id === activeAnnotation.id ? patch(a) : a))
+    setActiveAnnotation(prev => prev ? patch(prev) : prev)
+    try {
+      await fetch(`${API}/api/nook/floors/${id}`, { method: 'DELETE' })
     } catch {}
   }
 
@@ -1880,11 +1949,17 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     } catch {}
   }
 
-  // 点击划线、批注卡片以外的任何地方都应关闭当前打开的批注卡片
+  // 点击划线、批注卡片以外的任何地方都应关闭当前打开的批注卡片；
+  // 点在卡片里但不是楼层的操作菜单上，就只收起那个小菜单
   useEffect(() => {
     if (!activeAnnotation) return
     const handleOutside = (e) => {
-      if (sheetRef.current && sheetRef.current.contains(e.target)) return
+      // 删除确认弹窗是卡片外面的独立浮层，点它（包括按钮）不算"点在卡片外"
+      if (e.target.closest && e.target.closest('.nook-confirm-overlay')) return
+      if (sheetRef.current && sheetRef.current.contains(e.target)) {
+        if (floorMenu && !(e.target.closest && e.target.closest('.nook-bubble-wrap'))) setFloorMenu(null)
+        return
+      }
       if (e.target.closest && e.target.closest('.nook-highlight')) return
       setActiveAnnotation(null)
     }
@@ -1894,7 +1969,14 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
       document.removeEventListener('mousedown', handleOutside)
       document.removeEventListener('touchstart', handleOutside)
     }
-  }, [activeAnnotation])
+  }, [activeAnnotation, floorMenu])
+
+  // 换到另一条批注（或关掉卡片）时清掉编辑/菜单状态，别带到下一条里
+  useEffect(() => {
+    setEditingFloorId(null)
+    setFloorMenu(null)
+    setReplyText('')
+  }, [activeAnnotation?.id])
 
   // 拖拽把手下拉关闭卡片
   const handleDragStart = (e) => {
@@ -1993,19 +2075,43 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
                 return (
                   <div key={f.id} className={`nook-bubble-row ${mine ? 'mine' : 'theirs'}`}>
                     {!mine && <span className="nook-bubble-name">{nookName(f.who)}</span>}
-                    <div className="nook-bubble">{f.text}</div>
+                    <div className="nook-bubble-wrap">
+                      <div className="nook-bubble">{f.text}</div>
+                      {mine && (
+                        floorMenu === f.id ? (
+                          <div className="nook-bubble-menu">
+                            <button onClick={() => startEditFloor(f)}>Edit</button>
+                            <button className="danger" onClick={() => { setConfirmDeleteFloor(f); setFloorMenu(null) }}>Delete</button>
+                          </div>
+                        ) : (
+                          <button className="nook-bubble-more" onClick={() => setFloorMenu(f.id)}>{I.more}</button>
+                        )
+                      )}
+                    </div>
                     <span className="nook-bubble-time">{nookRelativeTime(f.created_at)}</span>
                   </div>
                 )
               })}
             </div>
             <div className="nook-sheet-input-row">
+              {editingFloorId && <button className="icon-btn small" onClick={cancelEditFloor}>{I.close}</button>}
               <input
-                className="nook-sheet-input" placeholder="Say something..." value={replyText}
+                className="nook-sheet-input" placeholder={editingFloorId ? 'Edit reply...' : 'Say something...'} value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') submitFloor() }}
               />
               <button className="nook-sheet-send" onClick={submitFloor} disabled={!replyText.trim()}>{I.send}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDeleteFloor && (
+        <div className="nook-confirm-overlay" onClick={() => setConfirmDeleteFloor(null)}>
+          <div className="nook-confirm-card" onClick={e => e.stopPropagation()}>
+            <p>Delete this reply?</p>
+            <div className="nook-confirm-actions">
+              <button className="nook-confirm-cancel" onClick={() => setConfirmDeleteFloor(null)}>Cancel</button>
+              <button className="nook-confirm-delete" onClick={deleteFloor}>Delete</button>
             </div>
           </div>
         </div>
