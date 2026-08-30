@@ -2174,9 +2174,13 @@ function NookPage({ onBack, onEnterRoom }) {
       setBooks(list)
       const entries = await Promise.all(list.map(async (b) => {
         try {
-          const rows = await fetch(`${API}/api/nook/progress/${b.id}`).then(r => r.json())
+          const [rows, aiProgress] = await Promise.all([
+            fetch(`${API}/api/nook/progress/${b.id}`).then(r => r.json()),
+            fetch(`${API}/api/nook/books/${b.id}/ai-progress`).then(r => r.json())
+          ])
           const byWho = {}
           for (const row of (Array.isArray(rows) ? rows : [])) byWho[row.who] = row
+          if (aiProgress?.chapter) byWho.mu = { chapter: aiProgress.chapter }
           return [b.id, byWho]
         } catch { return [b.id, {}] }
       }))
@@ -2184,15 +2188,25 @@ function NookPage({ onBack, onEnterRoom }) {
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
+  // 点书封面直接进阅读器，跳到桦桦上次读到的位置；没有进度记录就从第一章开始，
+  // 不再先停在目录页——目录页还在，从阅读器的返回箭头能进去挑别的章节。
   const openBook = async (book) => {
     setSelectedBook(book)
-    setScreen('chapters')
     setChaptersLoading(true)
     try {
-      const data = await fetch(`${API}/api/nook/books/${book.id}/chapters`).then(r => r.json())
-      setChapters(Array.isArray(data) ? data : [])
-    } catch { setChapters([]) }
+      const [chaptersData, progressRows] = await Promise.all([
+        fetch(`${API}/api/nook/books/${book.id}/chapters`).then(r => r.json()),
+        fetch(`${API}/api/nook/progress/${book.id}`).then(r => r.json())
+      ])
+      setChapters(Array.isArray(chaptersData) ? chaptersData : [])
+      const huaProgress = (Array.isArray(progressRows) ? progressRows : []).find(row => row.who === 'hua')
+      setSelectedChapter(huaProgress ? huaProgress.chapter : 1)
+    } catch {
+      setChapters([])
+      setSelectedChapter(1)
+    }
     setChaptersLoading(false)
+    setScreen('reader')
   }
 
   const openChapter = (num) => { setSelectedChapter(num); setScreen('reader') }
