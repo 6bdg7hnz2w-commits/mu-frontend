@@ -496,6 +496,11 @@ function resolveAudioDuration(audio, cb) {
   audio.addEventListener('loadedmetadata', onLoaded)
 }
 
+function cleanAssistantText(text) {
+  if (!text) return '';
+  return text.replace(/\[助手[^\]]*\]\s*/g, '').replace(/^(中文|英文|俄语|日语|法语|韩语)[：:]\s*/g, '').trim();
+}
+
 const VOICE_MIN_WIDTH = 120
 const VOICE_MAX_WIDTH = 320
 function voiceBarWidth(duration) {
@@ -784,7 +789,7 @@ function ChatRoom({ session, onBack }) {
         const map = {}
         data.forEach((m, i) => { if (m.role === 'assistant') map[i] = pickSticker(m.content) })
         setStickerMap(map)
-        data.forEach((m, i) => { if (m.role === 'assistant' && m.content) fetchDurationEstimate(i, m.content) })
+        data.forEach((m, i) => { if (m.role === 'assistant' && m.content && m.voice) fetchDurationEstimate(i, cleanAssistantText(m.content)) })
       }
     })
   }, [session.id, stopTts, clearTtsCache, fetchDurationEstimate])
@@ -805,9 +810,9 @@ function ChatRoom({ session, onBack }) {
       const data = await res.json()
       const assistIdx = newIdx + 1
       const sticker = pickSticker(data.reply)
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString() }])
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString(), voice: data.voice }])
       setStickerMap(prev => ({ ...prev, [assistIdx]: sticker }))
-      if (data.reply && data.reply.trim()) fetchDurationEstimate(assistIdx, data.reply)
+      if (data.voice && data.reply && data.reply.trim()) fetchDurationEstimate(assistIdx, cleanAssistantText(data.reply))
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
     }
@@ -871,14 +876,34 @@ function ChatRoom({ session, onBack }) {
               </div>
             )}
             {m.role === 'assistant' && m.content ? (
-              <VoiceMessage
-                status={(ttsState[i] || {}).status || 'idle'}
-                progress={(ttsState[i] || {}).progress || 0}
-                duration={ttsDurations[i]}
-                text={m.content}
-                onToggle={() => toggleTts(i, m.content)}
-                onSeek={ratio => seekTts(i, ratio)}
-              />
+              m.voice ? (
+                <VoiceMessage
+                  status={(ttsState[i] || {}).status || 'idle'}
+                  progress={(ttsState[i] || {}).progress || 0}
+                  duration={ttsDurations[i]}
+                  text={cleanAssistantText(m.content)}
+                  onToggle={() => toggleTts(i, cleanAssistantText(m.content))}
+                  onSeek={ratio => seekTts(i, ratio)}
+                />
+              ) : (
+                <div className="bubble">
+                  {cleanAssistantText(m.content)}
+                  {(ttsState[i] || {}).status && (ttsState[i] || {}).status !== 'idle' ? (
+                    <VoiceMessage
+                      status={ttsState[i].status}
+                      progress={(ttsState[i] || {}).progress || 0}
+                      duration={ttsDurations[i]}
+                      text={cleanAssistantText(m.content)}
+                      onToggle={() => toggleTts(i, cleanAssistantText(m.content))}
+                      onSeek={ratio => seekTts(i, ratio)}
+                    />
+                  ) : (
+                    <button className="inline-voice-btn" onClick={() => toggleTts(i, cleanAssistantText(m.content))} aria-label="Play voice">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.08"/></svg>
+                    </button>
+                  )}
+                </div>
+              )
             ) : (
               <div className="bubble">{m.content}</div>
             )}
