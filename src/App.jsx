@@ -1482,7 +1482,6 @@ function MemoryImportPage({ onBack }) {
   const [memories, setMemories] = useState([])
   const [selectedMemory, setSelectedMemory] = useState(null)
   const [editText, setEditText] = useState('')
-  const [editing, setEditing] = useState(false)
   const swipe = useSwipeBack(onBack)
 
   useEffect(() => {
@@ -1505,7 +1504,7 @@ function MemoryImportPage({ onBack }) {
     try {
       await fetch(`${API}/api/memories/${id}`, { method: 'DELETE' })
       setMemories(prev => prev.filter(m => m.id !== id))
-      setSelectedMemory(null)
+      if (selectedMemory?.id === id) setSelectedMemory(null)
     } catch {}
   }
 
@@ -1514,33 +1513,22 @@ function MemoryImportPage({ onBack }) {
     try {
       await fetch(`${API}/api/memories/${selectedMemory.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: editText.trim() }) })
       setMemories(prev => prev.map(m => m.id === selectedMemory.id ? { ...m, summary: editText.trim() } : m))
-      setSelectedMemory(prev => ({ ...prev, summary: editText.trim() }))
-      setEditing(false)
+      setSelectedMemory(null)
     } catch {}
   }
 
   if (selectedMemory) {
     return (
       <div className="more-sub-page">
-        <div className="page-header"><button className="icon-btn" onClick={() => { setSelectedMemory(null); setEditing(false) }}>{I.back}</button><h1>Memory Detail</h1></div>
+        <div className="page-header">
+          <button className="icon-btn" onClick={() => setSelectedMemory(null)}>{I.back}</button>
+          <h1>Edit Memory</h1>
+          <div className="header-actions">
+            <button className="text-btn" onClick={updateMemory} disabled={!editText.trim()}>Save</button>
+          </div>
+        </div>
         <div className="card">
-          {editing ? (
-            <>
-              <textarea className="write-area" value={editText} onChange={e => setEditText(e.target.value)} rows={8} />
-              <div className="write-actions">
-                <button className="btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
-                <button className="btn-primary" onClick={updateMemory} disabled={!editText.trim()}>Save</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px', lineHeight: 1.6 }}>{selectedMemory.summary}</div>
-              <div className="write-actions">
-                <button className="text-btn danger" onClick={() => deleteMemory(selectedMemory.id)}>Delete</button>
-                <button className="btn-primary" onClick={() => { setEditText(selectedMemory.summary); setEditing(true) }}>Edit</button>
-              </div>
-            </>
-          )}
+          <textarea className="write-area" value={editText} onChange={e => setEditText(e.target.value)} rows={10} />
         </div>
       </div>
     )
@@ -1563,10 +1551,12 @@ function MemoryImportPage({ onBack }) {
       <div className="card">
         {memories.length === 0 && <div className="empty-state-sm">No saved memories yet</div>}
         {memories.map(m => (
-          <div key={m.id} className="important-day-item" onClick={() => setSelectedMemory(m)} style={{ cursor: 'pointer' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.summary}</span>
-            {I.chevron}
-          </div>
+          <SwipeRow key={m.id} onDelete={() => deleteMemory(m.id)}>
+            <div className="important-day-item" onClick={() => { setSelectedMemory(m); setEditText(m.summary) }} style={{ cursor: 'pointer' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.summary}</span>
+              {I.chevron}
+            </div>
+          </SwipeRow>
         ))}
       </div>
     </div>
