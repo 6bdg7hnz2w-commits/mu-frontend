@@ -545,3 +545,6 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .nook-sheet-input::placeholder{color:#b3b3b3}
 .nook-sheet-send{width:36px;height:36px;border-radius:50%;border:none;background:var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .nook-sheet-send:disabled{opacity:.35;cursor:default}
+
+.inline-voice-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;background:none;color:var(--text-dim);cursor:pointer;vertical-align:middle;margin-left:6px;padding:0;border-radius:50%;transition:color .2s}
+.inline-voice-btn:active{color:var(--accent)}
