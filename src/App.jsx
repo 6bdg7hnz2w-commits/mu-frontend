@@ -576,6 +576,40 @@ function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
   )
 }
 
+// 上传前把图片压缩到 webp（不支持时退回 jpeg），一张照片大概能压到100-300KB
+function compressImage(file, maxWidth = 1200, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      let { width, height } = img
+      if (width > maxWidth) {
+        height = Math.round(height * (maxWidth / width))
+        width = maxWidth
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(webpBlob => {
+        if (webpBlob && webpBlob.type === 'image/webp') return resolve(webpBlob)
+        canvas.toBlob(jpegBlob => jpegBlob ? resolve(jpegBlob) : reject(new Error('compression failed')), 'image/jpeg', quality)
+      }, 'image/webp', quality)
+    }
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image load failed')) }
+    img.src = objectUrl
+  })
+}
+
+// 用户消息content里可能带 "[图片: url]" 标记，把文本和图片URL拆开
+function parseImageContent(content) {
+  if (!content) return { text: content, imageUrl: null }
+  const match = content.match(/\[图片: (.+?)\]/)
+  if (!match) return { text: content, imageUrl: null }
+  return { text: content.slice(0, match.index).trim(), imageUrl: match[1] }
+}
+
 // ─── ChatRoom ───────────────────────────────────────
 function ChatRoom({ session, onBack }) {
   const [messages, setMessages] = useState([])
@@ -590,9 +624,14 @@ function ChatRoom({ session, onBack }) {
   const [highlightIdx, setHighlightIdx] = useState(null)
   const [ttsState, setTtsState] = useState({})
   const [ttsDurations, setTtsDurations] = useState({})
+  const [pendingImage, setPendingImage] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [lightboxImage, setLightboxImage] = useState(null)
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
   const textareaRef = useRef(null)
+  const photoInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const model = session.model || 'opus'
   const info = getModelInfo(model)
 
@@ -799,14 +838,52 @@ function ChatRoom({ session, onBack }) {
 
   const toggleExtThinking = () => { const v = !extThinking; setExtThinking(v); setExtendedThinkingStorage(session.id, v) }
 
+  const handleImageSelect = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const blob = await compressImage(file)
+      const previewUrl = URL.createObjectURL(blob)
+      setPendingImage(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return { blob, previewUrl } })
+    } catch {}
+  }
+
+  const cancelPendingImage = () => {
+    setPendingImage(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null })
+  }
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return
+    if ((!input.trim() && !pendingImage) || loading || uploadingImage) return
     const text = input.trim(); setInput(''); setDraftStorage(session.id, '')
+    const imageToSend = pendingImage
+    setPendingImage(null)
+
+    let imageUrl = null
+    if (imageToSend) {
+      setUploadingImage(true)
+      try {
+        const ext = imageToSend.blob.type === 'image/webp' ? 'webp' : 'jpg'
+        const formData = new FormData()
+        formData.append('file', imageToSend.blob, `photo.${ext}`)
+        const uploadRes = await fetch(`${API}/api/upload`, { method: 'POST', body: formData })
+        const uploadData = await uploadRes.json()
+        imageUrl = uploadData.url || null
+      } catch {}
+      URL.revokeObjectURL(imageToSend.previewUrl)
+      setUploadingImage(false)
+      if (!imageUrl) {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Image upload failed...', created_at: new Date().toISOString() }])
+        return
+      }
+    }
+
     const newIdx = messages.length
-    setMessages(prev => [...prev, { role: 'user', content: text, created_at: new Date().toISOString() }])
+    const displayContent = imageUrl ? `${text}\n[图片: ${imageUrl}]` : text
+    setMessages(prev => [...prev, { role: 'user', content: displayContent, created_at: new Date().toISOString() }])
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking }) })
+      const res = await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking, image_url: imageUrl }) })
       const data = await res.json()
       const assistIdx = newIdx + 1
       const sticker = pickSticker(data.reply)
@@ -905,7 +982,17 @@ function ChatRoom({ session, onBack }) {
                 </div>
               )
             ) : (
-              <div className="bubble">{m.content}</div>
+              <div className="bubble">
+                {(() => {
+                  const { text, imageUrl } = parseImageContent(m.content)
+                  return (
+                    <>
+                      {imageUrl && <img src={imageUrl} alt="" className="msg-image" onClick={() => setLightboxImage(imageUrl)} />}
+                      {text && <div>{text}</div>}
+                    </>
+                  )
+                })()}
+              </div>
             )}
             <div className="msg-meta">
               <span className="msg-time">{fmtShortTime(m.created_at)}</span>
@@ -917,17 +1004,30 @@ function ChatRoom({ session, onBack }) {
       </div>
 
       <div className="composer">
+        {pendingImage && (
+          <div className="composer-image-preview">
+            <img src={pendingImage.previewUrl} alt="" />
+            <button onClick={cancelPendingImage} aria-label="Remove image">{I.close}</button>
+          </div>
+        )}
         <div className="composer-input-row">
           <div className="composer-attachments">
             <button className="attach-btn">{I.file}</button>
-            <button className="attach-btn">{I.camera}</button>
-            <button className="attach-btn">{I.photo}</button>
+            <button className="attach-btn" onClick={() => cameraInputRef.current?.click()}>{I.camera}</button>
+            <button className="attach-btn" onClick={() => photoInputRef.current?.click()}>{I.photo}</button>
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
           </div>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} />
-          <button className="send-btn" onClick={sendMessage} disabled={loading || !input.trim()}>{I.send}</button>
+          <button className="send-btn" onClick={sendMessage} disabled={loading || uploadingImage || (!input.trim() && !pendingImage)}>{uploadingImage ? <span className="spinner tiny light" /> : I.send}</button>
         </div>
       </div>
 
+      {lightboxImage && (
+        <div className="image-lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <img src={lightboxImage} alt="" />
+        </div>
+      )}
       {thinkingText && <ThinkingPanel text={thinkingText} onClose={() => setThinkingText(null)} />}
       {showAvatarUpload && <AvatarUploadModal sessionId={session.id} onClose={() => setShowAvatarUpload(false)} />}
     </div>
