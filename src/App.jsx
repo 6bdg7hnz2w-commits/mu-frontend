@@ -186,7 +186,6 @@ const I = {
   heart: <svg width="24" height="24" viewBox="0 0 24 24" fill="#e8707e"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   game: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>,
   book: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
-  terminal: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 9l3 3-3 3M12 15h5"/></svg>,
   brain: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2a2.5 2.5 0 0 0-2.5 2.5v.5A2.5 2.5 0 0 0 4.5 7.5v.5A2.5 2.5 0 0 0 2 10.5v0A2.5 2.5 0 0 0 4.5 13v0a2.5 2.5 0 0 0 0 5v0a2.5 2.5 0 0 0 2.5 2.5v0A2.5 2.5 0 0 0 9.5 23"/><path d="M14.5 2a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1 0 5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5"/></svg>,
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   speaker: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
@@ -403,8 +402,9 @@ function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
 }
 
 // ─── ChatListPage ───────────────────────────────────
-function ChatListPage({ onOpen, onOpenSearch }) {
+function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
   const [sessions, setSessions] = useState([])
+  const [ccLast] = useState(getCcLast)
   const [lastMessages, setLastMessages] = useState({})
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
@@ -450,6 +450,14 @@ function ChatListPage({ onOpen, onOpenSearch }) {
         ))}
       </div>)}
       <div className="session-list">
+        <div className="session-card pinned" onClick={onOpenCC}>
+          <div className="session-avatar">沐</div>
+          <div className="session-info">
+            <div className="session-top"><span className="session-name">沐 (CC)</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
+            <div className="session-sub-row"><span className="session-sublabel">Claude Code</span></div>
+            <div className="session-bottom"><span className="session-preview">{ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''}</span><span className="session-model-tag">CC</span></div>
+          </div>
+        </div>
         {loading && <div className="loading-state"><span className="spinner" />Loading...</div>}
         {!loading && sessions.length === 0 && <div className="empty-state">Tap + to start your first chat</div>}
         {!loading && sessions.map(s => {
@@ -1036,8 +1044,11 @@ function ChatRoom({ session, onBack }) {
 }
 
 // ─── ChatPage ───────────────────────────────────────
+const CC_SESSION = { id: 'cc' }
+
 function ChatPage({ onEnterRoom }) {
-  const [openSession, setOpenSession] = useState(null)
+  // 每次切到 Chats 都会重新挂载，所以默认直接进 CC；返回进会话列表
+  const [openSession, setOpenSession] = useState(CC_SESSION)
   const [showSearch, setShowSearch] = useState(false)
   useEffect(() => { onEnterRoom(!!openSession || showSearch) }, [openSession, showSearch])
 
@@ -1047,8 +1058,9 @@ function ChatPage({ onEnterRoom }) {
   }
 
   if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} onJumpToMessage={handleSearchJump} />
+  if (openSession === CC_SESSION) return <CCChatPage onBack={() => setOpenSession(null)} />
   if (openSession) return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
-  return <ChatListPage onOpen={setOpenSession} onOpenSearch={() => setShowSearch(true)} />
+  return <ChatListPage onOpen={setOpenSession} onOpenCC={() => setOpenSession(CC_SESSION)} onOpenSearch={() => setShowSearch(true)} />
 }
 
 // ─── SplashScreen ────────────────────────────────────
@@ -2393,8 +2405,14 @@ function getCcSent() {
 function saveCcSent(list) {
   try { localStorage.setItem('cc_sent', JSON.stringify(list.slice(-50))) } catch {}
 }
+function getCcLast() {
+  try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
+}
+function setCcLastStorage(m) {
+  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text, time: m.time })) } catch {}
+}
 
-function CCChatPage({ onBack, onEnterRoom }) {
+function CCChatPage({ onBack }) {
   const [passcode, setPasscode] = useState(getCcPasscode)
   const [passcodeInput, setPasscodeInput] = useState('')
   const [authError, setAuthError] = useState(false)
@@ -2406,11 +2424,6 @@ function CCChatPage({ onBack, onEnterRoom }) {
   const messagesEndRef = useRef(null)
   const seenRef = useRef(new Set())
   const swipe = useSwipeBack(onBack)
-
-  useEffect(() => {
-    onEnterRoom(true)
-    return () => onEnterRoom(false)
-  }, [])
 
   const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
 
@@ -2470,6 +2483,7 @@ function CCChatPage({ onBack, onEnterRoom }) {
     [sent, replies]
   )
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, waiting])
+  useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
   const updateSent = (fn) => setSent(prev => { const next = fn(prev); saveCcSent(next.filter(m => !m.failed)); return next })
 
@@ -2562,7 +2576,6 @@ function MorePage({ onEnterRoom }) {
     )
   }
   if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
-  if (subPage === 'cc') return <CCChatPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
 
   return (
     <div className="more-page">
@@ -2570,7 +2583,6 @@ function MorePage({ onEnterRoom }) {
       <div className="more-grid">
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
         <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
-        <div className="more-item" onClick={() => setSubPage('cc')}><div className="more-icon cc-icon">{I.terminal}</div><span>沐 (CC)</span></div>
         <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>
