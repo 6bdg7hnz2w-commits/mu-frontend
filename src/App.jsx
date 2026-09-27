@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 
-const API = 'https://mu-backend-l0uw.onrender.com'
+const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
 
 // ─── Avatar helpers (localStorage) — session list avatar ──
@@ -186,6 +186,7 @@ const I = {
   heart: <svg width="24" height="24" viewBox="0 0 24 24" fill="#e8707e"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   game: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>,
   book: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+  terminal: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 9l3 3-3 3M12 15h5"/></svg>,
   brain: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2a2.5 2.5 0 0 0-2.5 2.5v.5A2.5 2.5 0 0 0 4.5 7.5v.5A2.5 2.5 0 0 0 2 10.5v0A2.5 2.5 0 0 0 4.5 13v0a2.5 2.5 0 0 0 0 5v0a2.5 2.5 0 0 0 2.5 2.5v0A2.5 2.5 0 0 0 9.5 23"/><path d="M14.5 2a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v.5a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1 0 5v0a2.5 2.5 0 0 1-2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5"/></svg>,
   upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   speaker: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
@@ -2377,6 +2378,170 @@ function NookPage({ onBack, onEnterRoom }) {
   )
 }
 
+// ─── 沐 (CC) ─────────────────────────────────────────
+// 经后端 /api/cc/* 转发到 VPS 上的 Claude Code。浏览器只持有 APP 口令，bridge token 只在后端。
+function getCcPasscode() {
+  try { return localStorage.getItem('cc_passcode') || '' } catch { return '' }
+}
+function setCcPasscodeStorage(code) {
+  try { if (code) localStorage.setItem('cc_passcode', code); else localStorage.removeItem('cc_passcode') } catch {}
+}
+// bridge 只推 CC 的回复，自己发的消息存在本地，刷新后对话还能对上
+function getCcSent() {
+  try { const v = JSON.parse(localStorage.getItem('cc_sent') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+function saveCcSent(list) {
+  try { localStorage.setItem('cc_sent', JSON.stringify(list.slice(-50))) } catch {}
+}
+
+function CCChatPage({ onBack, onEnterRoom }) {
+  const [passcode, setPasscode] = useState(getCcPasscode)
+  const [passcodeInput, setPasscodeInput] = useState('')
+  const [authError, setAuthError] = useState(false)
+  const [replies, setReplies] = useState([])
+  const [sent, setSent] = useState(getCcSent)
+  const [status, setStatus] = useState('connecting')
+  const [waiting, setWaiting] = useState(false)
+  const [input, setInput] = useState('')
+  const messagesEndRef = useRef(null)
+  const seenRef = useRef(new Set())
+  const swipe = useSwipeBack(onBack)
+
+  useEffect(() => {
+    onEnterRoom(true)
+    return () => onEnterRoom(false)
+  }, [])
+
+  const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
+
+  // 用 fetch 读 SSE（EventSource 不能带 Authorization 头），断线后自动重连
+  useEffect(() => {
+    if (!passcode) return
+    const controller = new AbortController()
+    let retryTimer = null
+    let stopped = false
+
+    const handleLine = (line) => {
+      line = line.trim()
+      if (!line || line.startsWith(':') || line.startsWith('event:') || line.startsWith('id:')) return
+      if (line.startsWith('data:')) line = line.slice(5).trim()
+      let ev
+      try { ev = JSON.parse(line) } catch { return }
+      if (!ev || typeof ev.text !== 'string') return
+      const key = `${ev.time}|${ev.text}`
+      if (seenRef.current.has(key)) return
+      seenRef.current.add(key)
+      setReplies(prev => [...prev, { key, role: 'assistant', text: ev.text, time: ev.time }])
+      setWaiting(false)
+    }
+
+    const connect = async () => {
+      setStatus('connecting')
+      try {
+        const res = await fetch(`${API}/api/cc/events`, { headers: { Authorization: `Bearer ${passcode}` }, signal: controller.signal })
+        if (res.status === 401) { stopped = true; lockOut(); return }
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+        setStatus('live')
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop()
+          lines.forEach(handleLine)
+        }
+      } catch {
+        if (controller.signal.aborted) return
+      }
+      if (stopped || controller.signal.aborted) return
+      setStatus('offline')
+      retryTimer = setTimeout(connect, 3000)
+    }
+
+    connect()
+    return () => { controller.abort(); clearTimeout(retryTimer) }
+  }, [passcode])
+
+  const messages = useMemo(
+    () => [...sent, ...replies].sort((a, b) => new Date(a.time) - new Date(b.time)),
+    [sent, replies]
+  )
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, waiting])
+
+  const updateSent = (fn) => setSent(prev => { const next = fn(prev); saveCcSent(next.filter(m => !m.failed)); return next })
+
+  const sendMessage = async () => {
+    const text = input.trim()
+    if (!text) return
+    const msg = { key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString() }
+    updateSent(prev => [...prev, msg])
+    setInput('')
+    setWaiting(true)
+    try {
+      const res = await fetch(`${API}/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify({ text }) })
+      if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      setWaiting(false)
+      updateSent(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
+    }
+  }
+
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+  const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
+  const submitPasscode = () => { const code = passcodeInput.trim(); if (!code) return; setCcPasscodeStorage(code); setAuthError(false); setPasscodeInput(''); setPasscode(code) }
+  const statusLabel = { connecting: 'Connecting…', live: 'Claude Code', offline: 'Offline · reconnecting' }[status]
+
+  return (
+    <div className="chatroom" {...swipe}>
+      <div className="chatroom-header">
+        <button className="icon-btn" onClick={onBack}>{I.back}</button>
+        <div className="chatroom-title">
+          <div className="chatroom-name">沐 (CC)</div>
+          <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
+        </div>
+      </div>
+
+      <div className="messages">
+        {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
+        {messages.map(m => (
+          <div key={m.key} className={`msg ${m.role}`}>
+            <div className="bubble">{m.text}</div>
+            <div className="msg-meta">
+              <span className="msg-time">{m.failed ? 'Failed to send' : fmtShortTime(m.time)}</span>
+            </div>
+          </div>
+        ))}
+        {waiting && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div className="composer">
+        <div className="composer-input-row">
+          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
+          <button className="send-btn" onClick={sendMessage} disabled={!passcode || !input.trim()}>{I.send}</button>
+        </div>
+      </div>
+
+      {!passcode && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h3>Passcode</h3>
+            <input className="modal-input" type="password" autoComplete="current-password" placeholder={authError ? 'Wrong passcode, try again' : 'Enter passcode'} value={passcodeInput} onChange={e => setPasscodeInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitPasscode() }} autoFocus />
+            <div className="modal-actions-row">
+              <button className="btn-ghost" onClick={onBack}>Cancel</button>
+              <button className="btn-primary" onClick={submitPasscode} disabled={!passcodeInput.trim()}>Unlock</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── MorePage ───────────────────────────────────────
 function MorePage({ onEnterRoom }) {
   const [subPage, setSubPage] = useState(null)
@@ -2397,6 +2562,7 @@ function MorePage({ onEnterRoom }) {
     )
   }
   if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
+  if (subPage === 'cc') return <CCChatPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
 
   return (
     <div className="more-page">
@@ -2404,6 +2570,7 @@ function MorePage({ onEnterRoom }) {
       <div className="more-grid">
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
         <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
+        <div className="more-item" onClick={() => setSubPage('cc')}><div className="more-icon cc-icon">{I.terminal}</div><span>沐 (CC)</span></div>
         <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>

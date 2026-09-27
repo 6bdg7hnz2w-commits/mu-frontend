@@ -369,6 +369,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .reading-icon{background:#e6f5ec;color:#2e7d4f}
 .settings-icon{background:var(--card);color:var(--text-secondary)}
 .memory-icon{background:#e6f0ff;color:#3d6dd9}
+.cc-icon{background:var(--accent-soft);color:var(--accent)}
 
 /* Memory import page */
 .import-hint{font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px}
