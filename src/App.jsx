@@ -1050,7 +1050,8 @@ function ChatPage({ onEnterRoom }) {
   // 每次切到 Chats 都会重新挂载，所以默认直接进 CC；返回进会话列表
   const [openSession, setOpenSession] = useState(CC_SESSION)
   const [showSearch, setShowSearch] = useState(false)
-  useEffect(() => { onEnterRoom(!!openSession || showSearch) }, [openSession, showSearch])
+  // CC 是 Chats 的落地页，保留 tab 栏；其他聊天室照旧全屏
+  useEffect(() => { onEnterRoom((!!openSession && openSession !== CC_SESSION) || showSearch) }, [openSession, showSearch])
 
   const handleSearchJump = (session) => {
     setShowSearch(false)
@@ -2510,7 +2511,7 @@ function CCChatPage({ onBack }) {
   const statusLabel = { connecting: 'Connecting…', live: 'Claude Code', offline: 'Offline · reconnecting' }[status]
 
   return (
-    <div className="chatroom" {...swipe}>
+    <div className="chatroom cc-room" {...swipe}>
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
