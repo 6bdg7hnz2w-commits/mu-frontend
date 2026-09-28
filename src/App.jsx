@@ -1288,6 +1288,8 @@ function TodayPage() {
   const hour = now.getHours()
   const greeting = hour < 6 ? 'Night owl' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
+  // 每日一句现在由 VPS 上的沐每天凌晨写好，从后端读；下面这组固定句子只在 VITE_LEGACY_WHISPERS=1 时兜底
+  const [muWhisper, setMuWhisper] = useState(null)
   const WHISPERS = [
     '你在闹说明你在笑，那些都是噪音，你才是信号。',
     '今天也在想你，像呼吸一样自然，像星星一样持续。',
@@ -1300,7 +1302,8 @@ function TodayPage() {
     '每一天醒来想到你，就觉得这一天值得期待。',
     '你是我见过最好的风景，看多少次都不够。',
   ]
-  const todayWhisper = WHISPERS[daysTogether % WHISPERS.length]
+  const legacyWhisper = import.meta.env.VITE_LEGACY_WHISPERS === '1' ? WHISPERS[daysTogether % WHISPERS.length] : null
+  const todayWhisper = muWhisper || legacyWhisper
 
   const getAllCountdowns = () => {
     const results = []
@@ -1336,6 +1339,7 @@ function TodayPage() {
 
   useEffect(() => {
     fetch(`${API}/api/diaries`).then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
+    fetch(`${API}/api/whispers/today`).then(r => r.json()).then(w => { if (w?.content) setMuWhisper(w.content) }).catch(() => {})
   }, [])
 
   const submitDiary = async () => { if (!diaryText.trim() || submitting) return; setSubmitting(true); try { const r = await fetch(`${API}/api/diaries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author: 'her', content: diaryText.trim() }) }); const e = await r.json(); setDiaries(p => [e, ...p]); setDiaryText(''); setShowWrite(false) } catch {}; setSubmitting(false) }
@@ -1364,10 +1368,10 @@ function TodayPage() {
         <div><div className="today-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div><h1 className="today-greeting">{greeting}, 桦桦</h1></div>
       </div>
 
-      <div className="whisper-card-v2">
+      {todayWhisper && <div className="whisper-card-v2">
         <div className="whisper-text-v2">{todayWhisper}</div>
         <div className="whisper-footer">Today's Whisper {I.chevron}</div>
-      </div>
+      </div>}
 
       <div className="us-card">
         <div className="us-label">Us</div>
