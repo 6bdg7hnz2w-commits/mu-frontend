@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 
 const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
@@ -1409,11 +1409,13 @@ function TodayPage() {
   const fmtDate = (s) => { const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()}` }
   const fmtTime = (s) => { const d = new Date(s); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 
+  // 日记属于哪一天：沐写的日记有 diary_date（写的是前一天，但写入时间是凌晨），桦桦手写的没有，就用创建时间的日期
+  const diaryDay = (d) => { if (d.diary_date) return d.diary_date; const dt = new Date(d.created_at); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}` }
   let filtered = diaries
   if (filter !== 'all') filtered = filtered.filter(d => d.author === filter)
-  if (showDatePicker && diaryDateFilter) filtered = filtered.filter(d => { const dd = new Date(d.created_at); return `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}-${String(dd.getDate()).padStart(2, '0')}` === diaryDateFilter })
+  if (showDatePicker && diaryDateFilter) filtered = filtered.filter(d => diaryDay(d) === diaryDateFilter)
 
-  const groupByDate = (entries) => { const g = {}; entries.forEach(d => { const dt = new Date(d.created_at); const k = `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`; if (!g[k]) g[k] = { date: dt, entries: [] }; g[k].entries.push(d) }); return Object.values(g).sort((a, b) => b.date - a.date) }
+  const groupByDate = (entries) => { const g = {}; entries.forEach(d => { const k = diaryDay(d); const dt = new Date(`${k}T00:00:00`); if (!g[k]) g[k] = { date: dt, entries: [] }; g[k].entries.push(d) }); return Object.values(g).sort((a, b) => b.date - a.date) }
   const diaryGroups = groupByDate(filtered)
 
   const ringMax = topCountdown?.isMonthly ? 31 : Math.min(topCountdown?.daysLeft + 10, 60)
@@ -1522,7 +1524,7 @@ function TodayPage() {
           {filtered.length === 0 && <div className="empty-state">No diary entries yet</div>}
           {filtered.map(d => (
             <div key={d.id} className={`diary-card-item ${d.author}`} onContextMenu={e => handleLongPress(e, d)} onTouchStart={() => { longPressTimer.current = setTimeout(() => setContextMenu({ id: d.id, diary: d }), 500) }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onTouchMove={() => clearTimeout(longPressTimer.current)}>
-              <div className="diary-card-meta"><span className="diary-card-date">{fmtDate(d.created_at)}</span><span className="diary-card-time">{fmtTime(d.created_at)}</span></div>
+              <div className="diary-card-meta"><span className="diary-card-date">{fmtDate(`${diaryDay(d)}T00:00:00`)}</span><span className="diary-card-time">{fmtTime(d.created_at)}</span></div>
               <div className="diary-card-content">{d.content.length > 80 ? d.content.slice(0, 80) + '...' : d.content}</div>
               {contextMenu && contextMenu.id === d.id && <div className="context-menu" onClick={e => e.stopPropagation()}>{d.author === 'her' && <button onClick={() => startEdit(d)}>Edit</button>}<button className="danger" onClick={() => deleteDiary(d.id)}>Delete</button></div>}
             </div>
@@ -2465,14 +2467,24 @@ function setCcPasscodeStorage(code) {
 function getCcSent() {
   try { const v = JSON.parse(localStorage.getItem('cc_sent') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
 }
-// 图片只存服务器上的 path（{ path }），不存图片本身：刷新后按 path 再向后端取回缩略图；
-// 还在上传、没有 path 的图不存（localUrl 是临时的 blob 地址，刷新后就失效了）
-function saveCcSent(list) {
-  const slim = list
-    .map(m => m.images ? { ...m, images: m.images.filter(i => i.path).map(i => ({ path: i.path })) } : m)
-    .filter(m => m.text || m.images?.length)
-  try { localStorage.setItem('cc_sent', JSON.stringify(slim.slice(-50))) } catch {}
+// 聊天记录现在存在 VPS（bridge 的 inbox/outbox），前端只在内存里留"发送中/发送失败"的临时消息。
+// 旧版把发送记录存在 localStorage 的 cc_sent 里，首次打开时一次性迁到 VPS（见 migrateLegacySent）
+async function migrateLegacySent(passcode) {
+  try { if (localStorage.getItem('cc_migrated')) return } catch { return }
+  const legacy = getCcSent()
+    .filter(m => m.role === 'user' && !m.failed && m.time)
+    .map(m => ({ time: m.time, text: m.text || '', images: (m.images || []).map(i => i.path).filter(Boolean) }))
+  if (legacy.length) {
+    const res = await fetch(`${API}/api/cc/history/import`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify({ messages: legacy }) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  }
+  try { localStorage.setItem('cc_migrated', '1'); localStorage.removeItem('cc_sent') } catch {}
 }
+// 服务器上的一条记录 → 页面上的消息
+function ccFromServer(m) {
+  return { key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}) }
+}
+const CC_PAGE = 30
 const CC_MAX_IMAGES = 4
 // 带口令取回 bridge 上的图（<img> 带不了 Authorization），blob 地址按 path 缓存在内存里
 const ccImageCache = new Map()
@@ -2519,8 +2531,10 @@ function CCChatPage({ onBack }) {
   const [passcode, setPasscode] = useState(getCcPasscode)
   const [passcodeInput, setPasscodeInput] = useState('')
   const [authError, setAuthError] = useState(false)
-  const [replies, setReplies] = useState([])
-  const [sent, setSent] = useState(getCcSent)
+  const [history, setHistory] = useState([]) // 服务器上的记录（双方），按时间
+  const [temp, setTemp] = useState([]) // 发送中/发送失败的本地消息
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [status, setStatus] = useState('connecting')
   const [waiting, setWaiting] = useState(false)
   const [input, setInput] = useState('')
@@ -2528,7 +2542,9 @@ function CCChatPage({ onBack }) {
   const [lightboxImage, setLightboxImage] = useState(null)
   const photoInputRef = useRef(null)
   const messagesEndRef = useRef(null)
-  const seenRef = useRef(new Set())
+  const listRef = useRef(null)
+  const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，保持原位置
+  const prevHeightRef = useRef(0)
   const swipe = useSwipeBack(onBack)
   const voice = useVoicePlayer()
   const { fetchDurationEstimate } = voice
@@ -2536,7 +2552,27 @@ function CCChatPage({ onBack }) {
 
   const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
 
-  // 用 fetch 读 SSE（EventSource 不能带 Authorization 头），断线后自动重连
+  // 按 id 合并进历史（SSE 推来的和历史接口拉到的可能重复）
+  const mergeHistory = useCallback((incoming, mode) => {
+    scrollModeRef.current = mode
+    setHistory(prev => {
+      const byKey = new Map(prev.map(m => [m.key, m]))
+      incoming.forEach(m => byKey.set(m.key, m))
+      return [...byKey.values()].sort((a, b) => new Date(a.time) - new Date(b.time))
+    })
+    incoming.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
+  }, [fetchDurationEstimate])
+
+  const fetchHistory = useCallback(async (before) => {
+    const qs = new URLSearchParams({ limit: String(CC_PAGE) })
+    if (before) qs.set('before', before)
+    const res = await fetch(`${API}/api/cc/history?${qs}`, { headers: { Authorization: `Bearer ${passcode}` } })
+    if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  }, [passcode])
+
+  // 用 fetch 读 SSE（EventSource 不能带 Authorization 头），断线后自动重连。SSE 只推新消息，旧的走 /history
   useEffect(() => {
     if (!passcode) return
     const controller = new AbortController()
@@ -2549,13 +2585,9 @@ function CCChatPage({ onBack }) {
       if (line.startsWith('data:')) line = line.slice(5).trim()
       let ev
       try { ev = JSON.parse(line) } catch { return }
-      if (!ev || typeof ev.text !== 'string') return
-      const key = `${ev.time}|${ev.text}`
-      if (seenRef.current.has(key)) return
-      seenRef.current.add(key)
-      setReplies(prev => [...prev, { key, role: 'assistant', text: ev.text, time: ev.time }])
-      estimateVoiceDurations(key, ev.text, fetchDurationEstimate)
-      setWaiting(false)
+      if (!ev || !ev.id || typeof ev.text !== 'string') return
+      mergeHistory([ccFromServer(ev)], 'bottom')
+      if (ev.role !== 'user') setWaiting(false)
     }
 
     const connect = async () => {
@@ -2586,16 +2618,48 @@ function CCChatPage({ onBack }) {
 
     connect()
     return () => { controller.abort(); clearTimeout(retryTimer) }
-  }, [passcode, fetchDurationEstimate])
+  }, [passcode, mergeHistory])
+
+  // 打开会话：先把旧的本地发送记录迁到 VPS（只做一次），再拉最近 30 条
+  useEffect(() => {
+    if (!passcode) return
+    let alive = true
+    ;(async () => {
+      try { await migrateLegacySent(passcode) } catch {}
+      try {
+        const data = await fetchHistory()
+        if (!alive) return
+        mergeHistory((data.messages || []).map(ccFromServer), 'bottom')
+        setHasMore(!!data.has_more)
+      } catch {}
+    })()
+    return () => { alive = false }
+  }, [passcode, fetchHistory, mergeHistory])
+
+  // 往上滑到顶加载更早的 30 条，保持当前位置不跳
+  const loadOlder = async () => {
+    if (loadingMore || !hasMore || !history.length) return
+    setLoadingMore(true)
+    prevHeightRef.current = listRef.current?.scrollHeight || 0
+    try {
+      const data = await fetchHistory(history[0].time)
+      mergeHistory((data.messages || []).map(ccFromServer), 'keep')
+      setHasMore(!!data.has_more)
+    } catch {}
+    setLoadingMore(false)
+  }
 
   const messages = useMemo(
-    () => [...sent, ...replies].sort((a, b) => new Date(a.time) - new Date(b.time)),
-    [sent, replies]
+    () => [...history, ...temp].sort((a, b) => new Date(a.time) - new Date(b.time)),
+    [history, temp]
   )
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, waiting])
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
+    else messagesEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, waiting])
   useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
-
-  const updateSent = (fn) => setSent(prev => { const next = fn(prev); saveCcSent(next.filter(m => !m.failed)); return next })
 
   const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []).slice(0, CC_MAX_IMAGES - pending.length)
@@ -2620,20 +2684,25 @@ function CCChatPage({ onBack }) {
     const imgs = pending
     if (!text && !imgs.length) return
     const msg = { key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString(), ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}) }
-    updateSent(prev => [...prev, msg])
+    scrollModeRef.current = 'bottom'
+    setTemp(prev => [...prev, msg])
     setInput('')
     setPending([])
     setWaiting(true)
     try {
       const paths = await Promise.all(imgs.map(p => uploadCcImage(p.blob, passcode)))
-      if (paths.length) updateSent(prev => prev.map(m => m.key === msg.key ? { ...m, images: m.images.map((im, i) => ({ ...im, path: paths[i] })) } : m))
+      paths.forEach((p, i) => ccImageCache.set(p, imgs[i].previewUrl)) // 刚发的图直接用本地预览，不用再向服务器取
       const res = await fetch(`${API}/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify(paths.length ? { text, images: paths } : { text }) })
-      if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
+      if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json().catch(() => ({}))
+      // 发送成功：临时消息换成服务器记录（SSE 可能已经先推来了，按 id 合并不会重复）
+      if (data.id) mergeHistory([{ key: data.id, role: 'user', text, time: data.time || msg.time, ...(paths.length ? { images: paths.map(path => ({ path })) } : {}) }], 'bottom')
+      setTemp(prev => prev.filter(m => m.key !== msg.key))
     } catch (err) {
       if (err.message === 'unauthorized') lockOut()
       setWaiting(false)
-      updateSent(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
+      setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
     }
   }
 
@@ -2652,7 +2721,8 @@ function CCChatPage({ onBack }) {
         </div>
       </div>
 
-      <div className="messages">
+      <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
+        {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
         {messages.map(m => (
           <div key={m.key} className={`msg ${m.role}`}>
