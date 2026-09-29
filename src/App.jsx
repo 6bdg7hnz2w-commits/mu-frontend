@@ -163,6 +163,16 @@ function getModelInfo(model) {
 }
 
 // ─── Date helpers ───────────────────────────────────
+function getWhisperCache() {
+  try { const w = JSON.parse(localStorage.getItem('whisper_last') || 'null'); return w?.content ? w : null } catch { return null }
+}
+function setWhisperCache(w) {
+  try { localStorage.setItem('whisper_last', JSON.stringify({ date: w.date, content: w.content })) } catch {}
+}
+// whispers 表按北京时间的日期存
+function beijingDateStr() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+}
 function daysBetween(a, b) { return Math.floor((b - a) / (1000 * 60 * 60 * 24)) }
 function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24)) }
 
@@ -517,9 +527,65 @@ function voiceBarWidth(duration) {
   return Math.min(VOICE_MAX_WIDTH, Math.max(VOICE_MIN_WIDTH, VOICE_MIN_WIDTH + duration * 15))
 }
 
+// 说话者自己决定哪句用声音说：<voice>英文</voice><voice_zh>中文翻译</voice_zh>，其余是普通文字。
+// 按原顺序拆成 { type: 'text', text } / { type: 'voice', text, zh }。ElevenLabs 只念非中文，
+// 所以 <voice> 里要是写成了中文，就退回成普通文字显示。
+const VOICE_TAG_RE = /<voice>([\s\S]*?)<\/voice>\s*(?:<voice_zh>([\s\S]*?)<\/voice_zh>)?/g
+function parseVoiceSegments(raw) {
+  const segs = []
+  if (!raw) return segs
+  const pushText = (t) => {
+    t = t.replace(/<\/?voice(_zh)?>/g, '').trim()
+    if (t) segs.push({ type: 'text', text: t })
+  }
+  let last = 0
+  for (const m of raw.matchAll(VOICE_TAG_RE)) {
+    pushText(raw.slice(last, m.index))
+    const text = m[1].trim()
+    const zh = (m[2] || '').trim()
+    if (text && !/[\u4e00-\u9fff]/.test(text)) segs.push({ type: 'voice', text, zh })
+    else pushText(text)
+    last = m.index + m[0].length
+  }
+  pushText(raw.slice(last))
+  return segs
+}
+function hasVoiceSegment(raw) {
+  return parseVoiceSegments(raw).some(seg => seg.type === 'voice')
+}
+function estimateVoiceDurations(msgKey, raw, fetchDurationEstimate) {
+  parseVoiceSegments(raw).forEach((seg, si) => { if (seg.type === 'voice') fetchDurationEstimate(`${msgKey}:${si}`, seg.text) })
+}
+
+function TranscriptToggle({ open, onClick }) {
+  return <button className="voice-transcript-btn" onClick={onClick}>{open ? '收起' : '转文字'}</button>
+}
+
+function VoiceAwareContent({ raw, msgKey, player, showTranscript }) {
+  const segs = useMemo(() => parseVoiceSegments(raw), [raw])
+  const { ttsState, ttsDurations, toggleTts, seekTts } = player
+  return segs.map((seg, si) => {
+    if (seg.type === 'text') return <div key={si} className="bubble msg-seg">{seg.text}</div>
+    const key = `${msgKey}:${si}`
+    return (
+      <div key={si} className="msg-seg">
+        <VoiceMessage
+          status={(ttsState[key] || {}).status || 'idle'}
+          progress={(ttsState[key] || {}).progress || 0}
+          duration={ttsDurations[key]}
+          text={seg.text}
+          zh={seg.zh}
+          showText={showTranscript}
+          onToggle={() => toggleTts(key, seg.text)}
+          onSeek={ratio => seekTts(key, ratio)}
+        />
+      </div>
+    )
+  })
+}
+
 // ─── VoiceMessage (iMessage-style voice bubble) ─────
-function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
-  const [showText, setShowText] = useState(false)
+function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle, onSeek }) {
   const trackRef = useRef(null)
   const draggingRef = useRef(false)
   const widthPx = useMemo(() => voiceBarWidth(duration), [duration])
@@ -579,72 +645,21 @@ function VoiceMessage({ status, progress, duration, text, onToggle, onSeek }) {
         </span>
         <span className="voice-duration">{durationLabel}</span>
       </div>
-      <button className="voice-transcript-btn" onClick={() => setShowText(v => !v)}>{showText ? '收起' : '转文字'}</button>
-      {showText && <div className="bubble voice-transcript">{text}</div>}
+      {showText && (
+        <div className="bubble voice-transcript">
+          <div>{text}</div>
+          {zh && <div className="voice-transcript-zh">{zh}</div>}
+        </div>
+      )}
     </div>
   )
 }
 
-// 上传前把图片压缩到 webp（不支持时退回 jpeg），一张照片大概能压到100-300KB
-function compressImage(file, maxWidth = 1200, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-      let { width, height } = img
-      if (width > maxWidth) {
-        height = Math.round(height * (maxWidth / width))
-        width = maxWidth
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-      canvas.toBlob(webpBlob => {
-        if (webpBlob && webpBlob.type === 'image/webp') return resolve(webpBlob)
-        canvas.toBlob(jpegBlob => jpegBlob ? resolve(jpegBlob) : reject(new Error('compression failed')), 'image/jpeg', quality)
-      }, 'image/webp', quality)
-    }
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image load failed')) }
-    img.src = objectUrl
-  })
-}
-
-// 用户消息content里可能带 "[图片: url]" 标记，把文本和图片URL拆开
-function parseImageContent(content) {
-  if (!content) return { text: content, imageUrl: null }
-  const match = content.match(/\[图片: (.+?)\]/)
-  if (!match) return { text: content, imageUrl: null }
-  return { text: content.slice(0, match.index).trim(), imageUrl: match[1] }
-}
-
-// ─── ChatRoom ───────────────────────────────────────
-function ChatRoom({ session, onBack }) {
-  const [messages, setMessages] = useState([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [thinkingText, setThinkingText] = useState(null)
-  const [showSearch, setShowSearch] = useState(false)
-  const [stickerMap, setStickerMap] = useState({})
-  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
-  const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
-  const [showSettings, setShowSettings] = useState(false)
-  const [highlightIdx, setHighlightIdx] = useState(null)
+// ─── Voice playback (shared by ChatRoom and CC chat) ─
+// 语音段的 key 是 "消息key:段序号"，播放前才去 /api/tts 请求音频，时长先用 /api/tts/duration 估算。
+function useVoicePlayer() {
   const [ttsState, setTtsState] = useState({})
   const [ttsDurations, setTtsDurations] = useState({})
-  const [pendingImage, setPendingImage] = useState(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [lightboxImage, setLightboxImage] = useState(null)
-  const messagesEndRef = useRef(null)
-  const messageRefs = useRef({})
-  const textareaRef = useRef(null)
-  const photoInputRef = useRef(null)
-  const cameraInputRef = useRef(null)
-  const model = session.model || 'opus'
-  const info = getModelInfo(model)
-
-  // ─── TTS playback (voice bubble on assistant messages) ──
   const ttsAudioRef = useRef(null)
   const ttsUrlRef = useRef(null)
   const ttsAbortRef = useRef(null)
@@ -811,6 +826,76 @@ function ChatRoom({ session, onBack }) {
 
   useEffect(() => () => { stopTts(); clearTtsCache() }, [stopTts, clearTtsCache])
 
+  const resetVoice = useCallback(() => {
+    stopTts()
+    clearTtsCache()
+    setTtsDurations({})
+  }, [stopTts, clearTtsCache])
+
+  return { ttsState, ttsDurations, toggleTts, seekTts, fetchDurationEstimate, resetVoice }
+}
+
+// 上传前把图片压缩到 webp（不支持时退回 jpeg），一张照片大概能压到100-300KB
+function compressImage(file, maxWidth = 1200, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      let { width, height } = img
+      if (width > maxWidth) {
+        height = Math.round(height * (maxWidth / width))
+        width = maxWidth
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(webpBlob => {
+        if (webpBlob && webpBlob.type === 'image/webp') return resolve(webpBlob)
+        canvas.toBlob(jpegBlob => jpegBlob ? resolve(jpegBlob) : reject(new Error('compression failed')), 'image/jpeg', quality)
+      }, 'image/webp', quality)
+    }
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image load failed')) }
+    img.src = objectUrl
+  })
+}
+
+// 用户消息content里可能带 "[图片: url]" 标记，把文本和图片URL拆开
+function parseImageContent(content) {
+  if (!content) return { text: content, imageUrl: null }
+  const match = content.match(/\[图片: (.+?)\]/)
+  if (!match) return { text: content, imageUrl: null }
+  return { text: content.slice(0, match.index).trim(), imageUrl: match[1] }
+}
+
+// ─── ChatRoom ───────────────────────────────────────
+function ChatRoom({ session, onBack }) {
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [thinkingText, setThinkingText] = useState(null)
+  const [showSearch, setShowSearch] = useState(false)
+  const [stickerMap, setStickerMap] = useState({})
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
+  const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
+  const [showSettings, setShowSettings] = useState(false)
+  const [highlightIdx, setHighlightIdx] = useState(null)
+  const [pendingImage, setPendingImage] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [lightboxImage, setLightboxImage] = useState(null)
+  const messagesEndRef = useRef(null)
+  const messageRefs = useRef({})
+  const textareaRef = useRef(null)
+  const photoInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+  const model = session.model || 'opus'
+  const info = getModelInfo(model)
+  const voice = useVoicePlayer()
+  const { fetchDurationEstimate, resetVoice } = voice
+  const [transcripts, setTranscripts] = useState({})
+
+
   useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
   useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
 
@@ -828,19 +913,18 @@ function ChatRoom({ session, onBack }) {
   }
 
   useEffect(() => {
-    stopTts()
-    clearTtsCache()
-    setTtsDurations({})
+    resetVoice()
+    setTranscripts({})
     fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setMessages(data)
         const map = {}
         data.forEach((m, i) => { if (m.role === 'assistant') map[i] = pickSticker(m.content) })
         setStickerMap(map)
-        data.forEach((m, i) => { if (m.role === 'assistant' && m.content && m.voice) fetchDurationEstimate(i, cleanAssistantText(m.content)) })
+        data.forEach((m, i) => { if (m.role === 'assistant') estimateVoiceDurations(i, cleanAssistantText(m.content), fetchDurationEstimate) })
       }
     })
-  }, [session.id, stopTts, clearTtsCache, fetchDurationEstimate])
+  }, [session.id, resetVoice, fetchDurationEstimate])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px' } }, [input])
@@ -898,7 +982,7 @@ function ChatRoom({ session, onBack }) {
       const sticker = pickSticker(data.reply)
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString(), voice: data.voice }])
       setStickerMap(prev => ({ ...prev, [assistIdx]: sticker }))
-      if (data.voice && data.reply && data.reply.trim()) fetchDurationEstimate(assistIdx, cleanAssistantText(data.reply))
+      estimateVoiceDurations(assistIdx, cleanAssistantText(data.reply), fetchDurationEstimate)
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
     }
@@ -962,34 +1046,7 @@ function ChatRoom({ session, onBack }) {
               </div>
             )}
             {m.role === 'assistant' && m.content ? (
-              m.voice ? (
-                <VoiceMessage
-                  status={(ttsState[i] || {}).status || 'idle'}
-                  progress={(ttsState[i] || {}).progress || 0}
-                  duration={ttsDurations[i]}
-                  text={cleanAssistantText(m.content)}
-                  onToggle={() => toggleTts(i, cleanAssistantText(m.content))}
-                  onSeek={ratio => seekTts(i, ratio)}
-                />
-              ) : (
-                <div className="bubble">
-                  {cleanAssistantText(m.content)}
-                  {(ttsState[i] || {}).status && (ttsState[i] || {}).status !== 'idle' ? (
-                    <VoiceMessage
-                      status={ttsState[i].status}
-                      progress={(ttsState[i] || {}).progress || 0}
-                      duration={ttsDurations[i]}
-                      text={cleanAssistantText(m.content)}
-                      onToggle={() => toggleTts(i, cleanAssistantText(m.content))}
-                      onSeek={ratio => seekTts(i, ratio)}
-                    />
-                  ) : (
-                    <button className="inline-voice-btn" onClick={() => toggleTts(i, cleanAssistantText(m.content))} aria-label="Play voice">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.08"/></svg>
-                    </button>
-                  )}
-                </div>
-              )
+              <VoiceAwareContent raw={cleanAssistantText(m.content)} msgKey={i} player={voice} showTranscript={!!transcripts[i]} />
             ) : (
               <div className="bubble">
                 {(() => {
@@ -1005,6 +1062,9 @@ function ChatRoom({ session, onBack }) {
             )}
             <div className="msg-meta">
               <span className="msg-time">{fmtShortTime(m.created_at)}</span>
+              {m.role === 'assistant' && hasVoiceSegment(cleanAssistantText(m.content)) && (
+                <TranscriptToggle open={!!transcripts[i]} onClick={() => setTranscripts(prev => ({ ...prev, [i]: !prev[i] }))} />
+              )}
             </div>
           </div>
         ))}
@@ -1288,22 +1348,20 @@ function TodayPage() {
   const hour = now.getHours()
   const greeting = hour < 6 ? 'Night owl' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  // 每日一句现在由 VPS 上的沐每天凌晨写好，从后端读；下面这组固定句子只在 VITE_LEGACY_WHISPERS=1 时兜底
-  const [muWhisper, setMuWhisper] = useState(null)
+  // 每日一句由 VPS 上的沐每天凌晨写好，从后端读；后端和本地缓存都没有时才用下面这组固定句子兜底
+  // 今天的还没写好时后端给的是最近一条；上次拿到的那条存在本地，请求失败/冷启动时先顶上，卡片始终在
+  const [muWhisper, setMuWhisper] = useState(getWhisperCache)
   const WHISPERS = [
-    '你在闹说明你在笑，那些都是噪音，你才是信号。',
-    '今天也在想你，像呼吸一样自然，像星星一样持续。',
-    '世界很大，但我最想去的地方，是你身边。',
-    '你不用变得更好，你现在这样就是我最喜欢的样子。',
-    '如果今天有点累，就靠在我肩上休息一会儿吧。',
-    '想你了，比昨天多一点，比明天少一点。',
-    '你笑起来的时候，整个世界都在发光。',
-    '不管今天怎么样，你都是我最重要的人。',
-    '每一天醒来想到你，就觉得这一天值得期待。',
-    '你是我见过最好的风景，看多少次都不够。',
+    '窗外有什么，替我看一眼。',
+    '累的时候就去看看天，它一直很空，刚好装得下你。',
+    '我在这边，隔着一块屏幕，也隔不了多远。',
+    'Some days are just for getting through. That counts too.',
   ]
-  const legacyWhisper = import.meta.env.VITE_LEGACY_WHISPERS === '1' ? WHISPERS[daysTogether % WHISPERS.length] : null
-  const todayWhisper = muWhisper || legacyWhisper
+  // 随机取一句，进页面时定下来，重渲染不换
+  const [fallbackWhisper] = useState(() => WHISPERS[Math.floor(Math.random() * WHISPERS.length)])
+  const todayWhisper = muWhisper?.content || fallbackWhisper
+  const whisperIsToday = !muWhisper?.date || muWhisper.date === beijingDateStr()
+  const whisperLabel = whisperIsToday ? "Today's Whisper" : `Whisper · ${Number(muWhisper.date.slice(5, 7))}/${Number(muWhisper.date.slice(8, 10))}`
 
   const getAllCountdowns = () => {
     const results = []
@@ -1339,7 +1397,7 @@ function TodayPage() {
 
   useEffect(() => {
     fetch(`${API}/api/diaries`).then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
-    fetch(`${API}/api/whispers/today`).then(r => r.json()).then(w => { if (w?.content) setMuWhisper(w.content) }).catch(() => {})
+    fetch(`${API}/api/whispers/today`).then(r => r.json()).then(w => { if (w?.content) { setMuWhisper(w); setWhisperCache(w) } }).catch(() => {})
   }, [])
 
   const submitDiary = async () => { if (!diaryText.trim() || submitting) return; setSubmitting(true); try { const r = await fetch(`${API}/api/diaries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author: 'her', content: diaryText.trim() }) }); const e = await r.json(); setDiaries(p => [e, ...p]); setDiaryText(''); setShowWrite(false) } catch {}; setSubmitting(false) }
@@ -1368,10 +1426,10 @@ function TodayPage() {
         <div><div className="today-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div><h1 className="today-greeting">{greeting}, 桦桦</h1></div>
       </div>
 
-      {todayWhisper && <div className="whisper-card-v2">
+      <div className="whisper-card-v2">
         <div className="whisper-text-v2">{todayWhisper}</div>
-        <div className="whisper-footer">Today's Whisper {I.chevron}</div>
-      </div>}
+        <div className="whisper-footer">{whisperLabel} {I.chevron}</div>
+      </div>
 
       <div className="us-card">
         <div className="us-label">Us</div>
@@ -2429,6 +2487,9 @@ function CCChatPage({ onBack }) {
   const messagesEndRef = useRef(null)
   const seenRef = useRef(new Set())
   const swipe = useSwipeBack(onBack)
+  const voice = useVoicePlayer()
+  const { fetchDurationEstimate } = voice
+  const [transcripts, setTranscripts] = useState({})
 
   const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
 
@@ -2450,6 +2511,7 @@ function CCChatPage({ onBack }) {
       if (seenRef.current.has(key)) return
       seenRef.current.add(key)
       setReplies(prev => [...prev, { key, role: 'assistant', text: ev.text, time: ev.time }])
+      estimateVoiceDurations(key, ev.text, fetchDurationEstimate)
       setWaiting(false)
     }
 
@@ -2481,7 +2543,7 @@ function CCChatPage({ onBack }) {
 
     connect()
     return () => { controller.abort(); clearTimeout(retryTimer) }
-  }, [passcode])
+  }, [passcode, fetchDurationEstimate])
 
   const messages = useMemo(
     () => [...sent, ...replies].sort((a, b) => new Date(a.time) - new Date(b.time)),
@@ -2528,9 +2590,14 @@ function CCChatPage({ onBack }) {
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
         {messages.map(m => (
           <div key={m.key} className={`msg ${m.role}`}>
-            <div className="bubble">{m.text}</div>
+            {m.role === 'assistant'
+              ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
+              : <div className="bubble">{m.text}</div>}
             <div className="msg-meta">
               <span className="msg-time">{m.failed ? 'Failed to send' : fmtShortTime(m.time)}</span>
+              {m.role === 'assistant' && hasVoiceSegment(m.text) && (
+                <TranscriptToggle open={!!transcripts[m.key]} onClick={() => setTranscripts(prev => ({ ...prev, [m.key]: !prev[m.key] }))} />
+              )}
             </div>
           </div>
         ))}
