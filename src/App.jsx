@@ -2552,15 +2552,20 @@ function CCChatPage({ onBack }) {
 
   const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
 
-  // 按 id 合并进历史（SSE 推来的和历史接口拉到的可能重复）
+  // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
+  const knownRef = useRef(new Set())
   const mergeHistory = useCallback((incoming, mode) => {
+    const fresh = incoming.filter(m => !knownRef.current.has(m.key))
+    if (!fresh.length) return
+    fresh.forEach(m => knownRef.current.add(m.key))
     scrollModeRef.current = mode
     setHistory(prev => {
       const byKey = new Map(prev.map(m => [m.key, m]))
-      incoming.forEach(m => byKey.set(m.key, m))
+      fresh.forEach(m => byKey.set(m.key, m))
       return [...byKey.values()].sort((a, b) => new Date(a.time) - new Date(b.time))
     })
-    incoming.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
+    fresh.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
+    if (fresh.some(m => m.role === 'assistant')) setWaiting(false)
   }, [fetchDurationEstimate])
 
   const fetchHistory = useCallback(async (before) => {
@@ -2572,53 +2577,108 @@ function CCChatPage({ onBack }) {
     return res.json()
   }, [passcode])
 
-  // 用 fetch 读 SSE（EventSource 不能带 Authorization 头），断线后自动重连。SSE 只推新消息，旧的走 /history
+  // 补拉一次最近的历史（轮询兜底、回到前台、SSE 重连后都用它），按 id 去重
+  const pollOnce = useCallback(async () => {
+    try {
+      const data = await fetchHistory()
+      mergeHistory((data.messages || []).map(ccFromServer), 'bottom')
+    } catch {}
+  }, [fetchHistory, mergeHistory])
+  const pollOnceRef = useRef(pollOnce)
+  useEffect(() => { pollOnceRef.current = pollOnce }, [pollOnce])
+
+  // 用 fetch 读 SSE（EventSource 不能带 Authorization 头）。SSE 只推新消息，旧的走 /history。
+  // 手机锁屏/切后台时连接会悄悄死掉（读不到数据也不报错），所以：
+  // - 15 秒一次的心跳超过 40 秒没收到任何字节，就当连接已死，主动断开重连
+  // - 回到前台（visibilitychange）、网络恢复（online）时立刻重连并补拉一次历史
   useEffect(() => {
     if (!passcode) return
-    const controller = new AbortController()
+    let cancelled = false
     let retryTimer = null
-    let stopped = false
+    let attempt = null // 当前这次连接的 AbortController；被新连接顶替时旧的循环不再重试
+    let lastByte = Date.now()
 
     const handleLine = (line) => {
       line = line.trim()
-      if (!line || line.startsWith(':') || line.startsWith('event:') || line.startsWith('id:')) return
+      if (!line || line.startsWith(':') || line.startsWith('event:') || line.startsWith('id:') || line.startsWith('retry:')) return
       if (line.startsWith('data:')) line = line.slice(5).trim()
       let ev
       try { ev = JSON.parse(line) } catch { return }
       if (!ev || !ev.id || typeof ev.text !== 'string') return
       mergeHistory([ccFromServer(ev)], 'bottom')
-      if (ev.role !== 'user') setWaiting(false)
     }
 
     const connect = async () => {
+      if (cancelled) return
+      clearTimeout(retryTimer)
+      if (attempt) attempt.abort()
+      const ctl = new AbortController()
+      attempt = ctl
+      lastByte = Date.now()
       setStatus('connecting')
       try {
-        const res = await fetch(`${API}/api/cc/events`, { headers: { Authorization: `Bearer ${passcode}` }, signal: controller.signal })
-        if (res.status === 401) { stopped = true; lockOut(); return }
+        const res = await fetch(`${API}/api/cc/events`, { headers: { Authorization: `Bearer ${passcode}` }, signal: ctl.signal })
+        if (res.status === 401) { cancelled = true; lockOut(); return }
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+        lastByte = Date.now()
         setStatus('live')
+        pollOnceRef.current() // 每次连上都补拉一次：SSE 重连不回放，断线期间错过的消息只能从历史里补
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
         for (;;) {
           const { value, done } = await reader.read()
           if (done) break
+          lastByte = Date.now()
           buf += decoder.decode(value, { stream: true })
           const lines = buf.split('\n')
           buf = lines.pop()
           lines.forEach(handleLine)
         }
-      } catch {
-        if (controller.signal.aborted) return
-      }
-      if (stopped || controller.signal.aborted) return
+      } catch {}
+      if (cancelled || ctl !== attempt) return
       setStatus('offline')
       retryTimer = setTimeout(connect, 3000)
     }
 
+    const wake = () => { connect(); pollOnceRef.current() }
+    const onVisible = () => { if (document.visibilityState === 'visible') wake() }
+    const watchdog = setInterval(() => {
+      if (attempt && !attempt.signal.aborted && Date.now() - lastByte > 40000) attempt.abort()
+    }, 10000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', wake)
+    window.addEventListener('pageshow', onVisible)
+
     connect()
-    return () => { controller.abort(); clearTimeout(retryTimer) }
+    return () => {
+      cancelled = true
+      clearTimeout(retryTimer)
+      clearInterval(watchdog)
+      if (attempt) attempt.abort()
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', wake)
+      window.removeEventListener('pageshow', onVisible)
+    }
   }, [passcode, mergeHistory])
+
+  // SSE 没连上（连接中/断线）时每 5 秒轮询一次历史，连上后停止
+  useEffect(() => {
+    if (!passcode || status === 'live') return
+    const iv = setInterval(() => pollOnceRef.current(), 5000)
+    return () => clearInterval(iv)
+  }, [passcode, status])
+
+  // 发送后 60 秒内 SSE 还没送来回复，就算 SSE 显示连着也开始每 5 秒轮询，直到回复出现
+  useEffect(() => {
+    if (!passcode || !waiting) return
+    let iv = null
+    const t = setTimeout(() => {
+      pollOnceRef.current()
+      iv = setInterval(() => pollOnceRef.current(), 5000)
+    }, 60000)
+    return () => { clearTimeout(t); clearInterval(iv) }
+  }, [passcode, waiting])
 
   // 打开会话：先把旧的本地发送记录迁到 VPS（只做一次），再拉最近 30 条
   useEffect(() => {
