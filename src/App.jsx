@@ -2465,14 +2465,54 @@ function setCcPasscodeStorage(code) {
 function getCcSent() {
   try { const v = JSON.parse(localStorage.getItem('cc_sent') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
 }
+// 图片只存服务器上的 path（{ path }），不存图片本身：刷新后按 path 再向后端取回缩略图；
+// 还在上传、没有 path 的图不存（localUrl 是临时的 blob 地址，刷新后就失效了）
 function saveCcSent(list) {
-  try { localStorage.setItem('cc_sent', JSON.stringify(list.slice(-50))) } catch {}
+  const slim = list
+    .map(m => m.images ? { ...m, images: m.images.filter(i => i.path).map(i => ({ path: i.path })) } : m)
+    .filter(m => m.text || m.images?.length)
+  try { localStorage.setItem('cc_sent', JSON.stringify(slim.slice(-50))) } catch {}
+}
+const CC_MAX_IMAGES = 4
+// 带口令取回 bridge 上的图（<img> 带不了 Authorization），blob 地址按 path 缓存在内存里
+const ccImageCache = new Map()
+async function fetchCcImage(path, passcode) {
+  if (ccImageCache.has(path)) return ccImageCache.get(path)
+  const [date, file] = path.split('/').slice(-2)
+  const res = await fetch(`${API}/api/cc/uploads/${encodeURIComponent(date)}/${encodeURIComponent(file)}`, { headers: { Authorization: `Bearer ${passcode}` } })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const url = URL.createObjectURL(await res.blob())
+  ccImageCache.set(path, url)
+  return url
+}
+async function uploadCcImage(blob, passcode) {
+  const form = new FormData()
+  form.append('image', blob, blob.type === 'image/webp' ? 'image.webp' : 'image.jpg')
+  const res = await fetch(`${API}/api/cc/upload`, { method: 'POST', headers: { Authorization: `Bearer ${passcode}` }, body: form })
+  if (res.status === 401) throw new Error('unauthorized')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).path
+}
+
+// 聊天里自己发的图：刚发的用本地预览，刷新后的历史按 path 向后端取；bridge 只留 7 天，过期了显示占位
+function CcImage({ img, passcode, onOpen }) {
+  const [url, setUrl] = useState(img.localUrl || (img.path && ccImageCache.get(img.path)) || null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    if (url || !img.path) return
+    let alive = true
+    fetchCcImage(img.path, passcode).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
+    return () => { alive = false }
+  }, [img.path, passcode, url])
+  if (failed) return <div className="cc-thumb cc-thumb-gone">图片已过期</div>
+  if (!url) return <div className="cc-thumb cc-thumb-loading" />
+  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(url)} />
 }
 function getCcLast() {
   try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
 }
 function setCcLastStorage(m) {
-  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text, time: m.time })) } catch {}
+  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : ''), time: m.time })) } catch {}
 }
 
 function CCChatPage({ onBack }) {
@@ -2484,6 +2524,9 @@ function CCChatPage({ onBack }) {
   const [status, setStatus] = useState('connecting')
   const [waiting, setWaiting] = useState(false)
   const [input, setInput] = useState('')
+  const [pending, setPending] = useState([]) // 待发送的图：{ key, blob, previewUrl }
+  const [lightboxImage, setLightboxImage] = useState(null)
+  const photoInputRef = useRef(null)
   const messagesEndRef = useRef(null)
   const seenRef = useRef(new Set())
   const swipe = useSwipeBack(onBack)
@@ -2554,18 +2597,41 @@ function CCChatPage({ onBack }) {
 
   const updateSent = (fn) => setSent(prev => { const next = fn(prev); saveCcSent(next.filter(m => !m.failed)); return next })
 
+  const handleImageSelect = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, CC_MAX_IMAGES - pending.length)
+    e.target.value = ''
+    const added = []
+    for (const file of files) {
+      try {
+        const blob = await compressImage(file, 1200, 0.8)
+        added.push({ key: `img-${Date.now()}-${added.length}`, blob, previewUrl: URL.createObjectURL(blob) })
+      } catch {}
+    }
+    setPending(prev => [...prev, ...added].slice(0, CC_MAX_IMAGES))
+  }
+  const removePending = (key) => setPending(prev => {
+    const gone = prev.find(p => p.key === key)
+    if (gone) URL.revokeObjectURL(gone.previewUrl)
+    return prev.filter(p => p.key !== key)
+  })
+
   const sendMessage = async () => {
     const text = input.trim()
-    if (!text) return
-    const msg = { key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString() }
+    const imgs = pending
+    if (!text && !imgs.length) return
+    const msg = { key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString(), ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}) }
     updateSent(prev => [...prev, msg])
     setInput('')
+    setPending([])
     setWaiting(true)
     try {
-      const res = await fetch(`${API}/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify({ text }) })
+      const paths = await Promise.all(imgs.map(p => uploadCcImage(p.blob, passcode)))
+      if (paths.length) updateSent(prev => prev.map(m => m.key === msg.key ? { ...m, images: m.images.map((im, i) => ({ ...im, path: paths[i] })) } : m))
+      const res = await fetch(`${API}/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify(paths.length ? { text, images: paths } : { text }) })
       if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    } catch {
+    } catch (err) {
+      if (err.message === 'unauthorized') lockOut()
       setWaiting(false)
       updateSent(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
     }
@@ -2592,7 +2658,10 @@ function CCChatPage({ onBack }) {
           <div key={m.key} className={`msg ${m.role}`}>
             {m.role === 'assistant'
               ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
-              : <div className="bubble">{m.text}</div>}
+              : <>
+                  {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} passcode={passcode} onOpen={setLightboxImage} />)}</div>}
+                  {m.text && <div className="bubble">{m.text}</div>}
+                </>}
             <div className="msg-meta">
               <span className="msg-time">{m.failed ? 'Failed to send' : fmtShortTime(m.time)}</span>
               {m.role === 'assistant' && hasVoiceSegment(m.text) && (
@@ -2606,11 +2675,29 @@ function CCChatPage({ onBack }) {
       </div>
 
       <div className="composer">
+        {pending.length > 0 && (
+          <div className="cc-pending">
+            {pending.map(p => (
+              <div key={p.key} className="composer-image-preview">
+                <img src={p.previewUrl} alt="" />
+                <button onClick={() => removePending(p.key)} aria-label="Remove image">{I.close}</button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="composer-input-row">
+          <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || pending.length >= CC_MAX_IMAGES} aria-label="Add images">{I.photo}</button>
+          <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
-          <button className="send-btn" onClick={sendMessage} disabled={!passcode || !input.trim()}>{I.send}</button>
+          <button className="send-btn" onClick={sendMessage} disabled={!passcode || (!input.trim() && !pending.length)}>{I.send}</button>
         </div>
       </div>
+
+      {lightboxImage && (
+        <div className="image-lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <img src={lightboxImage} alt="" />
+        </div>
+      )}
 
       {!passcode && (
         <div className="modal-overlay">
