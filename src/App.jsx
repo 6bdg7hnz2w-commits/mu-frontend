@@ -755,8 +755,22 @@ function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle
   const movedRef = useRef(false)
   const startXRef = useRef(0)
   const widthPx = useMemo(() => voiceBarWidth(duration), [duration])
-  const dotCount = useMemo(() => Math.max(10, Math.min(32, Math.round(widthPx / 10))), [widthPx])
-  const dots = useMemo(() => Array.from({ length: dotCount }, () => 4 + Math.round(Math.random() * 10)), [dotCount])
+  // 波形点数按波形区实际宽度来排（每点 3px + 间隔 3px），正好铺满：
+  // 以前按"理想宽度"算点数，窄屏上语音条被 max-width 截短，右边的点被裁掉，进度就显得走得太快
+  const [trackWidth, setTrackWidth] = useState(0)
+  useLayoutEffect(() => {
+    const el = trackRef.current
+    if (!el) return
+    const measure = () => setTrackWidth(el.clientWidth)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const dotCount = useMemo(() => trackWidth ? Math.max(6, Math.floor((trackWidth + 3) / 6)) : Math.max(10, Math.min(32, Math.round(widthPx / 10))), [trackWidth, widthPx])
+  const dotHeights = useMemo(() => Array.from({ length: 64 }, () => 4 + Math.round(Math.random() * 10)), [])
+  const dots = useMemo(() => dotHeights.slice(0, Math.min(dotCount, 64)), [dotHeights, dotCount]) // 宽度变了也不重新洗高度，免得波形闪
 
   const playing = status === 'playing'
   const paused = status === 'paused'
