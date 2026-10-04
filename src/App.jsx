@@ -202,6 +202,7 @@ const I = {
   pause: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
   more: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
   play: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
+  copy: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>,
 }
 
 // ─── SwipeRow ───────────────────────────────────────
@@ -465,7 +466,7 @@ function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
           <div className="session-info">
             <div className="session-top"><span className="session-name">沐 (CC)</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
             <div className="session-sub-row"><span className="session-sublabel">Claude Code</span></div>
-            <div className="session-bottom"><span className="session-preview">{ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''}</span><span className="session-model-tag">CC</span></div>
+            <div className="session-bottom"><span className={`session-preview ${hasDraft('cc') ? 'draft' : ''}`}>{hasDraft('cc') ? getPreview('cc') : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''}</span><span className="session-model-tag">CC</span></div>
           </div>
         </div>
         {loading && <div className="loading-state"><span className="spinner" />Loading...</div>}
@@ -557,6 +558,169 @@ function estimateVoiceDurations(msgKey, raw, fetchDurationEstimate) {
   parseVoiceSegments(raw).forEach((seg, si) => { if (seg.type === 'voice') fetchDurationEstimate(`${msgKey}:${si}`, seg.text) })
 }
 
+// ─── Copy ───────────────────────────────────────────
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch { /* 旧浏览器/非 https：走下面的兜底 */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+    document.body.appendChild(ta)
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch { return false }
+}
+function CopyButton({ getText, className = 'copy-btn', label }) {
+  const [done, setDone] = useState(false)
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const onClick = async (e) => {
+    e.stopPropagation()
+    if (!(await copyText(getText()))) return
+    setDone(true)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setDone(false), 1500)
+  }
+  return <button className={className} onClick={onClick} aria-label="Copy">{done ? I.check : I.copy}{label && <span>{done ? 'Copied' : label}</span>}</button>
+}
+// 一条消息复制出去的文字：去掉 <voice> 标签，语音段留原文
+function messageCopyText(raw) {
+  return parseVoiceSegments(raw).map(seg => seg.text).join('\n\n')
+}
+
+// ─── Markdown（不引依赖，只做聊天里用得到的那部分）──
+// 强调只认 *，不认 _：颜文字里全是下划线。* 后面必须紧跟文字（字母/数字/汉字）才算强调，
+// 这样 (*´▽`*) 之类不会被吃掉星号。
+const MD_INLINE_RE = /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|\*(?=[\p{L}\p{N}])([^*\n]*?[^\s*])\*(?!\*)|~~(?=\S)([\s\S]*?\S)~~|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'）】，。]+)/gu
+function mdInline(text, kp) {
+  const out = []
+  let last = 0
+  let n = 0
+  for (const m of text.matchAll(MD_INLINE_RE)) {
+    if (m.index > last) out.push(text.slice(last, m.index))
+    const k = `${kp}.${n++}`
+    if (m[1]) out.push(<code key={k} className="md-code">{m[2]}</code>)
+    else if (m[3] != null) out.push(<strong key={k}>{mdInline(m[3], k)}</strong>)
+    else if (m[4] != null) out.push(/[A-Za-z0-9]/.test(text[m.index - 1] || '') ? m[0] : <em key={k}>{mdInline(m[4], k)}</em>) // 2*3*4 这种算式不当斜体
+    else if (m[5] != null) out.push(<del key={k}>{mdInline(m[5], k)}</del>)
+    else if (m[6] != null) out.push(<a key={k} href={m[7]} target="_blank" rel="noreferrer noopener">{mdInline(m[6], k)}</a>)
+    else out.push(<a key={k} href={m[8]} target="_blank" rel="noreferrer noopener">{m[8]}</a>)
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return out
+}
+const MD_FENCE_RE = /^\s*(`{3,}|~{3,})\s*([^\s`]*)[^`]*$/
+const MD_LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/
+const MD_TABLE_SEP_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/
+function mdCells(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+}
+function mdBlocks(src) {
+  const lines = (src || '').replace(/\r\n?/g, '\n').split('\n')
+  const blocks = []
+  let para = []
+  const flush = () => { if (para.length) { blocks.push({ t: 'p', text: para.join('\n') }); para = [] } }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const fence = line.match(MD_FENCE_RE)
+    if (fence) {
+      flush()
+      const ch = fence[1][0]
+      const body = []
+      i++
+      while (i < lines.length) {
+        const t = lines[i].trim()
+        if (t.length >= fence[1].length && t.split('').every(c => c === ch)) break
+        body.push(lines[i++])
+      }
+      blocks.push({ t: 'code', lang: fence[2], code: body.join('\n') })
+      continue
+    }
+    if (!line.trim()) { flush(); continue }
+    const h = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/)
+    if (h) { flush(); blocks.push({ t: 'h', level: h[1].length, text: h[2] }); continue }
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); blocks.push({ t: 'hr' }); continue }
+    if (/^>(\s|$)/.test(line)) {
+      flush()
+      const q = []
+      while (i < lines.length && /^>(\s|$)/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ''))
+      i--
+      blocks.push({ t: 'quote', text: q.join('\n') })
+      continue
+    }
+    if (line.includes('|') && i + 1 < lines.length && lines[i + 1].includes('-') && lines[i + 1].includes('|') && MD_TABLE_SEP_RE.test(lines[i + 1])) {
+      flush()
+      const head = mdCells(line)
+      const rows = []
+      i += 2
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) rows.push(mdCells(lines[i++]))
+      i--
+      blocks.push({ t: 'table', head, rows })
+      continue
+    }
+    const li = line.match(MD_LIST_RE)
+    if (li) {
+      flush()
+      const items = []
+      while (i < lines.length) {
+        const m = lines[i].match(MD_LIST_RE)
+        if (m) items.push({ depth: Math.min(4, Math.floor(m[1].replace(/\t/g, '  ').length / 2)), marker: /\d/.test(m[2]) ? m[2].replace(')', '.') : '•', text: m[3] })
+        else if (lines[i].trim() && /^\s{2,}/.test(lines[i]) && items.length) items[items.length - 1].text += '\n' + lines[i].trim()
+        else break
+        i++
+      }
+      i--
+      blocks.push({ t: 'list', items })
+      continue
+    }
+    para.push(line)
+  }
+  flush()
+  return blocks
+}
+function CodeBlock({ lang, code }) {
+  return (
+    <div className="md-pre">
+      <div className="md-pre-head"><span>{lang || 'code'}</span><CopyButton className="md-pre-copy" getText={() => code} label="Copy" /></div>
+      <pre><code>{code}</code></pre>
+    </div>
+  )
+}
+// 助手消息的文字气泡：按 Markdown 渲染；有代码块或表格时气泡放宽，免得太窄
+function MdBubble({ text, className = '' }) {
+  const blocks = useMemo(() => mdBlocks(text), [text])
+  const wide = blocks.some(b => b.t === 'code' || b.t === 'table')
+  return (
+    <div className={`bubble md ${wide ? 'wide' : ''} ${className}`}>
+      {blocks.map((b, i) => {
+        if (b.t === 'code') return <CodeBlock key={i} lang={b.lang} code={b.code} />
+        if (b.t === 'h') return <div key={i} className={`md-h md-h${Math.min(b.level, 3)}`}>{mdInline(b.text, i)}</div>
+        if (b.t === 'hr') return <hr key={i} className="md-hr" />
+        if (b.t === 'quote') return <div key={i} className="md-quote">{mdInline(b.text, i)}</div>
+        if (b.t === 'list') return (
+          <div key={i} className="md-list">
+            {b.items.map((it, j) => <div key={j} className="md-li" style={it.depth ? { paddingLeft: `${it.depth * 1.2}em` } : undefined}><span className="md-bullet">{it.marker}</span><span className="md-li-text">{mdInline(it.text, `${i}-${j}`)}</span></div>)}
+          </div>
+        )
+        if (b.t === 'table') return (
+          <div key={i} className="md-table-wrap">
+            <table className="md-table">
+              <thead><tr>{b.head.map((c, j) => <th key={j}>{mdInline(c, `${i}-h${j}`)}</th>)}</tr></thead>
+              <tbody>{b.rows.map((r, ri) => <tr key={ri}>{b.head.map((_, j) => <td key={j}>{mdInline(r[j] || '', `${i}-${ri}-${j}`)}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        )
+        return <div key={i} className="md-p">{mdInline(b.text, i)}</div>
+      })}
+    </div>
+  )
+}
+
 function TranscriptToggle({ open, onClick }) {
   return <button className="voice-transcript-btn" onClick={onClick}>{open ? '收起' : '转文字'}</button>
 }
@@ -565,7 +729,7 @@ function VoiceAwareContent({ raw, msgKey, player, showTranscript }) {
   const segs = useMemo(() => parseVoiceSegments(raw), [raw])
   const { ttsState, ttsDurations, toggleTts, seekTts } = player
   return segs.map((seg, si) => {
-    if (seg.type === 'text') return <div key={si} className="bubble msg-seg">{seg.text}</div>
+    if (seg.type === 'text') return <MdBubble key={si} className="msg-seg" text={seg.text} />
     const key = `${msgKey}:${si}`
     return (
       <div key={si} className="msg-seg">
@@ -588,6 +752,8 @@ function VoiceAwareContent({ raw, msgKey, player, showTranscript }) {
 function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle, onSeek }) {
   const trackRef = useRef(null)
   const draggingRef = useRef(false)
+  const movedRef = useRef(false)
+  const startXRef = useRef(0)
   const widthPx = useMemo(() => voiceBarWidth(duration), [duration])
   const dotCount = useMemo(() => Math.max(10, Math.min(32, Math.round(widthPx / 10))), [widthPx])
   const dots = useMemo(() => Array.from({ length: dotCount }, () => 4 + Math.round(Math.random() * 10)), [dotCount])
@@ -608,14 +774,20 @@ function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle
     if (!rect.width) return 0
     return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
   }
+  // 点语音条任意位置 = 播放/暂停；在波形上横向拖动才是调进度（拖过之后那次 click 不算点击）
   const handlePointerDown = (e) => {
+    movedRef.current = false
     if (!seekable) return
     draggingRef.current = true
-    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
-    onSeek(ratioFromEvent(e))
+    startXRef.current = e.clientX
   }
   const handlePointerMove = (e) => {
     if (!draggingRef.current) return
+    if (!movedRef.current) {
+      if (Math.abs(e.clientX - startXRef.current) < 8) return
+      movedRef.current = true
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+    }
     onSeek(ratioFromEvent(e))
   }
   const endDrag = (e) => {
@@ -627,13 +799,10 @@ function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle
   return (
     <div className="voice-msg">
       <div className={`voice-bar ${status}`} style={{ width: `${widthPx}px` }} onClick={onToggle} aria-label={playing ? 'Pause voice' : loading ? 'Loading voice' : 'Play voice'}>
-        <span className="voice-play-btn">
-          {loading ? <span className="spinner tiny light" /> : playing ? I.pause : I.play}
-        </span>
         <span
           ref={trackRef}
           className={`voice-wave ${seekable ? '' : 'disabled'}`}
-          onClick={e => e.stopPropagation()}
+          onClick={e => { if (movedRef.current) { movedRef.current = false; e.stopPropagation() } }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}
@@ -643,7 +812,7 @@ function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle
             <span key={di} className={`voice-dot ${di < activeCount ? 'active' : ''}`} style={{ height: `${h}px` }} />
           ))}
         </span>
-        <span className="voice-duration">{durationLabel}</span>
+        <span className="voice-duration">{loading ? <span className="spinner tiny light" /> : durationLabel}</span>
       </div>
       {showText && (
         <div className="bubble voice-transcript">
@@ -1062,6 +1231,7 @@ function ChatRoom({ session, onBack }) {
             )}
             <div className="msg-meta">
               <span className="msg-time">{fmtShortTime(m.created_at)}</span>
+              {(() => { const t = m.role === 'assistant' ? messageCopyText(cleanAssistantText(m.content)) : parseImageContent(m.content).text; return t ? <CopyButton getText={() => t} /> : null })()}
               {m.role === 'assistant' && hasVoiceSegment(cleanAssistantText(m.content)) && (
                 <TranscriptToggle open={!!transcripts[i]} onClick={() => setTranscripts(prev => ({ ...prev, [i]: !prev[i] }))} />
               )}
@@ -2537,10 +2707,11 @@ function CCChatPage({ onBack }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [status, setStatus] = useState('connecting')
   const [waiting, setWaiting] = useState(false)
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => getDraft(CC_SESSION.id)) // 没发出去的字留作草稿，下次进来还在
   const [pending, setPending] = useState([]) // 待发送的图：{ key, blob, previewUrl }
   const [lightboxImage, setLightboxImage] = useState(null)
   const photoInputRef = useRef(null)
+  const textareaRef = useRef(null)
   const messagesEndRef = useRef(null)
   const listRef = useRef(null)
   const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，保持原位置
@@ -2551,6 +2722,9 @@ function CCChatPage({ onBack }) {
   const [transcripts, setTranscripts] = useState({})
 
   const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
+
+  useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
+  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
   const knownRef = useRef(new Set())
@@ -2794,6 +2968,7 @@ function CCChatPage({ onBack }) {
                 </>}
             <div className="msg-meta">
               <span className="msg-time">{m.failed ? 'Failed to send' : fmtShortTime(m.time)}</span>
+              {m.text && <CopyButton getText={() => m.role === 'assistant' ? messageCopyText(m.text) : m.text} />}
               {m.role === 'assistant' && hasVoiceSegment(m.text) && (
                 <TranscriptToggle open={!!transcripts[m.key]} onClick={() => setTranscripts(prev => ({ ...prev, [m.key]: !prev[m.key] }))} />
               )}
@@ -2818,7 +2993,7 @@ function CCChatPage({ onBack }) {
         <div className="composer-input-row">
           <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || pending.length >= CC_MAX_IMAGES} aria-label="Add images">{I.photo}</button>
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
-          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
+          <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
           <button className="send-btn" onClick={sendMessage} disabled={!passcode || (!input.trim() && !pending.length)}>{I.send}</button>
         </div>
       </div>
