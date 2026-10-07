@@ -695,6 +695,11 @@ function CodeBlock({ lang, code }) {
 function MdBubble({ text, className = '' }) {
   const blocks = useMemo(() => mdBlocks(text), [text])
   const wide = blocks.some(b => b.t === 'code' || b.t === 'table')
+  // 纯聊天（全是普通段落）时，空行隔开的每一段各成一个气泡，像连着发了几条微信；
+  // 带代码、列表、表格、标题的"技术回复"不拆，保持一整块
+  if (blocks.length > 1 && blocks.every(b => b.t === 'p')) {
+    return blocks.map((b, i) => <div key={i} className={`bubble md ${className}`}><div className="md-p">{mdInline(b.text, i)}</div></div>)
+  }
   return (
     <div className={`bubble md ${wide ? 'wide' : ''} ${className}`}>
       {blocks.map((b, i) => {
