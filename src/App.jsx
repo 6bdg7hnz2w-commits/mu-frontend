@@ -81,6 +81,7 @@ function eventLastDay(e) {
   return last > first && shTimeOf(e.ends_at) === '00:00' ? addDaysStr(last, -1) : last
 }
 
+// 日程、todos、periods 共用：带沐聊天页存的 APP 口令；没口令直接报 locked，非 2xx 抛错
 async function eventsApi(method, path, body) {
   const passcode = getCcPasscode()
   if (!passcode) throw Object.assign(new Error('locked'), { status: 0 })
@@ -1585,8 +1586,10 @@ function CalendarPage() {
   const firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate()
 
   useEffect(() => {
-    fetch(`${API}/api/todos`).then(r => r.json()).then(d => { if (Array.isArray(d)) setTodos(d) }).catch(() => {})
-    fetch(`${API}/api/periods`).then(r => r.json()).then(d => { if (Array.isArray(d)) setPeriods(d) }).catch(() => {})
+    // todos 和 periods 也要口令，和日程一样走 eventsApi；没解锁就不请求
+    if (!getCcPasscode()) return
+    eventsApi('GET', '/api/todos').then(d => { if (Array.isArray(d)) setTodos(d) }).catch(() => {})
+    eventsApi('GET', '/api/periods').then(d => { if (Array.isArray(d)) setPeriods(d) }).catch(() => {})
   }, [])
 
   const mkDate = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -1604,11 +1607,12 @@ function CalendarPage() {
   const reloadEvents = () => setEventsReload(n => n + 1)
   const monthEvents = events.key === monthFrom ? events.list : []
   const scheduleEvents = monthEvents.filter(e => e.kind === 'event')
-  const addTodo = async () => { if (!newTodo.trim()) return; const sd = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10); try { const r = await fetch(`${API}/api/todos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ side: 'her', text: newTodo.trim(), due_time: sd }) }); const t = await r.json(); setTodos(p => [...p, t]); setNewTodo('') } catch {} }
-  const toggleTodo = async (id, done) => { try { await fetch(`${API}/api/todos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: !done }) }); setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t)) } catch {} }
-  const deleteSelectedTodos = async () => { for (const id of selectedTodos) await fetch(`${API}/api/todos/${id}`, { method: 'DELETE' }); setTodos(p => p.filter(t => !selectedTodos.has(t.id))); setSelectedTodos(new Set()); setEditMode(false) }
+  const addTodo = async () => { if (!newTodo.trim()) return; const sd = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10); try { const t = await eventsApi('POST', '/api/todos', { side: 'her', text: newTodo.trim(), due_time: sd }); setTodos(p => [...p, t]); setNewTodo('') } catch {} }
+  const toggleTodo = async (id, done) => { try { await eventsApi('PUT', `/api/todos/${id}`, { done: !done }); setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t)) } catch {} }
+  // 只把真删掉的从列表里拿掉（没口令/口令错时一条也不删）
+  const deleteSelectedTodos = async () => { const gone = new Set(); for (const id of selectedTodos) { try { await eventsApi('DELETE', `/api/todos/${id}`); gone.add(id) } catch {} } setTodos(p => p.filter(t => !gone.has(t.id))); setSelectedTodos(new Set()); setEditMode(false) }
   const toggleSelectTodo = (id) => { setSelectedTodos(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n }) }
-  const togglePeriod = async (ds) => { try { const r = await fetch(`${API}/api/periods`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: ds }) }); const d = await r.json(); if (d.action === 'added') setPeriods(p => [...p, { date: ds }]); else setPeriods(p => p.filter(x => x.date !== ds)) } catch {} }
+  const togglePeriod = async (ds) => { try { const d = await eventsApi('POST', '/api/periods', { date: ds }); if (d.action === 'added') setPeriods(p => [...p, { date: ds }]); else setPeriods(p => p.filter(x => x.date !== ds)) } catch {} }
 
   const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null) }
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null) }
@@ -1756,7 +1760,7 @@ function CalendarPage() {
         <div className="todo-list">
           {incompleteTodos.map(t => (<div key={t.id} className="todo-item" onClick={() => editMode ? toggleSelectTodo(t.id) : toggleTodo(t.id, t.done)}>{editMode ? <div className={`todo-select ${selectedTodos.has(t.id) ? 'selected' : ''}`} /> : <div className="todo-check" />}<span>{t.text}</span></div>))}
           {completedTodos.map(t => (<div key={t.id} className="todo-item done" onClick={() => editMode ? toggleSelectTodo(t.id) : toggleTodo(t.id, t.done)}>{editMode ? <div className={`todo-select ${selectedTodos.has(t.id) ? 'selected' : ''}`} /> : <div className="todo-check checked">{I.check}</div>}<span>{t.text}</span></div>))}
-          {incompleteTodos.length === 0 && completedTodos.length === 0 && <div className="empty-state-sm">No todos</div>}
+          {incompleteTodos.length === 0 && completedTodos.length === 0 && <div className="empty-state-sm">{eventsState === 'locked' ? '还没解锁：先在「沐」聊天页输入口令' : 'No todos'}</div>}
         </div>
         {!editMode && <div className="todo-input"><input value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTodo()} placeholder="Add a todo..." /><button className="icon-btn small" onClick={addTodo}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg></button></div>}
       </div>
