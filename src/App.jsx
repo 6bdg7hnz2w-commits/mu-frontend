@@ -47,15 +47,13 @@ async function mcpRequest(url, method, params) {
   return payload.result
 }
 
-// ─── Important dates (localStorage) ─────────────────
+// ─── Important dates (localStorage，旧数据) ─────────
+// 现在存在数据库 events 里（见下面的 ensureImportantMigrated）；这里只读，用来迁移和没解锁时兜底
 function getImportantDates() {
   try {
     const d = localStorage.getItem('important_dates')
     return d ? JSON.parse(d) : getDefaultDates()
   } catch { return getDefaultDates() }
-}
-function saveImportantDates(dates) {
-  try { localStorage.setItem('important_dates', JSON.stringify(dates)) } catch {}
 }
 function getDefaultDates() {
   return [
@@ -63,6 +61,97 @@ function getDefaultDates() {
     { id: 'd2', name: 'Anniversary', date: '2026-07-27', emoji: '💕', recurring: 'yearly' },
     { id: 'd3', name: 'First Day of School', date: '2026-08-30', emoji: '🎓', recurring: false },
   ]
+}
+
+// ─── Calendar events（/api/events，用沐聊天页存的口令鉴权）──
+// 时间一律按 Asia/Shanghai 理解和显示
+const SH_TZ = 'Asia/Shanghai'
+const pad2 = (n) => String(n).padStart(2, '0')
+const addDaysStr = (s, n) => new Date(Date.parse(`${s}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+const daysBetweenStr = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
+const shDateOf = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: SH_TZ }).format(new Date(iso))
+const shTimeOf = (iso) => new Intl.DateTimeFormat('en-GB', { timeZone: SH_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))
+function eventFirstDay(e) { return e.all_day ? e.start_date : shDateOf(e.starts_at) }
+function eventLastDay(e) {
+  if (e.all_day) return e.end_date || e.start_date
+  const first = shDateOf(e.starts_at)
+  if (!e.ends_at || Date.parse(e.ends_at) <= Date.parse(e.starts_at)) return first
+  const last = shDateOf(e.ends_at)
+  // 正好 0 点结束的不算占了下一天
+  return last > first && shTimeOf(e.ends_at) === '00:00' ? addDaysStr(last, -1) : last
+}
+
+async function eventsApi(method, path, body) {
+  const passcode = getCcPasscode()
+  if (!passcode) throw Object.assign(new Error('locked'), { status: 0 })
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${passcode}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw Object.assign(new Error(data?.error || `HTTP ${res.status}`), { status: res.status })
+  return data
+}
+function eventsErrorText(e) {
+  if (e?.message === 'locked') return '还没解锁：先在「沐」聊天页输入口令'
+  if (e?.status === 401) return '口令不对：去「沐」聊天页重新输入'
+  if (e?.status === 400 || e?.status === 403) return `没保存上：${e.message}`
+  return '没保存上，稍后再试'
+}
+
+// 数据库里 kind=important 的一条 → 旧的重要日期格式（日历的重要日期卡片和弹窗沿用它）
+// 重复的由后端展开，date 用系列原始日期（编辑时改的是整个系列），shownOn 是这次显示在哪天
+function importantFromEvent(e) {
+  return { id: e.series_id ?? e.id, name: e.title, emoji: e.emoji || '📌', date: e.series_start_date ?? eventFirstDay(e), shownOn: eventFirstDay(e), recurring: e.repeat === 'none' ? false : e.repeat }
+}
+
+// 重要日期搬家：浏览器里的 important_dates（没存过就是默认那三条，页面一直显示的就是它们），
+// 数据库里还没有的（同名同日期，或 external_id=legacy:<原 id> 已存在）上传一次；全部成功才记"已迁移"，原数据不删
+const IMPORTANT_MIGRATED_KEY = 'important_dates_migrated'
+let importantMigration = null
+function ensureImportantMigrated() {
+  try { if (localStorage.getItem(IMPORTANT_MIGRATED_KEY)) return Promise.resolve() } catch { return Promise.resolve() }
+  if (!getCcPasscode()) return Promise.resolve()
+  importantMigration ??= (async () => {
+    let uploaded = 0
+    for (const d of getImportantDates()) {
+      const name = typeof d?.name === 'string' ? d.name.trim() : ''
+      if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) continue
+      const sameDay = await eventsApi('GET', `/api/events?from=${d.date}&to=${d.date}`)
+      if (sameDay.some(e => e.kind === 'important' && e.title === name)) continue
+      try {
+        await eventsApi('POST', '/api/events', {
+          title: name, all_day: true, start_date: d.date, kind: 'important',
+          repeat: d.recurring === 'yearly' || d.recurring === 'monthly' ? d.recurring : 'none',
+          emoji: d.emoji || null, external_id: `legacy:${d.id}`,
+        })
+        uploaded++
+      } catch (e) { if (e.status !== 409) throw e } // 409：别的设备已经传过这条
+    }
+    try { localStorage.setItem(IMPORTANT_MIGRATED_KEY, JSON.stringify({ at: new Date().toISOString(), uploaded })) } catch {}
+  })().catch(() => { importantMigration = null }) // 失败了下次进页面再试
+  return importantMigration
+}
+
+// 首页倒计时：今天起 400 天内每个重要日期的下一次（重复的由后端展开），整理成旧的重要日期格式；结果缓存一份，打开首页先顶上
+const IMPORTANT_CACHE_KEY = 'important_upcoming_cache'
+function getUpcomingImportantCache() {
+  try { const v = JSON.parse(localStorage.getItem(IMPORTANT_CACHE_KEY)); return Array.isArray(v) ? v : null } catch { return null }
+}
+async function fetchUpcomingImportant() {
+  const today = beijingDateStr()
+  const list = await eventsApi('GET', `/api/events?from=${today}&to=${addDaysStr(today, 399)}`)
+  const next = new Map()
+  for (const e of list) {
+    if (e.kind !== 'important') continue
+    const id = e.series_id ?? e.id, day = eventFirstDay(e)
+    if (day < today) continue
+    if (!next.has(id) || day < next.get(id).date) next.set(id, { id, name: e.title, emoji: e.emoji || '📌', date: day, recurring: false })
+  }
+  const out = [...next.values()]
+  try { localStorage.setItem(IMPORTANT_CACHE_KEY, JSON.stringify(out)) } catch {}
+  return out
 }
 
 // ─── Period prediction ──────────────────────────────
@@ -286,7 +375,14 @@ function AddDateModal({ onClose, onSave }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [emoji, setEmoji] = useState('📌')
-  const save = () => { if (!name.trim() || !date) return; onSave({ id: 'u' + Date.now(), name: name.trim(), date, emoji, recurring: false }); onClose() }
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  // onSave 返回 Promise（存进数据库）；失败时弹窗不关，显示原因
+  const save = async () => {
+    if (!name.trim() || !date || busy) return
+    setBusy(true); setError('')
+    try { await onSave({ id: 'u' + Date.now(), name: name.trim(), date, emoji, recurring: false }); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
+  }
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={e => e.stopPropagation()}>
@@ -298,9 +394,10 @@ function AddDateModal({ onClose, onSave }) {
             <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
           ))}
         </div>
+        {error && <div className="event-modal-error">{error}</div>}
         <div className="modal-actions-row">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={!name.trim() || !date}>Save</button>
+          <button className="btn-primary" onClick={save} disabled={!name.trim() || !date || busy}>Save</button>
         </div>
       </div>
     </div>
@@ -312,7 +409,15 @@ function EditDateModal({ item, onClose, onSave, onDelete }) {
   const [name, setName] = useState(item.name)
   const [date, setDate] = useState(item.date)
   const [emoji, setEmoji] = useState(item.emoji || '📌')
-  const save = () => { if (!name.trim() || !date) return; onSave({ ...item, name: name.trim(), date, emoji }); onClose() }
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  // onSave/onDelete 返回 Promise（写数据库）；失败时弹窗不关，显示原因
+  const run = async (fn) => {
+    if (busy) return
+    setBusy(true); setError('')
+    try { await fn(); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
+  }
+  const save = () => { if (!name.trim() || !date) return; run(() => onSave({ ...item, name: name.trim(), date, emoji })) }
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={e => e.stopPropagation()}>
@@ -324,10 +429,101 @@ function EditDateModal({ item, onClose, onSave, onDelete }) {
             <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
           ))}
         </div>
+        {error && <div className="event-modal-error">{error}</div>}
         <div className="modal-actions-row">
-          <button className="btn-danger-text" onClick={() => { onDelete(item.id); onClose() }}>Delete</button>
+          <button className="btn-danger-text" onClick={() => run(() => onDelete(item.id))} disabled={busy}>Delete</button>
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={!name.trim() || !date}>Save</button>
+          <button className="btn-primary" onClick={save} disabled={!name.trim() || !date || busy}>Save</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EventModal：新建/编辑日程 ───────────────────────
+const hmToMin = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m }
+const minToHm = (n) => { const v = ((n % 1440) + 1440) % 1440; return `${pad2(Math.floor(v / 60))}:${pad2(v % 60)}` }
+function nextWholeHour() {
+  const h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: SH_TZ, hour: '2-digit', hourCycle: 'h23' }).format(new Date()))
+  return `${pad2((h + 1) % 24)}:00`
+}
+
+// event 为空是新建（日期默认 defaultDate）；source=phone 的只读
+function EventModal({ event, defaultDate, onClose, onSaved }) {
+  const readOnly = event?.source === 'phone'
+  const timed = event && !event.all_day
+  const initialStart = timed ? shTimeOf(event.starts_at) : nextWholeHour()
+  const [title, setTitle] = useState(event?.title || '')
+  const [allDay, setAllDay] = useState(event ? event.all_day : false)
+  const [date, setDate] = useState(event ? (timed ? shDateOf(event.starts_at) : event.series_start_date ?? event.start_date) : defaultDate)
+  const [start, setStart] = useState(initialStart)
+  const [end, setEnd] = useState(timed ? (event.ends_at ? shTimeOf(event.ends_at) : '') : minToHm(hmToMin(initialStart) + 60))
+  const [location, setLocation] = useState(event?.location || '')
+  const [notes, setNotes] = useState(event?.notes || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // 改开始时间，结束时间跟着平移
+  const changeStart = (v) => {
+    if (v && start && end) setEnd(minToHm(hmToMin(end) + hmToMin(v) - hmToMin(start)))
+    setStart(v)
+  }
+  const run = async (fn) => {
+    if (busy) return
+    setBusy(true); setError('')
+    try { await fn(); onSaved(); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
+  }
+  const save = () => {
+    if (!title.trim()) return
+    if (!date || (!allDay && !start)) { setError('日期和开始时间要填'); return }
+    const body = { title: title.trim(), all_day: allDay, location: location.trim() || null, notes: notes.trim() || null }
+    if (allDay) {
+      body.start_date = date
+      // 原来就是多天的全天日程，保持天数
+      const origStart = event?.series_start_date ?? event?.start_date, origEnd = event?.series_end_date ?? event?.end_date
+      body.end_date = event?.all_day && origEnd ? addDaysStr(date, daysBetweenStr(origStart, origEnd)) : null
+    } else {
+      body.starts_at = `${date}T${start}`
+      // 结束早于开始，当作跨到第二天（比如 23:00–01:00）
+      body.ends_at = end ? `${end < start ? addDaysStr(date, 1) : date}T${end}` : null
+    }
+    run(() => event ? eventsApi('PUT', `/api/events/${event.series_id ?? event.id}`, body) : eventsApi('POST', '/api/events', body))
+  }
+  const remove = () => run(() => eventsApi('DELETE', `/api/events/${event.series_id ?? event.id}`))
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card event-modal" onClick={e => e.stopPropagation()}>
+        <h3>{event ? '编辑日程' : '新日程'}</h3>
+        <input className="modal-input" placeholder="要做什么" value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} />
+        <div className="seg">
+          <button className={allDay ? 'on' : ''} onClick={() => setAllDay(true)} disabled={readOnly}>全天</button>
+          <button className={allDay ? '' : 'on'} onClick={() => setAllDay(false)} disabled={readOnly}>定时</button>
+        </div>
+        <input className="modal-input" type="date" value={date} onChange={e => setDate(e.target.value)} disabled={readOnly} />
+        {!allDay && (
+          <div className="event-time-row">
+            <input className="modal-input" type="time" value={start} onChange={e => changeStart(e.target.value)} disabled={readOnly} aria-label="开始时间" />
+            <span>–</span>
+            <input className="modal-input" type="time" value={end} onChange={e => setEnd(e.target.value)} disabled={readOnly} aria-label="结束时间" />
+          </div>
+        )}
+        <input className="modal-input" placeholder="地点（可选）" value={location} onChange={e => setLocation(e.target.value)} disabled={readOnly} />
+        <textarea className="modal-input" rows={3} placeholder="备注（可选）" value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} />
+        {error && <div className="event-modal-error">{error}</div>}
+        <div className="modal-actions-row">
+          {readOnly ? (
+            <>
+              <span className="event-readonly-note">来自手机日历，请在手机上修改</span>
+              <button className="text-btn muted" onClick={onClose}>关闭</button>
+            </>
+          ) : (
+            <>
+              {event && <button className="text-btn danger event-delete-btn" onClick={remove} disabled={busy}>删除</button>}
+              <button className="text-btn muted" onClick={onClose}>取消</button>
+              <button className="btn-accent" onClick={save} disabled={!title.trim() || busy}>保存</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1376,10 +1572,14 @@ function CalendarPage() {
   const [newTodo, setNewTodo] = useState('')
   const [editMode, setEditMode] = useState(false)
   const [selectedTodos, setSelectedTodos] = useState(new Set())
-  const [importantDates, setImportantDates] = useState(getImportantDates())
   const [showAddDate, setShowAddDate] = useState(false)
   const [editingDate, setEditingDate] = useState(null)
   const [showMonthPicker, setShowMonthPicker] = useState(false)
+  // 当前月份的日程（含重要日期），key 记是哪个月的，换月时旧数据不会画到新月份上
+  const [events, setEvents] = useState({ key: null, list: [] })
+  const [eventsState, setEventsState] = useState('loading') // loading | ok | locked | error
+  const [eventsReload, setEventsReload] = useState(0)
+  const [eventModal, setEventModal] = useState(null) // { event } 编辑；{ date } 新建
 
   const year = currentDate.getFullYear(), month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -1390,6 +1590,20 @@ function CalendarPage() {
   }, [])
 
   const mkDate = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const monthFrom = mkDate(1), monthTo = mkDate(daysInMonth)
+  useEffect(() => {
+    if (!getCcPasscode()) { setEventsState('locked'); return }
+    let alive = true
+    setEventsState(s => (s === 'ok' ? 'ok' : 'loading'))
+    ensureImportantMigrated()
+      .then(() => eventsApi('GET', `/api/events?from=${monthFrom}&to=${monthTo}`))
+      .then(list => { if (alive) { setEvents({ key: monthFrom, list }); setEventsState('ok') } })
+      .catch(e => { if (alive) setEventsState(e?.message === 'locked' ? 'locked' : 'error') })
+    return () => { alive = false }
+  }, [monthFrom, monthTo, eventsReload])
+  const reloadEvents = () => setEventsReload(n => n + 1)
+  const monthEvents = events.key === monthFrom ? events.list : []
+  const scheduleEvents = monthEvents.filter(e => e.kind === 'event')
   const addTodo = async () => { if (!newTodo.trim()) return; const sd = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10); try { const r = await fetch(`${API}/api/todos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ side: 'her', text: newTodo.trim(), due_time: sd }) }); const t = await r.json(); setTodos(p => [...p, t]); setNewTodo('') } catch {} }
   const toggleTodo = async (id, done) => { try { await fetch(`${API}/api/todos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: !done }) }); setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t)) } catch {} }
   const deleteSelectedTodos = async () => { for (const id of selectedTodos) await fetch(`${API}/api/todos/${id}`, { method: 'DELETE' }); setTodos(p => p.filter(t => !selectedTodos.has(t.id))); setSelectedTodos(new Set()); setEditMode(false) }
@@ -1403,9 +1617,10 @@ function CalendarPage() {
   const yearOptions = []; for (let y = today.getFullYear() - 10; y <= today.getFullYear() + 10; y++) yearOptions.push(y)
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-  const addImportantDate = (d) => { const nd = [...importantDates, d]; setImportantDates(nd); saveImportantDates(nd) }
-  const updateImportantDate = (updated) => { const nd = importantDates.map(d => d.id === updated.id ? updated : d); setImportantDates(nd); saveImportantDates(nd) }
-  const deleteImportantDate = (id) => { const nd = importantDates.filter(d => d.id !== id); setImportantDates(nd); saveImportantDates(nd) }
+  // 重要日期存在 events（kind=important）；改的是整个系列，repeat 不动
+  const addImportantDate = (d) => eventsApi('POST', '/api/events', { title: d.name, all_day: true, start_date: d.date, kind: 'important', repeat: 'none', emoji: d.emoji }).then(reloadEvents)
+  const updateImportantDate = (d) => eventsApi('PUT', `/api/events/${d.id}`, { title: d.name, emoji: d.emoji, start_date: d.date }).then(reloadEvents)
+  const deleteImportantDate = (id) => eventsApi('DELETE', `/api/events/${id}`).then(reloadEvents)
 
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
   const cells = []; for (let i = 0; i < firstDay; i++) cells.push(null); for (let d = 1; d <= daysInMonth; d++) cells.push(d)
@@ -1421,13 +1636,22 @@ function CalendarPage() {
 
   const importantByDay = {}
   const pushImportant = (day, idate) => { if (!importantByDay[day]) importantByDay[day] = []; importantByDay[day].push(idate) }
-  importantDates.forEach(idate => {
-    const [dy, dm, dday] = idate.date.split('-').map(Number)
-    let showDay = null
-    if (idate.recurring === 'yearly') { if (dm - 1 === month) showDay = dday }
-    else { if (dm - 1 === month && dy === year) showDay = dday }
-    if (showDay) pushImportant(showDay, idate)
-  })
+  if (eventsState === 'locked') {
+    // 没解锁时照旧显示浏览器里的重要日期（只读）
+    getImportantDates().forEach(idate => {
+      const [dy, dm, dday] = idate.date.split('-').map(Number)
+      let showDay = null
+      if (idate.recurring === 'yearly') { if (dm - 1 === month) showDay = dday }
+      else { if (dm - 1 === month && dy === year) showDay = dday }
+      if (showDay) pushImportant(showDay, { ...idate, derived: true })
+    })
+  } else {
+    monthEvents.filter(e => e.kind === 'important').forEach(e => {
+      const idate = importantFromEvent(e)
+      const [dy, dm, dday] = idate.shownOn.split('-').map(Number)
+      if (dy === year && dm - 1 === month) pushImportant(dday, idate)
+    })
+  }
   // Monthly + milestone-day anniversaries (same source as the Today page countdowns)
   pushImportant(START_DATE.getDate(), { id: `monthly_${year}_${month}`, name: 'Monthly Anniversary', emoji: '💗', derived: true })
   ;[50, 100, 200, 365, 500, 730, 1000].forEach(m => {
@@ -1438,11 +1662,24 @@ function CalendarPage() {
   })
   const isImportant = (d) => d && importantByDay[d] && importantByDay[d].length > 0
 
+  // 有日程的日子（多天的每天都算）
+  const eventDaySet = new Set()
+  scheduleEvents.forEach(e => {
+    const last = eventLastDay(e)
+    for (let d = eventFirstDay(e) < monthFrom ? monthFrom : eventFirstDay(e); d <= last && d <= monthTo; d = addDaysStr(d, 1)) eventDaySet.add(d)
+  })
+  const hasEvent = (d) => d && eventDaySet.has(mkDate(d))
+
   const selectedDateStr = selectedDay ? `${month + 1}/${selectedDay}${isToday(selectedDay) ? ' · Today' : ''}` : null
   const selDateStr = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10)
   const dayTodos = todos.filter(t => { if (!t.due_time) return selectedDay && isToday(selectedDay); return t.due_time.startsWith(selDateStr) })
   const incompleteTodos = dayTodos.filter(t => !t.done), completedTodos = dayTodos.filter(t => t.done)
   const selectedDayImportantDates = selectedDay && importantByDay[selectedDay] ? importantByDay[selectedDay] : []
+  // 选中那天的日程：全天的在前，其余按开始时间
+  const dayEvents = selectedDay
+    ? scheduleEvents.filter(e => eventFirstDay(e) <= selDateStr && eventLastDay(e) >= selDateStr)
+      .sort((a, b) => (a.all_day ? 0 : 1) - (b.all_day ? 0 : 1) || Date.parse(a.starts_at || 0) - Date.parse(b.starts_at || 0))
+    : []
 
   return (
     <div className="calendar-page">
@@ -1454,7 +1691,12 @@ function CalendarPage() {
           {cells.map((d, i) => (
             <div key={i} className={`cal-day ${d ? '' : 'empty'} ${isToday(d) ? 'today' : ''} ${selectedDay === d && !isToday(d) ? 'selected' : ''} ${isPeriod(d) ? 'period' : ''} ${isPredicted(d) && !isPeriod(d) ? 'predicted-period' : ''} ${hasTodo(d) && !isToday(d) ? 'has-todo' : ''}`} onClick={() => d && setSelectedDay(d)}>
               {d || ''}
-              {isImportant(d) && <div className="cal-important-dot" />}
+              {(isImportant(d) || hasEvent(d)) && (
+                <div className="cal-dots">
+                  {isImportant(d) && <span className="cal-dot important" />}
+                  {hasEvent(d) && <span className="cal-dot event" />}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1463,6 +1705,7 @@ function CalendarPage() {
           <div className="legend-item"><span className="legend-dot predicted-legend" />Predicted</div>
           <div className="legend-item"><span className="legend-dot todo-legend" />Todo</div>
           <div className="legend-item"><span className="legend-dot important-legend" />Important</div>
+          <div className="legend-item"><span className="legend-dot event-legend" />日程</div>
         </div>
       </div>
 
@@ -1475,6 +1718,34 @@ function CalendarPage() {
               <span className="important-day-name">{idate.name}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {selectedDay && (
+        <div className="card event-day-card">
+          <div className="event-card-head">
+            <div className="card-title">日程</div>
+            <button className="event-add-btn" onClick={() => setEventModal({ date: selDateStr })} aria-label="新日程">{I.plus}</button>
+          </div>
+          {eventsState === 'locked' ? <div className="event-empty">还没解锁：先在「沐」聊天页输入口令</div>
+            : eventsState === 'error' && !dayEvents.length ? <div className="event-empty">日程没加载出来，稍后再试</div>
+            : !dayEvents.length ? <div className="event-empty">{eventsState === 'loading' ? '加载中…' : '这天没有安排'}</div>
+            : dayEvents.map(e => (
+              <div key={e.id} className="event-row" onClick={() => setEventModal({ event: e })}>
+                <div className="event-time">
+                  {e.all_day ? '全天' : <><div>{shTimeOf(e.starts_at)}</div>{e.ends_at && <div className="event-time-end">{shTimeOf(e.ends_at)}</div>}</>}
+                </div>
+                <div className="event-bar" />
+                <div className="event-main">
+                  <div className="event-title-line">
+                    <span className="event-title">{e.title}</span>
+                    {e.source === 'phone' && <span className="event-tag">手机</span>}
+                    {e.source === 'mu' && <span className="event-tag">沐</span>}
+                  </div>
+                  {e.location && <div className="event-location">{e.location}</div>}
+                </div>
+              </div>
+            ))}
         </div>
       )}
 
@@ -1494,6 +1765,7 @@ function CalendarPage() {
 
       {showAddDate && <AddDateModal onClose={() => setShowAddDate(false)} onSave={addImportantDate} />}
       {editingDate && <EditDateModal item={editingDate} onClose={() => setEditingDate(null)} onSave={updateImportantDate} onDelete={deleteImportantDate} />}
+      {eventModal && <EventModal event={eventModal.event} defaultDate={eventModal.date} onClose={() => setEventModal(null)} onSaved={reloadEvents} />}
       {showMonthPicker && (
         <div className="modal-overlay" onClick={() => setShowMonthPicker(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
@@ -1528,8 +1800,15 @@ function TodayPage() {
   const [filter, setFilter] = useState('all')
   const [diaryDateFilter, setDiaryDateFilter] = useState(new Date().toISOString().slice(0, 10))
   const [showDatePicker, setShowDatePicker] = useState(false)
-  const [importantDates, setImportantDates] = useState(getImportantDates())
+  // 倒计时读数据库里的重要日期（每个的下一次）；先用上次的缓存，没有缓存（还没解锁/第一次）才用浏览器里的旧数据
+  const [importantDates, setImportantDates] = useState(() => getUpcomingImportantCache() ?? getImportantDates())
   const longPressTimer = useRef(null)
+  useEffect(() => {
+    if (!getCcPasscode()) return
+    let alive = true
+    ensureImportantMigrated().then(fetchUpcomingImportant).then(list => { if (alive) setImportantDates(list) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   const now = new Date()
   const daysTogether = daysBetween(START_DATE, now)
