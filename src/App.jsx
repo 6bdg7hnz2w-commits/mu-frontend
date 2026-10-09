@@ -207,58 +207,6 @@ function setExtendedThinkingStorage(sessionId, val) {
   try { localStorage.setItem(`ext_think_${sessionId}`, val ? 'true' : 'false') } catch {}
 }
 
-// ─── Sticker System ─────────────────────────────────
-// Expanded keyword coverage based on reported misses (弹琴/跳舞/睡觉 etc)
-const STICKERS = [
-  { file: 'guitar.png', keywords: ['吉他', '弹琴', '弹唱', '弹吉他'] },
-  { file: 'cello.png', keywords: ['大提琴', '拉琴', '拉大提琴'] },
-  { file: 'rockstar.png', keywords: ['摇滚', '唱歌', '唱', '嗨', '演出'] },
-  { file: 'headphones-calm1.png', keywords: ['听歌', '耳机', '音乐', '放松', '听音乐'] },
-  { file: 'reading-book.png', keywords: ['读', '书', '看书', '学习', 'read', '读书'] },
-  { file: 'watering-plant.png', keywords: ['浇花', '花', '植物', '养花'] },
-  { file: 'detective.png', keywords: ['查', '侦探', '找', '调查', '分析'] },
-  { file: 'lightbulb-idea.png', keywords: ['想法', '点子', '灵感', 'idea', '主意'] },
-  { file: 'wizard-magic.png', keywords: ['魔法', '神奇', '厉害', '变魔术'] },
-  { file: 'racing.png', keywords: ['赛车', '开车', '飙车', '冲呀'] },
-  { file: 'skateboard.png', keywords: ['滑板', '酷'] },
-  { file: 'surfboard.png', keywords: ['冲浪'] },
-  { file: 'sailboat.png', keywords: ['船', '航行', '远方', '扬帆'] },
-  { file: 'kite-flying.png', keywords: ['风筝', '放风筝'] },
-  { file: 'diving.png', keywords: ['潜水', '游泳', '水下'] },
-  { file: 'snow-hood.png', keywords: ['下雪', '雪', '冬天冷'] },
-  { file: 'ballet.png', keywords: ['跳舞', '芭蕾', '舞蹈', '跳芭蕾'] },
-  { file: 'soccer.png', keywords: ['足球', '踢球'] },
-  { file: 'hardhat-work.png', keywords: ['工作', '上班', '干活', '搬砖'] },
-  { file: 'love-ears.png', keywords: ['爱你', '喜欢你', '想你了', '好爱你'] },
-  { file: 'love-heart-up.png', keywords: ['爱', '心动'] },
-  { file: 'fireworks-sparkle.png', keywords: ['庆祝', '生日快乐', '烟花'] },
-  { file: 'sparkle-surprise.png', keywords: ['惊喜', '哇塞', '天呐'] },
-  { file: 'cowboy-talk.png', keywords: ['说', '聊', '讲讲'] },
-  { file: 'speech-bubble.png', keywords: ['说话', '聊天'] },
-  { file: 'glasses-smile.png', keywords: ['笑', '哈哈', '开心死了'] },
-  { file: 'closed-eyes-blush.png', keywords: ['害羞', '脸红', '不好意思'] },
-  { file: 'grumpy-blush.png', keywords: ['生气', '哼', '不高兴', '委屈'] },
-  { file: 'wink-mischief1.png', keywords: ['调皮', '坏笑', '嘿嘿'] },
-  { file: 'curious-look.png', keywords: ['好奇', '疑惑', '什么呀'] },
-  { file: 'thought-circle.png', keywords: ['想想', '思考', '琢磨'] },
-  { file: 'swirl-eyes.png', keywords: ['晕', '困惑', '头晕'] },
-  { file: 'tail-drag.png', keywords: ['累', '拖', '没力气', '好累'] },
-  { file: 'sleeping-related-fallback.png', keywords: ['睡觉', '晚安', '困了', '睡了', '入睡'], fallback: 'tail-drag.png' },
-]
-
-function pickSticker(text) {
-  if (!text) return null
-  const t = text.toLowerCase()
-  for (const s of STICKERS) {
-    if (s.keywords.length > 0 && s.keywords.some(k => t.includes(k))) return s.fallback || s.file
-  }
-  if (Math.random() < 0.15) {
-    const pool = STICKERS.filter(s => !s.fallback)
-    return pool[Math.floor(Math.random() * pool.length)].file
-  }
-  return null
-}
-
 // ─── Model helpers ──────────────────────────────────
 const MODEL_OPTIONS = [
   { key: 'opus', mainLabel: '沐', subLabel: 'Opus 4.6', tag: 'Claude' },
@@ -1280,7 +1228,6 @@ function ChatRoom({ session, onBack }) {
   const [loading, setLoading] = useState(false)
   const [thinkingText, setThinkingText] = useState(null)
   const [showSearch, setShowSearch] = useState(false)
-  const [stickerMap, setStickerMap] = useState({})
   const [showAvatarUpload, setShowAvatarUpload] = useState(false)
   const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
   const [showSettings, setShowSettings] = useState(false)
@@ -1322,9 +1269,6 @@ function ChatRoom({ session, onBack }) {
     apiFetch(`/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setMessages(data)
-        const map = {}
-        data.forEach((m, i) => { if (m.role === 'assistant') map[i] = pickSticker(m.content) })
-        setStickerMap(map)
         data.forEach((m, i) => { if (m.role === 'assistant') estimateVoiceDurations(i, cleanAssistantText(m.content), fetchDurationEstimate) })
       }
     })
@@ -1383,9 +1327,7 @@ function ChatRoom({ session, onBack }) {
       const res = await apiFetch(`/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking, image_url: imageUrl }) })
       const data = await res.json()
       const assistIdx = newIdx + 1
-      const sticker = pickSticker(data.reply)
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString(), voice: data.voice }])
-      setStickerMap(prev => ({ ...prev, [assistIdx]: sticker }))
       estimateVoiceDurations(assistIdx, cleanAssistantText(data.reply), fetchDurationEstimate)
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
@@ -1486,7 +1428,6 @@ function ChatRoom({ session, onBack }) {
         )}
         <div className="composer-input-row">
           <div className="composer-attachments">
-            <button className="attach-btn">{I.file}</button>
             <button className="attach-btn" onClick={() => cameraInputRef.current?.click()}>{I.camera}</button>
             <button className="attach-btn" onClick={() => photoInputRef.current?.click()}>{I.photo}</button>
             <input ref={photoInputRef} type="file" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
@@ -2967,11 +2908,19 @@ async function migrateLegacySent() {
 }
 // 服务器上的一条记录 → 页面上的消息
 function ccFromServer(m) {
-  return { key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}) }
+  return {
+    key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time,
+    ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
+    ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
+  }
 }
 const CC_PAGE = 30
-const CC_MAX_IMAGES = 4
-// 带口令取回 bridge 上的图（<img> 带不了 Authorization），blob 地址按 path 缓存在内存里
+// 图片 + 文件一次最多几个、文件能选哪些类型、单个多大：都以 /api/cc/file-types 为准
+// （白名单唯一来源是 VPS 上的 /opt/mu-bridge/file_types.json，前端不写死）。拿不到时图片照常能发，按 9 个算
+const CC_MAX_ITEMS_FALLBACK = 9
+const ccExt = (name) => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : '' }
+const fmtFileSize = (n) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
+// 带口令取回 bridge 上的图或文件（<img>/<a> 带不了 Authorization），blob 地址按 path 缓存在内存里
 const ccImageCache = new Map()
 async function fetchCcImage(path) {
   if (ccImageCache.has(path)) return ccImageCache.get(path)
@@ -2982,13 +2931,74 @@ async function fetchCcImage(path) {
   ccImageCache.set(path, url)
   return url
 }
+// 上传失败时把后端的提示（"不支持 .docx 文件"、"文件不能超过 20MB"）带出来
+async function ccUploadForm(form) {
+  const res = await apiFetch(`/api/cc/upload`, { method: 'POST', body: form })
+  if (res.status === 401) throw new Error('unauthorized')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  return data
+}
 async function uploadCcImage(blob) {
   const form = new FormData()
   form.append('image', blob, blob.type === 'image/webp' ? 'image.webp' : 'image.jpg')
-  const res = await apiFetch(`/api/cc/upload`, { method: 'POST', body: form })
-  if (res.status === 401) throw new Error('unauthorized')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return (await res.json()).path
+  return (await ccUploadForm(form)).path
+}
+async function uploadCcFile(file) {
+  const form = new FormData()
+  form.append('name', file.name) // 原文件名单独放一个字段：multipart 的 filename 遇到中文各家浏览器编码不一
+  form.append('file', file, file.name)
+  return (await ccUploadForm(form)).path
+}
+// 打开/下载文件。手机上用 <a download>（iOS 会直接预览，能分享/存储）；电脑上新开标签页看，看不了的浏览器会自己下载
+function saveBlobUrl(url, name) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+const isMobileUa = () => /iPhone|iPad|Android/i.test(navigator.userAgent)
+
+const CC_FILE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+const CC_DOWNLOAD_ICON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+function CcFileIcon({ name }) {
+  return <span className="cc-file-icon">{CC_FILE_ICON}<span className="cc-file-ext">{ccExt(name).slice(0, 4).toUpperCase()}</span></span>
+}
+
+// 聊天里自己发的文件：类型图标 + 原文件名 + 大小，点一下打开，右边按钮下载。bridge 只留 7 天，过期了灰掉
+function CcFile({ file }) {
+  const [state, setState] = useState('idle') // idle | loading | gone
+  const getUrl = async () => file.localUrl || await fetchCcImage(file.path)
+  const open = async (download) => {
+    if (state !== 'idle') return
+    // 电脑上要先同步开窗，等拿到文件再跳，不然会被当成弹窗拦掉
+    const win = !download && !isMobileUa() ? window.open('', '_blank') : null
+    setState('loading')
+    try {
+      const url = await getUrl()
+      if (win) {
+        // 白名单里除了 pdf 都是文本：按纯文本打开，免得 csv/代码文件在新标签里被当成下载
+        if (ccExt(file.name) === 'pdf') win.location.href = url
+        else win.location.href = URL.createObjectURL(new Blob([await (await fetch(url)).blob()], { type: 'text/plain; charset=utf-8' }))
+      } else saveBlobUrl(url, file.name)
+      setState('idle')
+    } catch (err) {
+      win?.close()
+      setState(err.message === 'HTTP 404' ? 'gone' : 'idle')
+    }
+  }
+  return (
+    <div className={`bubble cc-file${state === 'gone' ? ' cc-file-gone' : ''}`} onClick={() => open(false)} role="button" title={file.name}>
+      <CcFileIcon name={file.name} />
+      <span className="cc-file-info">
+        <span className="cc-file-name">{file.name}</span>
+        <span className="cc-file-size">{state === 'gone' ? '文件已过期' : state === 'loading' ? '打开中…' : fmtFileSize(file.size || 0)}</span>
+      </span>
+      {state !== 'gone' && <button className="cc-file-dl" onClick={e => { e.stopPropagation(); open(true) }} aria-label="Download">{CC_DOWNLOAD_ICON}</button>}
+    </div>
+  )
 }
 
 // 聊天里自己发的图：刚发的用本地预览，刷新后的历史按 path 向后端取；bridge 只留 7 天，过期了显示占位
@@ -3009,7 +3019,7 @@ function getCcLast() {
   try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
 }
 function setCcLastStorage(m) {
-  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : ''), time: m.time })) } catch {}
+  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
 }
 
 function CCChatPage({ onBack }) {
@@ -3022,9 +3032,12 @@ function CCChatPage({ onBack }) {
   const [status, setStatus] = useState('connecting')
   const [waiting, setWaiting] = useState(false)
   const [input, setInput] = useState(() => getDraft(CC_SESSION.id)) // 没发出去的字留作草稿，下次进来还在
-  const [pending, setPending] = useState([]) // 待发送的图：{ key, blob, previewUrl }
+  const [pending, setPending] = useState([]) // 待发送的图 { key, kind: 'image', blob, previewUrl } 和文件 { key, kind: 'file', file }
+  const [fileTypes, setFileTypes] = useState(null) // /api/cc/file-types：{ max_bytes, max_items, types: [{ ext }] }
+  const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
   const [lightboxImage, setLightboxImage] = useState(null)
   const photoInputRef = useRef(null)
+  const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const messagesEndRef = useRef(null)
   const listRef = useRef(null)
@@ -3209,46 +3222,103 @@ function CCChatPage({ onBack }) {
   }, [messages, waiting])
   useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
+  // 文件白名单：拿不到就不让选文件，发图不受影响
+  useEffect(() => {
+    if (!passcode) return
+    let alive = true
+    apiFetch(`/api/cc/file-types`).then(r => r.ok ? r.json() : null).then(t => { if (alive && t?.types) setFileTypes(t) }).catch(() => {})
+    return () => { alive = false }
+  }, [passcode])
+  const maxItems = fileTypes?.max_items || CC_MAX_ITEMS_FALLBACK
+  const maxBytes = fileTypes?.max_bytes || 0
+  const allowedExts = useMemo(() => new Set((fileTypes?.types || []).map(t => t.ext)), [fileTypes])
+  const fileAccept = useMemo(() => [...allowedExts].map(e => `.${e}`).join(','), [allowedExts])
+  const full = pending.length >= maxItems
+
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(''), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
+  // 一次合计最多 maxItems 个：多选超了只收前面的，并提示
+  const takeRoom = (list) => {
+    const room = Math.max(maxItems - pending.length, 0)
+    if (list.length > room) setNotice(`图片和文件一次最多 ${maxItems} 个，多出的 ${list.length - room} 个没加上`)
+    return list.slice(0, room)
+  }
+
   const handleImageSelect = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, CC_MAX_IMAGES - pending.length)
+    const files = takeRoom(Array.from(e.target.files || []))
     e.target.value = ''
     const added = []
     for (const file of files) {
       try {
         const blob = await compressImage(file, 1200, 0.8)
-        added.push({ key: `img-${Date.now()}-${added.length}`, blob, previewUrl: URL.createObjectURL(blob) })
+        added.push({ key: `img-${Date.now()}-${added.length}`, kind: 'image', blob, previewUrl: URL.createObjectURL(blob) })
       } catch {}
     }
-    setPending(prev => [...prev, ...added].slice(0, CC_MAX_IMAGES))
+    setPending(prev => [...prev, ...added].slice(0, maxItems))
+  }
+  // 选的时候就把类型、大小、数量卡住，不等上传失败
+  const handleFileSelect = (e) => {
+    const picked = Array.from(e.target.files || [])
+    e.target.value = ''
+    const problems = []
+    const ok = picked.filter(f => {
+      if (!allowedExts.has(ccExt(f.name))) { problems.push(`${f.name}：沐读不了这种文件`); return false }
+      if (f.size > maxBytes) { problems.push(`${f.name}：${fmtFileSize(f.size)}，超过 ${Math.round(maxBytes / 1024 / 1024)}MB`); return false }
+      if (!f.size) { problems.push(`${f.name}：是空文件`); return false }
+      return true
+    })
+    const added = takeRoom(ok).map((file, i) => ({ key: `file-${Date.now()}-${i}`, kind: 'file', file }))
+    if (problems.length) setNotice(problems.join('；'))
+    setPending(prev => [...prev, ...added].slice(0, maxItems))
   }
   const removePending = (key) => setPending(prev => {
     const gone = prev.find(p => p.key === key)
-    if (gone) URL.revokeObjectURL(gone.previewUrl)
+    if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl)
     return prev.filter(p => p.key !== key)
   })
 
   const sendMessage = async () => {
     const text = input.trim()
-    const imgs = pending
-    if (!text && !imgs.length) return
-    const msg = { key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString(), ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}) }
+    const imgs = pending.filter(p => p.kind === 'image')
+    const docs = pending.filter(p => p.kind === 'file')
+    if (!text && !pending.length) return
+    const localDocs = docs.map(p => ({ key: p.key, name: p.file.name, size: p.file.size, localUrl: URL.createObjectURL(p.file) }))
+    const msg = {
+      key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString(),
+      ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}),
+      ...(docs.length ? { files: localDocs } : {}),
+    }
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
     setInput('')
     setPending([])
     setWaiting(true)
     try {
-      const paths = await Promise.all(imgs.map(p => uploadCcImage(p.blob)))
+      // 一个一个排队传，不并发：后端是整份读进内存再转给 VPS，一起传会把 Render 的内存顶满
+      const paths = []
+      for (const p of imgs) paths.push(await uploadCcImage(p.blob))
+      const filePaths = []
+      for (const p of docs) filePaths.push(await uploadCcFile(p.file))
       paths.forEach((p, i) => ccImageCache.set(p, imgs[i].previewUrl)) // 刚发的图直接用本地预览，不用再向服务器取
-      const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paths.length ? { text, images: paths } : { text }) })
+      filePaths.forEach((p, i) => ccImageCache.set(p, localDocs[i].localUrl))
+      const body = { text, ...(paths.length ? { images: paths } : {}), ...(filePaths.length ? { files: filePaths } : {}) }
+      const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.status === 401) throw new Error('unauthorized')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
       const data = await res.json().catch(() => ({}))
       // 发送成功：临时消息换成服务器记录（SSE 可能已经先推来了，按 id 合并不会重复）
-      if (data.id) mergeHistory([{ key: data.id, role: 'user', text, time: data.time || msg.time, ...(paths.length ? { images: paths.map(path => ({ path })) } : {}) }], 'bottom')
+      if (data.id) mergeHistory([{
+        key: data.id, role: 'user', text, time: data.time || msg.time,
+        ...(paths.length ? { images: paths.map(path => ({ path })) } : {}),
+        ...(filePaths.length ? { files: filePaths.map((path, i) => ({ path, name: localDocs[i].name, size: localDocs[i].size })) } : {}),
+      }], 'bottom')
       setTemp(prev => prev.filter(m => m.key !== msg.key))
     } catch (err) {
       if (err.message === 'unauthorized') lockOut()
+      else if (!/^HTTP \d+$/.test(err.message)) setNotice(err.message)
       setWaiting(false)
       setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
     }
@@ -3277,6 +3347,7 @@ function CCChatPage({ onBack }) {
               ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
               : <>
                   {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
+                  {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
                   {m.text && <div className="bubble">{m.text}</div>}
                 </>}
             <div className="msg-meta">
@@ -3293,9 +3364,19 @@ function CCChatPage({ onBack }) {
       </div>
 
       <div className="composer">
+        {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
         {pending.length > 0 && (
           <div className="cc-pending">
-            {pending.map(p => (
+            {pending.map(p => p.kind === 'file' ? (
+              <div key={p.key} className="composer-image-preview cc-pending-file" title={p.file.name}>
+                <CcFileIcon name={p.file.name} />
+                <span className="cc-file-info">
+                  <span className="cc-file-name">{p.file.name}</span>
+                  <span className="cc-file-size">{fmtFileSize(p.file.size)}</span>
+                </span>
+                <button onClick={() => removePending(p.key)} aria-label="Remove file">{I.close}</button>
+              </div>
+            ) : (
               <div key={p.key} className="composer-image-preview">
                 <img src={p.previewUrl} alt="" />
                 <button onClick={() => removePending(p.key)} aria-label="Remove image">{I.close}</button>
@@ -3304,7 +3385,9 @@ function CCChatPage({ onBack }) {
           </div>
         )}
         <div className="composer-input-row">
-          <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || pending.length >= CC_MAX_IMAGES} aria-label="Add images">{I.photo}</button>
+          <button className="attach-btn" onClick={() => fileInputRef.current?.click()} disabled={!passcode || !fileTypes || full} aria-label="Add files">{I.file}</button>
+          <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
+          <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || full} aria-label="Add images">{I.photo}</button>
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
           <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
           <button className="send-btn" onClick={sendMessage} disabled={!passcode || (!input.trim() && !pending.length)}>{I.send}</button>
