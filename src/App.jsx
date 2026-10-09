@@ -4,6 +4,28 @@ import './App.css'
 const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
 
+// ─── APP 口令 ──────────────────────────────────────
+// 所有 /api 请求都走 apiFetch，统一带 APP 口令。口令存在 localStorage 的 cc_passcode 里
+// （沿用沐聊天页原来的 key，以前在那儿解锁过的设备不用重输）。
+// 没口令或后端回 401 就清掉口令、广播 mu-lock，App 收到后整个切回锁屏。
+function getPasscode() {
+  try { return localStorage.getItem('cc_passcode') || '' } catch { return '' }
+}
+function setPasscodeStorage(code) {
+  try { if (code) localStorage.setItem('cc_passcode', code); else localStorage.removeItem('cc_passcode') } catch {}
+}
+function lockApp() {
+  setPasscodeStorage('')
+  window.dispatchEvent(new Event('mu-lock'))
+}
+async function apiFetch(path, opts = {}) {
+  const passcode = getPasscode()
+  if (!passcode) { lockApp(); throw Object.assign(new Error('locked'), { status: 0 }) }
+  const res = await fetch(`${API}${path}`, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${passcode}` } })
+  if (res.status === 401) lockApp()
+  return res
+}
+
 // ─── Avatar helpers (localStorage) — session list avatar ──
 function getAvatar(sessionId) {
   try { return localStorage.getItem(`avatar_${sessionId}`) } catch { return null }
@@ -63,7 +85,7 @@ function getDefaultDates() {
   ]
 }
 
-// ─── Calendar events（/api/events，用沐聊天页存的口令鉴权）──
+// ─── Calendar events（/api/events）──
 // 时间一律按 Asia/Shanghai 理解和显示
 const SH_TZ = 'Asia/Shanghai'
 const pad2 = (n) => String(n).padStart(2, '0')
@@ -81,13 +103,11 @@ function eventLastDay(e) {
   return last > first && shTimeOf(e.ends_at) === '00:00' ? addDaysStr(last, -1) : last
 }
 
-// 日程、todos、periods 共用：带沐聊天页存的 APP 口令；没口令直接报 locked，非 2xx 抛错
-async function eventsApi(method, path, body) {
-  const passcode = getCcPasscode()
-  if (!passcode) throw Object.assign(new Error('locked'), { status: 0 })
-  const res = await fetch(`${API}${path}`, {
+// JSON 接口的简便写法：非 2xx 抛错，错误上带 status
+async function apiJson(method, path, body) {
+  const res = await apiFetch(path, {
     method,
-    headers: { Authorization: `Bearer ${passcode}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   })
   const data = await res.json().catch(() => null)
@@ -95,8 +115,7 @@ async function eventsApi(method, path, body) {
   return data
 }
 function eventsErrorText(e) {
-  if (e?.message === 'locked') return '还没解锁：先在「沐」聊天页输入口令'
-  if (e?.status === 401) return '口令不对：去「沐」聊天页重新输入'
+  if (e?.message === 'locked' || e?.status === 401) return '口令失效了，重新解锁后再试'
   if (e?.status === 400 || e?.status === 403) return `没保存上：${e.message}`
   return '没保存上，稍后再试'
 }
@@ -113,16 +132,16 @@ const IMPORTANT_MIGRATED_KEY = 'important_dates_migrated'
 let importantMigration = null
 function ensureImportantMigrated() {
   try { if (localStorage.getItem(IMPORTANT_MIGRATED_KEY)) return Promise.resolve() } catch { return Promise.resolve() }
-  if (!getCcPasscode()) return Promise.resolve()
+  if (!getPasscode()) return Promise.resolve()
   importantMigration ??= (async () => {
     let uploaded = 0
     for (const d of getImportantDates()) {
       const name = typeof d?.name === 'string' ? d.name.trim() : ''
       if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) continue
-      const sameDay = await eventsApi('GET', `/api/events?from=${d.date}&to=${d.date}`)
+      const sameDay = await apiJson('GET', `/api/events?from=${d.date}&to=${d.date}`)
       if (sameDay.some(e => e.kind === 'important' && e.title === name)) continue
       try {
-        await eventsApi('POST', '/api/events', {
+        await apiJson('POST', '/api/events', {
           title: name, all_day: true, start_date: d.date, kind: 'important',
           repeat: d.recurring === 'yearly' || d.recurring === 'monthly' ? d.recurring : 'none',
           emoji: d.emoji || null, external_id: `legacy:${d.id}`,
@@ -142,7 +161,7 @@ function getUpcomingImportantCache() {
 }
 async function fetchUpcomingImportant() {
   const today = beijingDateStr()
-  const list = await eventsApi('GET', `/api/events?from=${today}&to=${addDaysStr(today, 399)}`)
+  const list = await apiJson('GET', `/api/events?from=${today}&to=${addDaysStr(today, 399)}`)
   const next = new Map()
   for (const e of list) {
     if (e.kind !== 'important') continue
@@ -488,9 +507,9 @@ function EventModal({ event, defaultDate, onClose, onSaved }) {
       // 结束早于开始，当作跨到第二天（比如 23:00–01:00）
       body.ends_at = end ? `${end < start ? addDaysStr(date, 1) : date}T${end}` : null
     }
-    run(() => event ? eventsApi('PUT', `/api/events/${event.series_id ?? event.id}`, body) : eventsApi('POST', '/api/events', body))
+    run(() => event ? apiJson('PUT', `/api/events/${event.series_id ?? event.id}`, body) : apiJson('POST', '/api/events', body))
   }
-  const remove = () => run(() => eventsApi('DELETE', `/api/events/${event.series_id ?? event.id}`))
+  const remove = () => run(() => apiJson('DELETE', `/api/events/${event.series_id ?? event.id}`))
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -567,15 +586,15 @@ function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
     setSearching(true)
     try {
       if (sessionId) {
-        const res = await fetch(`${API}/api/sessions/${sessionId}/messages`)
+        const res = await apiFetch(`/api/sessions/${sessionId}/messages`)
         const msgs = await res.json()
         if (Array.isArray(msgs)) setResults(msgs.filter(m => m.content && m.content.toLowerCase().includes(query.toLowerCase())).slice(0, 50).map((m) => ({ ...m, sessionName: '', _idx: msgs.indexOf(m) })))
       } else {
-        const sessRes = await fetch(`${API}/api/sessions`); const sessions = await sessRes.json()
+        const sessRes = await apiFetch(`/api/sessions`); const sessions = await sessRes.json()
         if (!Array.isArray(sessions)) { setSearching(false); return }
         const found = []
         for (const s of sessions.slice(0, 20)) {
-          try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelInfo(s.model).tag, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
+          try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelInfo(s.model).tag, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
         }
         setResults(found.slice(0, 50))
       }
@@ -620,23 +639,23 @@ function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/sessions`).then(r => r.json()).then(async data => {
+    apiFetch(`/api/sessions`).then(r => r.json()).then(async data => {
       if (!Array.isArray(data)) { setLoading(false); return }
       setSessions(data); setLoading(false)
       const msgs = {}
-      for (const s of data.slice(0, 10)) { try { const r = await fetch(`${API}/api/sessions/${s.id}/messages`); const a = await r.json(); if (Array.isArray(a) && a.length > 0) msgs[s.id] = a[a.length - 1] } catch {} }
+      for (const s of data.slice(0, 10)) { try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const a = await r.json(); if (Array.isArray(a) && a.length > 0) msgs[s.id] = a[a.length - 1] } catch {} }
       setLastMessages(msgs)
     }).catch(() => setLoading(false))
   }, [])
 
   const createSession = async (model) => {
-    const res = await fetch(`${API}/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '沐', model }) })
+    const res = await apiFetch(`/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '沐', model }) })
     const session = await res.json()
     setSessions(prev => [session, ...prev])
     onOpen({ ...session, model })
   }
 
-  const deleteSession = async (id) => { await fetch(`${API}/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)); setAvatarStorage(id, null) }
+  const deleteSession = async (id) => { await apiFetch(`/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)); setAvatarStorage(id, null) }
 
   const getPreview = (sid) => {
     const draft = getDraft(sid)
@@ -1060,7 +1079,7 @@ function useVoicePlayer() {
   const fetchDurationEstimate = useCallback((idx, text) => {
     if (!text || !text.trim()) return
     const params = new URLSearchParams({ text, preset: 'calm' })
-    fetch(`${API}/api/tts/duration?${params}`)
+    apiFetch(`/api/tts/duration?${params}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && isFinite(data.duration)) {
@@ -1164,7 +1183,7 @@ function useVoicePlayer() {
     const controller = new AbortController()
     ttsAbortRef.current = controller
     try {
-      const res = await fetch(`${API}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, preset: 'calm' }), signal: controller.signal })
+      const res = await apiFetch(`/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, preset: 'calm' }), signal: controller.signal })
       if (!res.ok) throw new Error('tts failed')
       const headerDuration = Number(res.headers.get('X-Audio-Duration'))
       const blob = await res.blob()
@@ -1293,14 +1312,14 @@ function ChatRoom({ session, onBack }) {
     const now = Date.now()
     if (value.trim() && now - lastPingRef.current >= 4000) {
       lastPingRef.current = now
-      fetch(`${API}/api/typing/ping`, { method: 'POST', keepalive: true }).catch(() => {})
+      apiFetch(`/api/typing/ping`, { method: 'POST' }).catch(() => {}) // 不用 keepalive：带口令头要先预检，Safari 上 keepalive+预检没法实测；它是打字时发的，用不着
     }
   }
 
   useEffect(() => {
     resetVoice()
     setTranscripts({})
-    fetch(`${API}/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
+    apiFetch(`/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setMessages(data)
         const map = {}
@@ -1344,7 +1363,7 @@ function ChatRoom({ session, onBack }) {
         const ext = imageToSend.blob.type === 'image/webp' ? 'webp' : 'jpg'
         const formData = new FormData()
         formData.append('file', imageToSend.blob, `photo.${ext}`)
-        const uploadRes = await fetch(`${API}/api/upload`, { method: 'POST', body: formData })
+        const uploadRes = await apiFetch(`/api/upload`, { method: 'POST', body: formData })
         const uploadData = await uploadRes.json()
         imageUrl = uploadData.url || null
       } catch {}
@@ -1361,7 +1380,7 @@ function ChatRoom({ session, onBack }) {
     setMessages(prev => [...prev, { role: 'user', content: displayContent, created_at: new Date().toISOString() }])
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking, image_url: imageUrl }) })
+      const res = await apiFetch(`/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking, image_url: imageUrl }) })
       const data = await res.json()
       const assistIdx = newIdx + 1
       const sticker = pickSticker(data.reply)
@@ -1587,19 +1606,19 @@ function CalendarPage() {
 
   useEffect(() => {
     // todos 和 periods 也要口令，和日程一样走 eventsApi；没解锁就不请求
-    if (!getCcPasscode()) return
-    eventsApi('GET', '/api/todos').then(d => { if (Array.isArray(d)) setTodos(d) }).catch(() => {})
-    eventsApi('GET', '/api/periods').then(d => { if (Array.isArray(d)) setPeriods(d) }).catch(() => {})
+    if (!getPasscode()) return
+    apiJson('GET', '/api/todos').then(d => { if (Array.isArray(d)) setTodos(d) }).catch(() => {})
+    apiJson('GET', '/api/periods').then(d => { if (Array.isArray(d)) setPeriods(d) }).catch(() => {})
   }, [])
 
   const mkDate = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   const monthFrom = mkDate(1), monthTo = mkDate(daysInMonth)
   useEffect(() => {
-    if (!getCcPasscode()) { setEventsState('locked'); return }
+    if (!getPasscode()) { setEventsState('locked'); return }
     let alive = true
     setEventsState(s => (s === 'ok' ? 'ok' : 'loading'))
     ensureImportantMigrated()
-      .then(() => eventsApi('GET', `/api/events?from=${monthFrom}&to=${monthTo}`))
+      .then(() => apiJson('GET', `/api/events?from=${monthFrom}&to=${monthTo}`))
       .then(list => { if (alive) { setEvents({ key: monthFrom, list }); setEventsState('ok') } })
       .catch(e => { if (alive) setEventsState(e?.message === 'locked' ? 'locked' : 'error') })
     return () => { alive = false }
@@ -1607,12 +1626,12 @@ function CalendarPage() {
   const reloadEvents = () => setEventsReload(n => n + 1)
   const monthEvents = events.key === monthFrom ? events.list : []
   const scheduleEvents = monthEvents.filter(e => e.kind === 'event')
-  const addTodo = async () => { if (!newTodo.trim()) return; const sd = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10); try { const t = await eventsApi('POST', '/api/todos', { side: 'her', text: newTodo.trim(), due_time: sd }); setTodos(p => [...p, t]); setNewTodo('') } catch {} }
-  const toggleTodo = async (id, done) => { try { await eventsApi('PUT', `/api/todos/${id}`, { done: !done }); setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t)) } catch {} }
+  const addTodo = async () => { if (!newTodo.trim()) return; const sd = selectedDay ? mkDate(selectedDay) : new Date().toISOString().slice(0, 10); try { const t = await apiJson('POST', '/api/todos', { side: 'her', text: newTodo.trim(), due_time: sd }); setTodos(p => [...p, t]); setNewTodo('') } catch {} }
+  const toggleTodo = async (id, done) => { try { await apiJson('PUT', `/api/todos/${id}`, { done: !done }); setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t)) } catch {} }
   // 只把真删掉的从列表里拿掉（没口令/口令错时一条也不删）
-  const deleteSelectedTodos = async () => { const gone = new Set(); for (const id of selectedTodos) { try { await eventsApi('DELETE', `/api/todos/${id}`); gone.add(id) } catch {} } setTodos(p => p.filter(t => !gone.has(t.id))); setSelectedTodos(new Set()); setEditMode(false) }
+  const deleteSelectedTodos = async () => { const gone = new Set(); for (const id of selectedTodos) { try { await apiJson('DELETE', `/api/todos/${id}`); gone.add(id) } catch {} } setTodos(p => p.filter(t => !gone.has(t.id))); setSelectedTodos(new Set()); setEditMode(false) }
   const toggleSelectTodo = (id) => { setSelectedTodos(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n }) }
-  const togglePeriod = async (ds) => { try { const d = await eventsApi('POST', '/api/periods', { date: ds }); if (d.action === 'added') setPeriods(p => [...p, { date: ds }]); else setPeriods(p => p.filter(x => x.date !== ds)) } catch {} }
+  const togglePeriod = async (ds) => { try { const d = await apiJson('POST', '/api/periods', { date: ds }); if (d.action === 'added') setPeriods(p => [...p, { date: ds }]); else setPeriods(p => p.filter(x => x.date !== ds)) } catch {} }
 
   const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null) }
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null) }
@@ -1622,9 +1641,9 @@ function CalendarPage() {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
   // 重要日期存在 events（kind=important）；改的是整个系列，repeat 不动
-  const addImportantDate = (d) => eventsApi('POST', '/api/events', { title: d.name, all_day: true, start_date: d.date, kind: 'important', repeat: 'none', emoji: d.emoji }).then(reloadEvents)
-  const updateImportantDate = (d) => eventsApi('PUT', `/api/events/${d.id}`, { title: d.name, emoji: d.emoji, start_date: d.date }).then(reloadEvents)
-  const deleteImportantDate = (id) => eventsApi('DELETE', `/api/events/${id}`).then(reloadEvents)
+  const addImportantDate = (d) => apiJson('POST', '/api/events', { title: d.name, all_day: true, start_date: d.date, kind: 'important', repeat: 'none', emoji: d.emoji }).then(reloadEvents)
+  const updateImportantDate = (d) => apiJson('PUT', `/api/events/${d.id}`, { title: d.name, emoji: d.emoji, start_date: d.date }).then(reloadEvents)
+  const deleteImportantDate = (id) => apiJson('DELETE', `/api/events/${id}`).then(reloadEvents)
 
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
   const cells = []; for (let i = 0; i < firstDay; i++) cells.push(null); for (let d = 1; d <= daysInMonth; d++) cells.push(d)
@@ -1808,7 +1827,7 @@ function TodayPage() {
   const [importantDates, setImportantDates] = useState(() => getUpcomingImportantCache() ?? getImportantDates())
   const longPressTimer = useRef(null)
   useEffect(() => {
-    if (!getCcPasscode()) return
+    if (!getPasscode()) return
     let alive = true
     ensureImportantMigrated().then(fetchUpcomingImportant).then(list => { if (alive) setImportantDates(list) }).catch(() => {})
     return () => { alive = false }
@@ -1868,14 +1887,14 @@ function TodayPage() {
   const monthDate = topCountdown ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][topCountdown.targetDate.getMonth()]} ${topCountdown.targetDate.getDate()}` : ''
 
   useEffect(() => {
-    fetch(`${API}/api/diaries`).then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
-    fetch(`${API}/api/whispers/today`).then(r => r.json()).then(w => { if (w?.content) { setMuWhisper(w); setWhisperCache(w) } }).catch(() => {})
+    apiFetch(`/api/diaries`).then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
+    apiFetch(`/api/whispers/today`).then(r => r.json()).then(w => { if (w?.content) { setMuWhisper(w); setWhisperCache(w) } }).catch(() => {})
   }, [])
 
-  const submitDiary = async () => { if (!diaryText.trim() || submitting) return; setSubmitting(true); try { const r = await fetch(`${API}/api/diaries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author: 'her', content: diaryText.trim() }) }); const e = await r.json(); setDiaries(p => [e, ...p]); setDiaryText(''); setShowWrite(false) } catch {}; setSubmitting(false) }
-  const deleteDiary = async (id) => { try { await fetch(`${API}/api/diaries/${id}`, { method: 'DELETE' }); setDiaries(p => p.filter(d => d.id !== id)) } catch {}; setContextMenu(null) }
+  const submitDiary = async () => { if (!diaryText.trim() || submitting) return; setSubmitting(true); try { const r = await apiFetch(`/api/diaries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author: 'her', content: diaryText.trim() }) }); const e = await r.json(); setDiaries(p => [e, ...p]); setDiaryText(''); setShowWrite(false) } catch {}; setSubmitting(false) }
+  const deleteDiary = async (id) => { try { await apiFetch(`/api/diaries/${id}`, { method: 'DELETE' }); setDiaries(p => p.filter(d => d.id !== id)) } catch {}; setContextMenu(null) }
   const startEdit = (d) => { if (d.author !== 'her') return; setEditingDiary(d.id); setEditText(d.content); setContextMenu(null); setShowWrite(true) }
-  const saveEdit = async () => { if (!editText.trim() || !editingDiary) return; try { await fetch(`${API}/api/diaries/${editingDiary}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: editText.trim() }) }); setDiaries(p => p.map(d => d.id === editingDiary ? { ...d, content: editText.trim() } : d)) } catch {}; setEditingDiary(null); setEditText(''); setShowWrite(false) }
+  const saveEdit = async () => { if (!editText.trim() || !editingDiary) return; try { await apiFetch(`/api/diaries/${editingDiary}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: editText.trim() }) }); setDiaries(p => p.map(d => d.id === editingDiary ? { ...d, content: editText.trim() } : d)) } catch {}; setEditingDiary(null); setEditText(''); setShowWrite(false) }
   const handleLongPress = (e, d) => { e.preventDefault(); setContextMenu({ id: d.id, diary: d }) }
 
   const fmtDate = (s) => { const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()}` }
@@ -2135,14 +2154,14 @@ function MemoryImportPage({ onBack }) {
   const swipe = useSwipeBack(onBack)
 
   useEffect(() => {
-    fetch(`${API}/api/memories`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMemories(d) }).catch(() => {})
+    apiFetch(`/api/memories`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMemories(d) }).catch(() => {})
   }, [justSaved])
 
   const submit = async () => {
     if (!text.trim() || submitting) return
     setSubmitting(true)
     try {
-      await fetch(`${API}/api/memories/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text.trim() }) })
+      await apiFetch(`/api/memories/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text.trim() }) })
       setText('')
       setJustSaved(true)
       setTimeout(() => setJustSaved(false), 2000)
@@ -2152,7 +2171,7 @@ function MemoryImportPage({ onBack }) {
 
   const deleteMemory = async (id) => {
     try {
-      await fetch(`${API}/api/memories/${id}`, { method: 'DELETE' })
+      await apiFetch(`/api/memories/${id}`, { method: 'DELETE' })
       setMemories(prev => prev.filter(m => m.id !== id))
       if (selectedMemory?.id === id) setSelectedMemory(null)
     } catch {}
@@ -2161,7 +2180,7 @@ function MemoryImportPage({ onBack }) {
   const updateMemory = async () => {
     if (!editText.trim() || !selectedMemory) return
     try {
-      await fetch(`${API}/api/memories/${selectedMemory.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: editText.trim() }) })
+      await apiFetch(`/api/memories/${selectedMemory.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: editText.trim() }) })
       setMemories(prev => prev.map(m => m.id === selectedMemory.id ? { ...m, summary: editText.trim() } : m))
       setSelectedMemory(null)
     } catch {}
@@ -2249,7 +2268,7 @@ function DrawGuessGame({ onBack }) {
   const startGame = async () => {
     setPhase('loading')
     try {
-      const res = await fetch(`${API}/api/games/draw-guess/start`, { method: 'POST' })
+      const res = await apiFetch(`/api/games/draw-guess/start`, { method: 'POST' })
       const data = await res.json()
       setWord(data.word)
       setTimeLeft(60)
@@ -2296,7 +2315,7 @@ function DrawGuessGame({ onBack }) {
     small.getContext('2d').drawImage(canvasRef.current, 0, 0, 400, 400)
     const dataUrl = small.toDataURL('image/png')
     try {
-      const res = await fetch(`${API}/api/games/draw-guess/guess`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: dataUrl, word }) })
+      const res = await apiFetch(`/api/games/draw-guess/guess`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: dataUrl, word }) })
       const data = await res.json()
       setResult(data)
     } catch {
@@ -2410,7 +2429,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
   // 每次点进书本都重新读一遍进度，不用父组件里可能已经过期的缓存
   // （比如刚在这本书里滚动过、上报过新进度，又退回章节列表再点进来）
   useEffect(() => {
-    fetch(`${API}/api/nook/progress/${book.id}`).then(r => r.json()).then(rows => {
+    apiFetch(`/api/nook/progress/${book.id}`).then(r => r.json()).then(rows => {
       const byWho = {}
       for (const row of (Array.isArray(rows) ? rows : [])) byWho[row.who] = row
       setProgress(byWho)
@@ -2421,8 +2440,8 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     setLoading(true)
     scrolledOnLoad.current = false
     Promise.all([
-      fetch(`${API}/api/nook/books/${book.id}/chapters/${chapterNum}`).then(r => r.json()),
-      fetch(`${API}/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
+      apiFetch(`/api/nook/books/${book.id}/chapters/${chapterNum}`).then(r => r.json()),
+      apiFetch(`/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
     ]).then(([ch, anns]) => {
       setChapter(ch)
       setAnnotations(Array.isArray(anns) ? anns : [])
@@ -2432,11 +2451,11 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
   // 沐第一次读到这一章时自己划几处线；后端用 ai_annotated 字段保证只跑一次，
   // 这里每次开章节都调用没关系，跑过的会立刻原样返回。跑完了才有新划线，重新拉一次。
   useEffect(() => {
-    fetch(`${API}/api/nook/books/${book.id}/chapters/${chapterNum}/ai-annotate`, { method: 'POST' })
+    apiFetch(`/api/nook/books/${book.id}/chapters/${chapterNum}/ai-annotate`, { method: 'POST' })
       .then(r => r.json())
       .then(result => {
         if (result && !result.skipped) {
-          return fetch(`${API}/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
+          return apiFetch(`/api/nook/annotations/${book.id}/${chapterNum}`).then(r => r.json())
         }
       })
       .then(anns => { if (Array.isArray(anns)) setAnnotations(anns) })
@@ -2462,7 +2481,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
   }, [loading, progress, paragraphs])
 
   const reportProgress = useCallback(() => {
-    fetch(`${API}/api/nook/progress`, {
+    apiFetch(`/api/nook/progress`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ book_id: book.id, who: identity, chapter: chapterNum, paragraph: currentParaRef.current })
     }).catch(() => {})
@@ -2540,7 +2559,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     if (!selectionInfo) return
     const { paraIndex, quote } = selectionInfo
     try {
-      const res = await fetch(`${API}/api/nook/annotations`, {
+      const res = await apiFetch(`/api/nook/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: book.id, chapter: chapterNum, anchor_para: paraIndex, anchor_quote: quote, who: identity })
       })
@@ -2556,7 +2575,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     if (editingFloorId) {
       const id = editingFloorId
       try {
-        const res = await fetch(`${API}/api/nook/floors/${id}`, {
+        const res = await apiFetch(`/api/nook/floors/${id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: replyText.trim() })
         })
@@ -2570,7 +2589,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
       return
     }
     try {
-      const res = await fetch(`${API}/api/nook/annotations/${activeAnnotation.id}/floors`, {
+      const res = await apiFetch(`/api/nook/annotations/${activeAnnotation.id}/floors`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ who: identity, text: replyText.trim() })
       })
@@ -2600,7 +2619,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     setAnnotations(prev => prev.map(a => a.id === activeAnnotation.id ? patch(a) : a))
     setActiveAnnotation(prev => prev ? patch(prev) : prev)
     try {
-      await fetch(`${API}/api/nook/floors/${id}`, { method: 'DELETE' })
+      await apiFetch(`/api/nook/floors/${id}`, { method: 'DELETE' })
     } catch {}
   }
 
@@ -2609,7 +2628,7 @@ function NookReader({ book, chapterNum, chapters, onBack, onChangeChapter, onEnt
     const id = activeAnnotation.id
     setActiveAnnotation(null)
     try {
-      await fetch(`${API}/api/nook/annotations/${id}`, { method: 'DELETE' })
+      await apiFetch(`/api/nook/annotations/${id}`, { method: 'DELETE' })
       setAnnotations(prev => prev.filter(a => a.id !== id))
     } catch {}
   }
@@ -2834,14 +2853,14 @@ function NookPage({ onBack, onEnterRoom }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/nook/books`).then(r => r.json()).then(async (data) => {
+    apiFetch(`/api/nook/books`).then(r => r.json()).then(async (data) => {
       const list = Array.isArray(data) ? data : []
       setBooks(list)
       const entries = await Promise.all(list.map(async (b) => {
         try {
           const [rows, aiProgress] = await Promise.all([
-            fetch(`${API}/api/nook/progress/${b.id}`).then(r => r.json()),
-            fetch(`${API}/api/nook/books/${b.id}/ai-progress`).then(r => r.json())
+            apiFetch(`/api/nook/progress/${b.id}`).then(r => r.json()),
+            apiFetch(`/api/nook/books/${b.id}/ai-progress`).then(r => r.json())
           ])
           const byWho = {}
           for (const row of (Array.isArray(rows) ? rows : [])) byWho[row.who] = row
@@ -2860,8 +2879,8 @@ function NookPage({ onBack, onEnterRoom }) {
     setChaptersLoading(true)
     try {
       const [chaptersData, progressRows] = await Promise.all([
-        fetch(`${API}/api/nook/books/${book.id}/chapters`).then(r => r.json()),
-        fetch(`${API}/api/nook/progress/${book.id}`).then(r => r.json())
+        apiFetch(`/api/nook/books/${book.id}/chapters`).then(r => r.json()),
+        apiFetch(`/api/nook/progress/${book.id}`).then(r => r.json())
       ])
       setChapters(Array.isArray(chaptersData) ? chaptersData : [])
       const huaProgress = (Array.isArray(progressRows) ? progressRows : []).find(row => row.who === 'hua')
@@ -2928,26 +2947,20 @@ function NookPage({ onBack, onEnterRoom }) {
 }
 
 // ─── 沐 (CC) ─────────────────────────────────────────
-// 经后端 /api/cc/* 转发到 VPS 上的 Claude Code。浏览器只持有 APP 口令，bridge token 只在后端。
-function getCcPasscode() {
-  try { return localStorage.getItem('cc_passcode') || '' } catch { return '' }
-}
-function setCcPasscodeStorage(code) {
-  try { if (code) localStorage.setItem('cc_passcode', code); else localStorage.removeItem('cc_passcode') } catch {}
-}
+// 经后端 /api/cc/* 转发到 VPS 上的 Claude Code。浏览器只持有 APP 口令（apiFetch 带上），bridge token 只在后端。
 // bridge 只推 CC 的回复，自己发的消息存在本地，刷新后对话还能对上
 function getCcSent() {
   try { const v = JSON.parse(localStorage.getItem('cc_sent') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
 }
 // 聊天记录现在存在 VPS（bridge 的 inbox/outbox），前端只在内存里留"发送中/发送失败"的临时消息。
 // 旧版把发送记录存在 localStorage 的 cc_sent 里，首次打开时一次性迁到 VPS（见 migrateLegacySent）
-async function migrateLegacySent(passcode) {
+async function migrateLegacySent() {
   try { if (localStorage.getItem('cc_migrated')) return } catch { return }
   const legacy = getCcSent()
     .filter(m => m.role === 'user' && !m.failed && m.time)
     .map(m => ({ time: m.time, text: m.text || '', images: (m.images || []).map(i => i.path).filter(Boolean) }))
   if (legacy.length) {
-    const res = await fetch(`${API}/api/cc/history/import`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify({ messages: legacy }) })
+    const res = await apiFetch(`/api/cc/history/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: legacy }) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
   }
   try { localStorage.setItem('cc_migrated', '1'); localStorage.removeItem('cc_sent') } catch {}
@@ -2960,34 +2973,34 @@ const CC_PAGE = 30
 const CC_MAX_IMAGES = 4
 // 带口令取回 bridge 上的图（<img> 带不了 Authorization），blob 地址按 path 缓存在内存里
 const ccImageCache = new Map()
-async function fetchCcImage(path, passcode) {
+async function fetchCcImage(path) {
   if (ccImageCache.has(path)) return ccImageCache.get(path)
   const [date, file] = path.split('/').slice(-2)
-  const res = await fetch(`${API}/api/cc/uploads/${encodeURIComponent(date)}/${encodeURIComponent(file)}`, { headers: { Authorization: `Bearer ${passcode}` } })
+  const res = await apiFetch(`/api/cc/uploads/${encodeURIComponent(date)}/${encodeURIComponent(file)}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const url = URL.createObjectURL(await res.blob())
   ccImageCache.set(path, url)
   return url
 }
-async function uploadCcImage(blob, passcode) {
+async function uploadCcImage(blob) {
   const form = new FormData()
   form.append('image', blob, blob.type === 'image/webp' ? 'image.webp' : 'image.jpg')
-  const res = await fetch(`${API}/api/cc/upload`, { method: 'POST', headers: { Authorization: `Bearer ${passcode}` }, body: form })
+  const res = await apiFetch(`/api/cc/upload`, { method: 'POST', body: form })
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return (await res.json()).path
 }
 
 // 聊天里自己发的图：刚发的用本地预览，刷新后的历史按 path 向后端取；bridge 只留 7 天，过期了显示占位
-function CcImage({ img, passcode, onOpen }) {
+function CcImage({ img, onOpen }) {
   const [url, setUrl] = useState(img.localUrl || (img.path && ccImageCache.get(img.path)) || null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     if (url || !img.path) return
     let alive = true
-    fetchCcImage(img.path, passcode).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
+    fetchCcImage(img.path).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
-  }, [img.path, passcode, url])
+  }, [img.path, url])
   if (failed) return <div className="cc-thumb cc-thumb-gone">图片已过期</div>
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
   return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(url)} />
@@ -3000,9 +3013,8 @@ function setCcLastStorage(m) {
 }
 
 function CCChatPage({ onBack }) {
-  const [passcode, setPasscode] = useState(getCcPasscode)
-  const [passcodeInput, setPasscodeInput] = useState('')
-  const [authError, setAuthError] = useState(false)
+  // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
+  const passcode = getPasscode()
   const [history, setHistory] = useState([]) // 服务器上的记录（双方），按时间
   const [temp, setTemp] = useState([]) // 发送中/发送失败的本地消息
   const [hasMore, setHasMore] = useState(false)
@@ -3023,7 +3035,7 @@ function CCChatPage({ onBack }) {
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
 
-  const lockOut = () => { setCcPasscodeStorage(''); setPasscode(''); setAuthError(true) }
+  const lockOut = lockApp
 
   useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
   useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode])
@@ -3047,7 +3059,7 @@ function CCChatPage({ onBack }) {
   const fetchHistory = useCallback(async (before) => {
     const qs = new URLSearchParams({ limit: String(CC_PAGE) })
     if (before) qs.set('before', before)
-    const res = await fetch(`${API}/api/cc/history?${qs}`, { headers: { Authorization: `Bearer ${passcode}` } })
+    const res = await apiFetch(`/api/cc/history?${qs}`)
     if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
@@ -3093,7 +3105,7 @@ function CCChatPage({ onBack }) {
       lastByte = Date.now()
       setStatus('connecting')
       try {
-        const res = await fetch(`${API}/api/cc/events`, { headers: { Authorization: `Bearer ${passcode}` }, signal: ctl.signal })
+        const res = await apiFetch(`/api/cc/events`, { signal: ctl.signal })
         if (res.status === 401) { cancelled = true; lockOut(); return }
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
         lastByte = Date.now()
@@ -3161,7 +3173,7 @@ function CCChatPage({ onBack }) {
     if (!passcode) return
     let alive = true
     ;(async () => {
-      try { await migrateLegacySent(passcode) } catch {}
+      try { await migrateLegacySent() } catch {}
       try {
         const data = await fetchHistory()
         if (!alive) return
@@ -3226,9 +3238,9 @@ function CCChatPage({ onBack }) {
     setPending([])
     setWaiting(true)
     try {
-      const paths = await Promise.all(imgs.map(p => uploadCcImage(p.blob, passcode)))
+      const paths = await Promise.all(imgs.map(p => uploadCcImage(p.blob)))
       paths.forEach((p, i) => ccImageCache.set(p, imgs[i].previewUrl)) // 刚发的图直接用本地预览，不用再向服务器取
-      const res = await fetch(`${API}/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${passcode}` }, body: JSON.stringify(paths.length ? { text, images: paths } : { text }) })
+      const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paths.length ? { text, images: paths } : { text }) })
       if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json().catch(() => ({}))
@@ -3244,7 +3256,6 @@ function CCChatPage({ onBack }) {
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
   const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
-  const submitPasscode = () => { const code = passcodeInput.trim(); if (!code) return; setCcPasscodeStorage(code); setAuthError(false); setPasscodeInput(''); setPasscode(code) }
   const statusLabel = { connecting: 'Connecting…', live: 'Claude Code', offline: 'Offline · reconnecting' }[status]
 
   return (
@@ -3265,7 +3276,7 @@ function CCChatPage({ onBack }) {
             {m.role === 'assistant'
               ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
               : <>
-                  {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} passcode={passcode} onOpen={setLightboxImage} />)}</div>}
+                  {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
                   {m.text && <div className="bubble">{m.text}</div>}
                 </>}
             <div className="msg-meta">
@@ -3306,18 +3317,6 @@ function CCChatPage({ onBack }) {
         </div>
       )}
 
-      {!passcode && (
-        <div className="modal-overlay">
-          <div className="modal-card">
-            <h3>Passcode</h3>
-            <input className="modal-input" type="password" autoComplete="current-password" placeholder={authError ? 'Wrong passcode, try again' : 'Enter passcode'} value={passcodeInput} onChange={e => setPasscodeInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitPasscode() }} autoFocus />
-            <div className="modal-actions-row">
-              <button className="btn-ghost" onClick={onBack}>Cancel</button>
-              <button className="btn-primary" onClick={submitPasscode} disabled={!passcodeInput.trim()}>Unlock</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -3356,14 +3355,57 @@ function MorePage({ onEnterRoom }) {
   )
 }
 
+// ─── 锁屏 ───────────────────────────────────────────
+// 输完口令先打 /api/auth/check 验一下，对了才存下来进 App。Render 免费实例冷启动可能要等几十秒
+function LockScreen({ expired, onUnlock }) {
+  const [input, setInput] = useState('')
+  const [error, setError] = useState(expired ? 'Passcode expired, enter it again' : '')
+  const [checking, setChecking] = useState(false)
+  const submit = async () => {
+    const code = input.trim()
+    if (!code || checking) return
+    setChecking(true)
+    setError('')
+    try {
+      const res = await fetch(`${API}/api/auth/check`, { headers: { Authorization: `Bearer ${code}` } })
+      if (res.ok) { setPasscodeStorage(code); onUnlock(); return }
+      setError(res.status === 401 ? 'Wrong passcode, try again' : res.status === 429 ? 'Too many tries, wait a minute' : `Server error (${res.status}), try again`)
+    } catch {
+      setError("Can't reach the server, try again")
+    }
+    setChecking(false)
+  }
+  return (
+    <div className="lock-screen">
+      <div className="modal-card">
+        <h3>Passcode</h3>
+        <input className="modal-input" type="password" autoComplete="current-password" placeholder="Enter passcode" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }} disabled={checking} autoFocus />
+        {error && <div className="lock-error">{error}</div>}
+        <div className="modal-actions-row">
+          <button className="btn-primary" onClick={submit} disabled={!input.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── App ────────────────────────────────────────────
 function App() {
   const [showSplash, setShowSplash] = useState(true)
   const [tab, setTab] = useState('today')
   const [inRoom, setInRoom] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [unlocked, setUnlocked] = useState(() => !!getPasscode())
+  const [lockExpired, setLockExpired] = useState(false)
 
   useKeyboardOpen(setKeyboardOpen)
+
+  // apiFetch 遇到 401 会广播 mu-lock：口令失效，整个 App 回锁屏
+  useEffect(() => {
+    const onLock = () => { setUnlocked(false); setLockExpired(true); setInRoom(false) }
+    window.addEventListener('mu-lock', onLock)
+    return () => window.removeEventListener('mu-lock', onLock)
+  }, [])
 
   const showTab = !inRoom && !keyboardOpen
 
@@ -3375,6 +3417,7 @@ function App() {
   ]
 
   if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />
+  if (!unlocked) return <LockScreen expired={lockExpired} onUnlock={() => setUnlocked(true)} />
 
   return (
     <div className="app">
