@@ -584,7 +584,6 @@ function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
   const [lastMessages, setLastMessages] = useState({})
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [avatarVersion, setAvatarVersion] = useState(0)
 
   useEffect(() => {
     setLoading(true)
@@ -2890,23 +2889,7 @@ function NookPage({ onBack, onEnterRoom }) {
 
 // ─── 沐 (CC) ─────────────────────────────────────────
 // 经后端 /api/cc/* 转发到 VPS 上的 Claude Code。浏览器只持有 APP 口令（apiFetch 带上），bridge token 只在后端。
-// bridge 只推 CC 的回复，自己发的消息存在本地，刷新后对话还能对上
-function getCcSent() {
-  try { const v = JSON.parse(localStorage.getItem('cc_sent') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
-}
 // 聊天记录现在存在 VPS（bridge 的 inbox/outbox），前端只在内存里留"发送中/发送失败"的临时消息。
-// 旧版把发送记录存在 localStorage 的 cc_sent 里，首次打开时一次性迁到 VPS（见 migrateLegacySent）
-async function migrateLegacySent() {
-  try { if (localStorage.getItem('cc_migrated')) return } catch { return }
-  const legacy = getCcSent()
-    .filter(m => m.role === 'user' && !m.failed && m.time)
-    .map(m => ({ time: m.time, text: m.text || '', images: (m.images || []).map(i => i.path).filter(Boolean) }))
-  if (legacy.length) {
-    const res = await apiFetch(`/api/cc/history/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: legacy }) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  }
-  try { localStorage.setItem('cc_migrated', '1'); localStorage.removeItem('cc_sent') } catch {}
-}
 // 服务器上的一条记录 → 页面上的消息。系统事件（沐那轮没回上来）不画成气泡，只用来在她那条下面挂提示
 function ccFromServer(m) {
   if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time }
@@ -3240,12 +3223,11 @@ function CCChatPage({ onBack }) {
     return () => clearTimeout(t)
   }, [waitSince])
 
-  // 打开会话：先把旧的本地发送记录迁到 VPS（只做一次），再拉最近 30 条
+  // 打开会话：拉最近 30 条
   useEffect(() => {
     if (!passcode) return
     let alive = true
     ;(async () => {
-      try { await migrateLegacySent() } catch {}
       try {
         const data = await fetchHistory()
         if (!alive) return
