@@ -633,6 +633,18 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-pending-file{display:flex;align-items:center;gap:6px;height:64px;padding:0 10px 0 6px;border-radius:10px;background:var(--surface);border:1px solid var(--border);max-width:200px}
 .cc-pending-file .cc-file-name{max-width:120px;font-size:13px}
 .cc-notice{margin:0 6px 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px;line-height:1.4}
+/* 消息下面的小字："他这次没回上来 · 再叫他一下"、"他好像卡住了"、"发送失败 · 点一下重发" */
+.cc-msg-note{margin-top:2px;padding:0 4px;font-size:12px;color:var(--text-dim)}
+.cc-note-btn{border:none;background:none;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.msg-meta .cc-note-btn{font-size:11px}
+.cc-note-btn:active{opacity:.5}
+/* 原地改自己发的文字 */
+.cc-edit{display:flex;flex-direction:column;gap:6px;width:min(100%,320px)}
+.cc-edit textarea{width:100%;box-sizing:border-box;resize:none;padding:8px 12px;border-radius:16px;border:1px solid var(--border);background:var(--bubble-user);color:var(--text);font:inherit;font-size:15px;line-height:1.4;outline:none}
+.cc-edit-actions{display:flex;justify-content:flex-end;gap:6px}
+.cc-edit-actions button{border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:12px;padding:3px 12px;font-size:13px;cursor:pointer}
+.cc-edit-actions .cc-edit-save{color:var(--text);font-weight:600}
+.cc-edit-actions button:disabled{opacity:.45;cursor:default}
 .image-lightbox-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
 .image-lightbox-overlay img{max-width:100%;max-height:100%;border-radius:8px}
 

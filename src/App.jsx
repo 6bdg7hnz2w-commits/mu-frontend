@@ -259,6 +259,7 @@ const I = {
   pause: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
   more: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
   play: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
+  edit: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>,
   copy: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>,
 }
 
@@ -2906,13 +2907,54 @@ async function migrateLegacySent() {
   }
   try { localStorage.setItem('cc_migrated', '1'); localStorage.removeItem('cc_sent') } catch {}
 }
-// 服务器上的一条记录 → 页面上的消息
+// 服务器上的一条记录 → 页面上的消息。系统事件（沐那轮没回上来）不画成气泡，只用来在她那条下面挂提示
 function ccFromServer(m) {
+  if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time }
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time,
+    ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
   }
+}
+// 兜底：发出后这么久没回、也没收到"没回上来"的事件（bridge 挂了之类），就停三个点说"他好像卡住了"。
+// 2026-09-27 ~ 10-10 共 269 次"她发 → 他回"：中位 4 秒，p99 27 秒，最慢 34 秒，取 120 秒
+const CC_STUCK_MS = 120 * 1000
+// 她哪几条"没回上来"还没解决：key → 那个系统事件。之后沐又回过话就都算解决了（history 按时间排好）
+function ccUnresolvedFailures(history) {
+  const out = new Map()
+  for (const m of history) {
+    if (m.role === 'assistant') out.clear()
+    else if (m.role === 'system' && m.kind === 'reply_failed' && m.replyTo) out.set(m.replyTo, m)
+  }
+  return out
+}
+// 每条消息一个 client_id，重发时带同一个，bridge 据此去重，沐不会收到两条
+const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+// 自己发的文字原地改：和原话一样（只差首尾空格也算）就当取消，不发请求；不能改成空的
+function CcEditBox({ text, onSave, onCancel }) {
+  const [value, setValue] = useState(text)
+  const [saving, setSaving] = useState(false)
+  const ref = useRef(null)
+  useLayoutEffect(() => { const ta = ref.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px' } }, [value])
+  useEffect(() => { const ta = ref.current; if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length) } }, [])
+  const next = value.trim()
+  const save = async () => {
+    if (next === text.trim()) return onCancel()
+    if (!next || saving) return
+    setSaving(true)
+    if (!(await onSave(next))) setSaving(false)
+  }
+  return (
+    <div className="cc-edit">
+      <textarea ref={ref} value={value} onChange={e => setValue(e.target.value)} rows={1} disabled={saving} />
+      <div className="cc-edit-actions">
+        <button className="cc-edit-cancel" onClick={onCancel} disabled={saving}>取消</button>
+        <button className="cc-edit-save" onClick={save} disabled={!next || saving}>{saving ? '保存中…' : '确认'}</button>
+      </div>
+    </div>
+  )
 }
 const CC_PAGE = 30
 // 图片 + 文件一次最多几个、文件能选哪些类型、单个多大：都以 /api/cc/file-types 为准
@@ -3030,7 +3072,14 @@ function CCChatPage({ onBack }) {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [status, setStatus] = useState('connecting')
-  const [waiting, setWaiting] = useState(false)
+  // 等沐回复：waitSince 是开始等的时间；超过 CC_STUCK_MS 还没回就 stuck（三个点停下、提示卡住，但还在轮询）
+  const [waitSince, setWaitSince] = useState(null)
+  const [stuck, setStuck] = useState(false)
+  const waiting = waitSince !== null && !stuck
+  const startWaiting = () => { setWaitSince(Date.now()); setStuck(false) }
+  const stopWaiting = useCallback(() => { setWaitSince(null); setStuck(false) }, [])
+  const [editingKey, setEditingKey] = useState(null) // 正在原地改的那条
+  const [calledAgain, setCalledAgain] = useState(() => new Set()) // 点过"再叫他一下"的 reply_failed 事件
   const [input, setInput] = useState(() => getDraft(CC_SESSION.id)) // 没发出去的字留作草稿，下次进来还在
   const [pending, setPending] = useState([]) // 待发送的图 { key, kind: 'image', blob, previewUrl } 和文件 { key, kind: 'file', file }
   const [fileTypes, setFileTypes] = useState(null) // /api/cc/file-types：{ max_bytes, max_items, types: [{ ext }] }
@@ -3054,23 +3103,26 @@ function CCChatPage({ onBack }) {
   useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
-  const knownRef = useRef(new Set())
+  // 同一个 id 更正过（edited_at 更新）的新版本要盖掉旧的；只是更正旧消息时不滚动
+  const knownRef = useRef(new Map()) // key → edited_at（没改过是 ''）
   const mergeHistory = useCallback((incoming, mode) => {
-    const fresh = incoming.filter(m => !knownRef.current.has(m.key))
+    const fresh = incoming.filter(m => { const v = knownRef.current.get(m.key); return v === undefined || (m.editedAt || '') > v })
     if (!fresh.length) return
-    fresh.forEach(m => knownRef.current.add(m.key))
-    scrollModeRef.current = mode
+    const onlyUpdates = fresh.every(m => knownRef.current.has(m.key))
+    fresh.forEach(m => knownRef.current.set(m.key, m.editedAt || ''))
+    scrollModeRef.current = onlyUpdates ? 'stay' : mode
     setHistory(prev => {
       const byKey = new Map(prev.map(m => [m.key, m]))
       fresh.forEach(m => byKey.set(m.key, m))
       return [...byKey.values()].sort((a, b) => new Date(a.time) - new Date(b.time))
     })
     fresh.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
-    if (fresh.some(m => m.role === 'assistant')) setWaiting(false)
-  }, [fetchDurationEstimate])
+    // 沐回了，或者 bridge 说他这轮没回上来，都不用再转三个点；她那条被更正不算
+    if (fresh.some(m => m.role === 'assistant' || m.kind === 'reply_failed')) stopWaiting()
+  }, [fetchDurationEstimate, stopWaiting])
 
   const fetchHistory = useCallback(async (before) => {
-    const qs = new URLSearchParams({ limit: String(CC_PAGE) })
+    const qs = new URLSearchParams({ limit: String(CC_PAGE), system: '1' })
     if (before) qs.set('before', before)
     const res = await apiFetch(`/api/cc/history?${qs}`)
     if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
@@ -3105,7 +3157,7 @@ function CCChatPage({ onBack }) {
       if (line.startsWith('data:')) line = line.slice(5).trim()
       let ev
       try { ev = JSON.parse(line) } catch { return }
-      if (!ev || !ev.id || typeof ev.text !== 'string') return
+      if (!ev || !ev.id || (typeof ev.text !== 'string' && ev.role !== 'system')) return
       mergeHistory([ccFromServer(ev)], 'bottom')
     }
 
@@ -3170,16 +3222,23 @@ function CCChatPage({ onBack }) {
     return () => clearInterval(iv)
   }, [passcode, status])
 
-  // 发送后 60 秒内 SSE 还没送来回复，就算 SSE 显示连着也开始每 5 秒轮询，直到回复出现
+  // 发送后 60 秒内 SSE 还没送来回复，就算 SSE 显示连着也开始每 5 秒轮询，直到回复出现（显示"卡住了"之后也继续）
   useEffect(() => {
-    if (!passcode || !waiting) return
+    if (!passcode || waitSince === null) return
     let iv = null
     const t = setTimeout(() => {
       pollOnceRef.current()
       iv = setInterval(() => pollOnceRef.current(), 5000)
     }, 60000)
     return () => { clearTimeout(t); clearInterval(iv) }
-  }, [passcode, waiting])
+  }, [passcode, waitSince])
+
+  // 兜底超时：等了 CC_STUCK_MS 还没动静就停三个点；回复后来又到了，stopWaiting 会把提示一起撤掉
+  useEffect(() => {
+    if (waitSince === null) return
+    const t = setTimeout(() => setStuck(true), Math.max(waitSince + CC_STUCK_MS - Date.now(), 0))
+    return () => clearTimeout(t)
+  }, [waitSince])
 
   // 打开会话：先把旧的本地发送记录迁到 VPS（只做一次），再拉最近 30 条
   useEffect(() => {
@@ -3211,14 +3270,16 @@ function CCChatPage({ onBack }) {
   }
 
   const messages = useMemo(
-    () => [...history, ...temp].sort((a, b) => new Date(a.time) - new Date(b.time)),
+    () => [...history.filter(m => m.role !== 'system'), ...temp].sort((a, b) => new Date(a.time) - new Date(b.time)),
     [history, temp]
   )
+  const failures = useMemo(() => ccUnresolvedFailures(history), [history])
+  const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
     if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
-    else messagesEndRef.current?.scrollIntoView({ block: 'end' })
+    else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, waiting])
   useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
@@ -3280,48 +3341,106 @@ function CCChatPage({ onBack }) {
     return prev.filter(p => p.key !== key)
   })
 
-  const sendMessage = async () => {
+  // 临时消息自己带着原始附件（items）和 client_id，失败了点一下能原样重发；已经传上去的附件记下 path，重发时不再传
+  const uploadedRef = useRef(new Map()) // 附件 key → 已上传的 path
+  const sendMessage = () => {
     const text = input.trim()
-    const imgs = pending.filter(p => p.kind === 'image')
-    const docs = pending.filter(p => p.kind === 'file')
     if (!text && !pending.length) return
-    const localDocs = docs.map(p => ({ key: p.key, name: p.file.name, size: p.file.size, localUrl: URL.createObjectURL(p.file) }))
+    const items = pending.map(p => p.kind === 'file' ? { ...p, localUrl: URL.createObjectURL(p.file) } : p)
+    const imgs = items.filter(p => p.kind === 'image')
+    const docs = items.filter(p => p.kind === 'file')
     const msg = {
-      key: `me-${Date.now()}`, role: 'user', text, time: new Date().toISOString(),
+      key: `me-${Date.now()}`, local: true, clientId: ccClientId(), items, role: 'user', text, time: new Date().toISOString(),
       ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}),
-      ...(docs.length ? { files: localDocs } : {}),
+      ...(docs.length ? { files: docs.map(p => ({ key: p.key, name: p.file.name, size: p.file.size, localUrl: p.localUrl })) } : {}),
     }
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
     setInput('')
     setPending([])
-    setWaiting(true)
+    deliver(msg)
+  }
+  const deliver = async (msg) => {
+    setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: false } : m))
+    startWaiting()
     try {
       // 一个一个排队传，不并发：后端是整份读进内存再转给 VPS，一起传会把 Render 的内存顶满
-      const paths = []
-      for (const p of imgs) paths.push(await uploadCcImage(p.blob))
-      const filePaths = []
-      for (const p of docs) filePaths.push(await uploadCcFile(p.file))
-      paths.forEach((p, i) => ccImageCache.set(p, imgs[i].previewUrl)) // 刚发的图直接用本地预览，不用再向服务器取
-      filePaths.forEach((p, i) => ccImageCache.set(p, localDocs[i].localUrl))
-      const body = { text, ...(paths.length ? { images: paths } : {}), ...(filePaths.length ? { files: filePaths } : {}) }
+      const sent = []
+      for (const p of msg.items) {
+        let path = uploadedRef.current.get(p.key)
+        if (!path) {
+          path = p.kind === 'image' ? await uploadCcImage(p.blob) : await uploadCcFile(p.file)
+          uploadedRef.current.set(p.key, path)
+          ccImageCache.set(path, p.previewUrl || p.localUrl) // 刚发的直接用本地预览，不用再向服务器取
+        }
+        sent.push({ p, path })
+      }
+      const paths = sent.filter(s => s.p.kind === 'image').map(s => s.path)
+      const files = sent.filter(s => s.p.kind === 'file')
+      const body = { text: msg.text, client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}) }
       const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
       const data = await res.json().catch(() => ({}))
       // 发送成功：临时消息换成服务器记录（SSE 可能已经先推来了，按 id 合并不会重复）
       if (data.id) mergeHistory([{
-        key: data.id, role: 'user', text, time: data.time || msg.time,
+        key: data.id, role: 'user', text: msg.text, time: data.time || msg.time,
         ...(paths.length ? { images: paths.map(path => ({ path })) } : {}),
-        ...(filePaths.length ? { files: filePaths.map((path, i) => ({ path, name: localDocs[i].name, size: localDocs[i].size })) } : {}),
+        ...(files.length ? { files: files.map(s => ({ path: s.path, name: s.p.file.name, size: s.p.file.size })) } : {}),
       }], 'bottom')
+      msg.items.forEach(p => uploadedRef.current.delete(p.key))
       setTemp(prev => prev.filter(m => m.key !== msg.key))
     } catch (err) {
       if (err.message === 'unauthorized') lockOut()
       else if (!/^HTTP \d+$/.test(err.message)) setNotice(err.message)
-      setWaiting(false)
+      stopWaiting()
       setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
     }
+  }
+  const discardFailed = (msg) => {
+    msg.items.forEach(p => { uploadedRef.current.delete(p.key); URL.revokeObjectURL(p.previewUrl || p.localUrl) })
+    setTemp(prev => prev.filter(m => m.key !== msg.key))
+  }
+  // 离开页面时，发送失败的文字放回草稿，不会就这么丢了（图和文件留不住）
+  const tempRef = useRef(temp)
+  useEffect(() => { tempRef.current = temp }, [temp])
+  useEffect(() => () => {
+    const lost = tempRef.current.filter(m => m.failed && m.text).map(m => m.text)
+    if (lost.length) setDraftStorage(CC_SESSION.id, [...lost, getDraft(CC_SESSION.id)].filter(Boolean).join('\n'))
+  }, [])
+
+  // 沐这轮没回上来：把她那条再交给他一次（bridge 不会新增她的消息）
+  const callAgain = async (msg, failure) => {
+    setCalledAgain(prev => new Set(prev).add(failure.key))
+    scrollModeRef.current = 'bottom'
+    startWaiting()
+    try {
+      const res = await apiFetch(`/api/cc/retry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: msg.key }) })
+      if (res.status === 401) return lockOut()
+      if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`) // 409：他已经回了或者已经叫过了
+    } catch {
+      setCalledAgain(prev => { const next = new Set(prev); next.delete(failure.key); return next })
+      stopWaiting()
+      setNotice('没叫到他，等一下再试')
+    }
+  }
+
+  // 更正她发过的文字；成功返回 true，编辑框收起
+  const saveEdit = async (msg, text) => {
+    try {
+      const res = await apiFetch(`/api/cc/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: msg.key, text }) })
+      if (res.status === 401) { lockOut(); return false }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        if (data.message) mergeHistory([ccFromServer(data.message)], 'stay')
+        setEditingKey(null)
+        return true
+      }
+      setNotice(res.status === 404 ? '找不到这条消息了' : '没改成，再试一次')
+    } catch {
+      setNotice('没改成，再试一次')
+    }
+    return false
   }
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
@@ -3341,24 +3460,44 @@ function CCChatPage({ onBack }) {
       <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
-        {messages.map(m => (
+        {messages.map(m => {
+          const failure = failures.get(m.key)
+          const showFailure = failure && !calledAgain.has(failure.key)
+          const editing = editingKey === m.key
+          return (
           <div key={m.key} className={`msg ${m.role}`}>
             {m.role === 'assistant'
               ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
               : <>
                   {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
                   {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
-                  {m.text && <div className="bubble">{m.text}</div>}
+                  {m.text && (editing
+                    ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
+                    : <div className="bubble">{m.text}</div>)}
                 </>}
             <div className="msg-meta">
-              <span className="msg-time">{m.failed ? 'Failed to send' : fmtShortTime(m.time)}</span>
-              {m.text && <CopyButton getText={() => m.role === 'assistant' ? messageCopyText(m.text) : m.text} />}
+              {m.failed
+                ? <>
+                    <button className="cc-note-btn" onClick={() => deliver(m)}>发送失败 · 点一下重发</button>
+                    <button className="copy-btn" onClick={() => discardFailed(m)} aria-label="Delete">{I.close}</button>
+                  </>
+                : <span className="msg-time">{fmtShortTime(m.time)}</span>}
+              {m.editedAt && <span className="msg-time">已编辑</span>}
+              {m.text && !editing && <CopyButton getText={() => m.role === 'assistant' ? messageCopyText(m.text) : m.text} />}
+              {m.role === 'user' && m.text && !m.local && !editing && (
+                <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
+              )}
               {m.role === 'assistant' && hasVoiceSegment(m.text) && (
                 <TranscriptToggle open={!!transcripts[m.key]} onClick={() => setTranscripts(prev => ({ ...prev, [m.key]: !prev[m.key] }))} />
               )}
             </div>
+            {showFailure && (
+              <div className="cc-msg-note">他这次没回上来 · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>再叫他一下</button></div>
+            )}
+            {!showFailure && stuck && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
           </div>
-        ))}
+          )
+        })}
         {waiting && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
         <div ref={messagesEndRef} />
       </div>
