@@ -127,7 +127,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 .chatroom{height:100%;display:flex;flex-direction:column}
 /* Header: use a 3-column grid so the title is always mathematically centered
-   regardless of how many icons sit on the right 鈥� fixes the "looks left-shifted" bug */
+   regardless of how many icons sit on the right — fixes the "looks left-shifted" bug */
 .chatroom-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 8px 8px;gap:4px;background:var(--bg);position:relative}
 .chatroom-header>.icon-btn{justify-self:start}
 .chatroom-title{grid-column:2;text-align:center;min-width:0}
@@ -177,7 +177,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .thinking-trigger:active{opacity:.6}
 .thinking-trigger svg:last-child{color:var(--text-dim)}
 
-/* Thinking Panel 鈥� styled closer to native app: close (X) top-left, title centered, plain readable body text */
+/* Thinking Panel — styled closer to native app: close (X) top-left, title centered, plain readable body text */
 .thinking-panel{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-radius:20px 20px 0 0;z-index:100;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.12);max-width:600px;margin:0 auto}
 .thinking-panel-handle{display:flex;justify-content:center;padding:10px 0 6px;cursor:grab}
 .handle-bar{width:36px;height:4px;border-radius:2px;background:var(--border)}
