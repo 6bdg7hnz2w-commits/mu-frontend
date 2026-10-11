@@ -2892,9 +2892,10 @@ function NookPage({ onBack, onEnterRoom }) {
 // 聊天记录现在存在 VPS（bridge 的 inbox/outbox），前端只在内存里留"发送中/发送失败"的临时消息。
 // 服务器上的一条记录 → 页面上的消息。系统事件（沐那轮没回上来）不画成气泡，只用来在她那条下面挂提示
 function ccFromServer(m) {
-  if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time }
+  const seq = Number.isSafeInteger(m.seq) ? { seq: m.seq } : {}
+  if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
   return {
-    key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time,
+    key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
@@ -2903,15 +2904,20 @@ function ccFromServer(m) {
 // 兜底：发出后这么久没回、也没收到"没回上来"的事件（bridge 挂了之类），就停三个点说"他好像卡住了"。
 // 2026-09-27 ~ 10-10 共 269 次"她发 → 他回"：中位 4 秒，p99 27 秒，最慢 34 秒，取 120 秒
 const CC_STUCK_MS = 120 * 1000
-// 她哪几条"没回上来"还没解决：key → 那个系统事件。之后沐又回过话就都算解决了（history 按时间排好）
+// 她哪几条"没回上来"还没解决：key → 那个系统事件。之后沐又回过话就都算解决了（history 按先后排好）
+// partial：她那条之后、断掉之前他已经说了几句（"话没说完就断了"）
 function ccUnresolvedFailures(history) {
   const out = new Map()
+  let spoke = false
   for (const m of history) {
-    if (m.role === 'assistant') out.clear()
-    else if (m.role === 'system' && m.kind === 'reply_failed' && m.replyTo) out.set(m.replyTo, m)
+    if (m.role === 'user') spoke = false
+    else if (m.role === 'assistant') { out.clear(); spoke = true }
+    else if (m.role === 'system' && m.kind === 'reply_failed' && m.replyTo) out.set(m.replyTo, { ...m, partial: spoke })
   }
   return out
 }
+// 先后：两条都有 bridge 给的序号就比序号（同一秒的几条也排得对），否则比时间（旧记录、发送中的本地消息）
+const ccOrder = (a, b) => (a.seq != null && b.seq != null ? a.seq - b.seq : new Date(a.time) - new Date(b.time))
 // 每条消息一个 client_id，重发时带同一个，bridge 据此去重，沐不会收到两条
 const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
@@ -3061,6 +3067,15 @@ function CCChatPage({ onBack }) {
   const waiting = waitSince !== null && !stuck
   const startWaiting = () => { setWaitSince(Date.now()); setStuck(false) }
   const stopWaiting = useCallback(() => { setWaitSince(null); setStuck(false) }, [])
+  // bridge 推的"正在输入"：{ on, reason }；null = 还没收到（旧 bridge 不推），只靠上面本地的 waiting
+  // 亮着就显示三个点；它说灭了：这一轮结束（[SILENT] 收尾也算）就停止等待，3 分钟没动静（timeout）就提示卡住
+  const [serverTyping, setServerTyping] = useState(null)
+  const onTyping = useCallback((ev) => {
+    setServerTyping({ on: !!ev.on, reason: ev.reason || null })
+    if (ev.on) return
+    if (ev.reason === 'timeout') { setWaitSince(null); setStuck(true) } else stopWaiting()
+  }, [stopWaiting])
+  const typingNow = waiting || !!serverTyping?.on
   const [editingKey, setEditingKey] = useState(null) // 正在原地改的那条
   const [calledAgain, setCalledAgain] = useState(() => new Set()) // 点过"再叫他一下"的 reply_failed 事件
   const [input, setInput] = useState(() => getDraft(CC_SESSION.id)) // 没发出去的字留作草稿，下次进来还在
@@ -3097,7 +3112,7 @@ function CCChatPage({ onBack }) {
     setHistory(prev => {
       const byKey = new Map(prev.map(m => [m.key, m]))
       fresh.forEach(m => byKey.set(m.key, m))
-      return [...byKey.values()].sort((a, b) => new Date(a.time) - new Date(b.time))
+      return [...byKey.values()].sort(ccOrder)
     })
     fresh.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
     // 沐回了，或者 bridge 说他这轮没回上来，都不用再转三个点；她那条被更正不算
@@ -3140,6 +3155,7 @@ function CCChatPage({ onBack }) {
       if (line.startsWith('data:')) line = line.slice(5).trim()
       let ev
       try { ev = JSON.parse(line) } catch { return }
+      if (ev && ev.type === 'typing') return onTyping(ev)
       if (!ev || !ev.id || (typeof ev.text !== 'string' && ev.role !== 'system')) return
       mergeHistory([ccFromServer(ev)], 'bottom')
     }
@@ -3196,7 +3212,7 @@ function CCChatPage({ onBack }) {
       window.removeEventListener('online', wake)
       window.removeEventListener('pageshow', onVisible)
     }
-  }, [passcode, mergeHistory])
+  }, [passcode, mergeHistory, onTyping])
 
   // SSE 没连上（连接中/断线）时每 5 秒轮询一次历史，连上后停止
   useEffect(() => {
@@ -3252,7 +3268,7 @@ function CCChatPage({ onBack }) {
   }
 
   const messages = useMemo(
-    () => [...history.filter(m => m.role !== 'system'), ...temp].sort((a, b) => new Date(a.time) - new Date(b.time)),
+    () => [...history.filter(m => m.role !== 'system'), ...temp].sort(ccOrder),
     [history, temp]
   )
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
@@ -3262,7 +3278,7 @@ function CCChatPage({ onBack }) {
     if (!el) return
     if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
     else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, waiting])
+  }, [messages, typingNow])
   useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
   // 文件白名单：拿不到就不让选文件，发图不受影响
@@ -3359,14 +3375,14 @@ function CCChatPage({ onBack }) {
       }
       const paths = sent.filter(s => s.p.kind === 'image').map(s => s.path)
       const files = sent.filter(s => s.p.kind === 'file')
-      const body = { text: msg.text, client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}) }
+      const body = { text: msg.text, kind: 'chat', client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}) }
       const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
       const data = await res.json().catch(() => ({}))
       // 发送成功：临时消息换成服务器记录（SSE 可能已经先推来了，按 id 合并不会重复）
       if (data.id) mergeHistory([{
-        key: data.id, role: 'user', text: msg.text, time: data.time || msg.time,
+        key: data.id, role: 'user', text: msg.text, time: data.time || msg.time, ...(Number.isSafeInteger(data.seq) ? { seq: data.seq } : {}),
         ...(paths.length ? { images: paths.map(path => ({ path })) } : {}),
         ...(files.length ? { files: files.map(s => ({ path: s.path, name: s.p.file.name, size: s.p.file.size })) } : {}),
       }], 'bottom')
@@ -3474,13 +3490,13 @@ function CCChatPage({ onBack }) {
               )}
             </div>
             {showFailure && (
-              <div className="cc-msg-note">他这次没回上来 · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>再叫他一下</button></div>
+              <div className="cc-msg-note">{failure.partial ? '话没说完就断了' : '他这次没回上来'} · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>再叫他一下</button></div>
             )}
-            {!showFailure && stuck && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
+            {!showFailure && stuck && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
           </div>
           )
         })}
-        {waiting && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
+        {typingNow && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
         <div ref={messagesEndRef} />
       </div>
 
