@@ -11,6 +11,7 @@ input,textarea { -webkit-user-select:text;user-select:text }
   --event-dot:#8aa0b2;--today-dot:rgba(255,255,255,.75);
   --health-card-bg:#f5f0ea;--health-card-bg2:#f0ece6;
   --pinned-bg:#ebe8e1;
+  --cc-user-bg:#ece9e1;
   color-scheme:light dark;
 }
 
@@ -22,6 +23,7 @@ input,textarea { -webkit-user-select:text;user-select:text }
     --bubble-user:#333;--bubble-assistant:#2a2420;
     --health-card-bg:#2a2420;--health-card-bg2:#252220;
     --pinned-bg:#2a2a2a;
+    --cc-user-bg:#2c2b28;
     --period-light:#302020;--predicted:#5a3540;
     /* 深色模式下"今天"那格是浅底，白点看不见，换成深色半透明 */
     --event-dot:#6f8597;--today-dot:rgba(15,15,15,.6);
@@ -666,3 +668,31 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .md-table{border-collapse:collapse;font-size:14px}
 .md-table th,.md-table td{border:1px solid var(--border);padding:5px 9px;text-align:left;vertical-align:top}
 .md-table th{font-weight:600;background:var(--code-bg)}
+
+/* ─── 沐 (CC)：照 claude.ai 的样子。他的回复不要气泡，同一轮合成一块铺满宽度；她的消息右侧圆角浅底 ─── */
+.cc-room .msg{margin-bottom:14px}
+.cc-room .msg.user .bubble{background:var(--cc-user-bg);border-radius:18px;max-width:85%;padding:9px 14px}
+.cc-turn{align-items:stretch}
+.cc-turn-body{width:100%;min-width:0;font-size:15.5px;line-height:1.65;color:var(--text);padding:2px 2px 0}
+.cc-turn-body,.cc-turn-body *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.cc-turn-body .md-pre-head,.cc-turn-body .md-pre-head *,.cc-turn-body .voice-bar,.cc-turn-body .voice-bar *,.cc-turn-body button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.cc-piece+.cc-piece{margin-top:.8em}
+.cc-md{white-space:normal;overflow-wrap:break-word;min-width:0}
+.cc-md>*+*{margin-top:.8em}
+.cc-md .md-pre{width:100%}
+.cc-turn-body .msg-seg+.msg-seg{margin-top:.8em}
+.cc-late{font-size:11px;color:var(--text-dim);margin-top:2px}
+.cc-turn .msg-meta{padding:0;margin-top:4px}
+/* 新到的字从上往下淡入：遮罩是 3 倍高的渐变，从底部（全透明）挪到顶部（全显示）；字早就在页面里，只是一层遮罩 */
+.cc-reveal{-webkit-mask-image:linear-gradient(to bottom,#000 34%,transparent 66%);mask-image:linear-gradient(to bottom,#000 34%,transparent 66%);-webkit-mask-size:100% 300%;mask-size:100% 300%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:ccReveal var(--cc-reveal-ms,700ms) cubic-bezier(.33,.15,.4,1) both}
+@keyframes ccReveal{from{-webkit-mask-position:0 100%;mask-position:0 100%;opacity:.2}to{-webkit-mask-position:0 0;mask-position:0 0;opacity:1}}
+/* 正在输入：不要气泡，三个小点轻轻明暗 */
+.cc-typing{flex-direction:row;align-items:center;gap:5px;padding:6px 2px;width:auto}
+.cc-typing-dot{width:6px;height:6px;border-radius:50%;background:var(--text-secondary);opacity:.35;animation:ccPulse 1.2s ease-in-out infinite}
+.cc-typing-dot:nth-child(2){animation-delay:.2s}
+.cc-typing-dot:nth-child(3){animation-delay:.4s}
+@keyframes ccPulse{0%,100%{opacity:.25}40%{opacity:.85}}
+@media(prefers-reduced-motion:reduce){
+  .cc-reveal{animation:none;-webkit-mask-image:none;mask-image:none}
+  .cc-typing-dot{animation:none;opacity:.6}
+}
