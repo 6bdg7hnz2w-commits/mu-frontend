@@ -683,16 +683,17 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-turn-body .msg-seg+.msg-seg{margin-top:.8em}
 .cc-late{font-size:11px;color:var(--text-dim);margin-top:2px}
 .cc-turn .msg-meta{padding:0;margin-top:4px}
-/* 新到的字从上往下淡入：遮罩是 3 倍高的渐变，从底部（全透明）挪到顶部（全显示）；字早就在页面里，只是一层遮罩 */
-.cc-reveal{-webkit-mask-image:linear-gradient(to bottom,#000 34%,transparent 66%);mask-image:linear-gradient(to bottom,#000 34%,transparent 66%);-webkit-mask-size:100% 300%;mask-size:100% 300%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:ccReveal var(--cc-reveal-ms,700ms) cubic-bezier(.33,.15,.4,1) both}
-@keyframes ccReveal{from{-webkit-mask-position:0 100%;mask-position:0 100%;opacity:.2}to{-webkit-mask-position:0 0;mask-position:0 0;opacity:1}}
+/* 新到的段落整段淡入：只改透明度，不遮罩、不位移；字早就在页面里 */
+.cc-reveal{animation:ccFade var(--cc-reveal-ms,400ms) ease-out both}
+@keyframes ccFade{from{opacity:0}to{opacity:1}}
 /* 正在输入：不要气泡，三个小点轻轻明暗 */
 .cc-typing{flex-direction:row;align-items:center;gap:5px;padding:6px 2px;width:auto}
+.cc-typing-inline{display:flex;padding:8px 0 2px}
 .cc-typing-dot{width:6px;height:6px;border-radius:50%;background:var(--text-secondary);opacity:.35;animation:ccPulse 1.2s ease-in-out infinite}
 .cc-typing-dot:nth-child(2){animation-delay:.2s}
 .cc-typing-dot:nth-child(3){animation-delay:.4s}
 @keyframes ccPulse{0%,100%{opacity:.25}40%{opacity:.85}}
 @media(prefers-reduced-motion:reduce){
-  .cc-reveal{animation:none;-webkit-mask-image:none;mask-image:none}
+  .cc-reveal{animation:none}
   .cc-typing-dot{animation:none;opacity:.6}
 }

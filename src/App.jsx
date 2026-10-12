@@ -2946,16 +2946,14 @@ function ccRows(messages) {
   return rows
 }
 
-// 他边写边到的新内容淡入：从上往下慢慢显出来。字是一到就完整写进页面的（能复制、能长按选字），动画只是一层遮罩。
-// 时长按字数算：每字 CC_REVEAL_MS_PER_CHAR，最短 CC_REVEAL_MIN_MS、最长 CC_REVEAL_MAX_MS。想快一点就把这几个数调小
-const CC_REVEAL_MS_PER_CHAR = 18
-const CC_REVEAL_MIN_MS = 350
-const CC_REVEAL_MAX_MS = 1500
+// 他边写边到的新段落：整段从透明渐变到完全显示，不遮罩、不位移、不逐字。字是一到就完整写进页面的（能复制、能长按选字），
+// 动画只改透明度。时长固定 CC_REVEAL_MS，想快想慢改这个数
+const CC_REVEAL_MS = 400
 const ccRevealed = new Set() // 已经浮现过的：块重新挂载（前面插进来补上的话）时不再播一遍
 const ccReduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 function CcPiece({ m, player, showTranscript }) {
   const [anim, setAnim] = useState(() => !!m.live && !ccRevealed.has(m.key) && !ccReduceMotion())
-  const ms = useMemo(() => Math.min(CC_REVEAL_MAX_MS, Math.max(CC_REVEAL_MIN_MS, [...m.text].length * CC_REVEAL_MS_PER_CHAR)), [m.text])
+  const ms = CC_REVEAL_MS
   useEffect(() => {
     ccRevealed.add(m.key)
     if (!anim) return
@@ -3123,7 +3121,9 @@ function CCChatPage({ onBack }) {
   // 亮着就显示三个点；它说灭了：这一轮结束（[SILENT] 收尾也算）就停止等待，3 分钟没动静（timeout）就提示卡住
   const [serverTyping, setServerTyping] = useState(null)
   const onTyping = useCallback((ev) => {
-    setServerTyping({ on: !!ev.on, reason: ev.reason || null })
+    // at：这次开始"正在输入"的时刻，用 bridge 给的 since（和他每段话的时间是同一个钟），刷新后也对得上
+    const since = Date.parse(ev.since)
+    setServerTyping(prev => ({ on: !!ev.on, reason: ev.reason || null, at: ev.on ? (Number.isFinite(since) ? since : prev?.on ? prev.at : Date.now()) : null }))
     if (ev.on) return
     if (ev.reason === 'timeout') { setWaitSince(null); setStuck(true) } else stopWaiting()
   }, [stopWaiting])
@@ -3327,6 +3327,11 @@ function CCChatPage({ onBack }) {
     [history, temp]
   )
   const rows = useMemo(() => ccRows(messages), [messages])
+  // 正在说的那一块：还亮着"正在输入"，而且列表最后一行就是他的一块（她发完还没回时最后一行是她的，三个点单独一行）
+  // 再加一道保险：这块的第一段得是"正在输入"亮起之后才到的，免得把上一轮已经说完的那块当成正在说
+  const lastRow = rows[rows.length - 1]
+  const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
+  const liveTurnKey = typingNow && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -3517,6 +3522,8 @@ function CCChatPage({ onBack }) {
         {rows.map(row => {
           if (row.turn) {
             // 他的一轮：几段合成一块，没有气泡；时间、复制整块、转文字放在块下面
+            // 还在说（服务器的"正在输入"亮着、这是最后一块）：不显示操作行，三个点跟在这块最后面
+            const live = liveTurnKey === row.key
             const items = row.items
             const last = items[items.length - 1]
             const voiced = items.some(it => hasVoiceSegment(it.text))
@@ -3525,12 +3532,15 @@ function CCChatPage({ onBack }) {
               <div key={row.key} className="msg assistant cc-turn">
                 <div className="cc-turn-body">
                   {items.map(it => <CcPiece key={it.key} m={it} player={voice} showTranscript={open} />)}
+                  {live && <div className="cc-typing cc-typing-inline" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
                 </div>
-                <div className="msg-meta">
-                  <span className="msg-time">{fmtShortTime(last.time)}</span>
-                  <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
-                  {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
-                </div>
+                {!live && (
+                  <div className="msg-meta">
+                    <span className="msg-time">{fmtShortTime(last.time)}</span>
+                    <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
+                    {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
+                  </div>
+                )}
               </div>
             )
           }
@@ -3565,7 +3575,7 @@ function CCChatPage({ onBack }) {
           </div>
           )
         })}
-        {typingNow && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
+        {typingNow && !liveTurnKey && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
         <div ref={messagesEndRef} />
       </div>
 
