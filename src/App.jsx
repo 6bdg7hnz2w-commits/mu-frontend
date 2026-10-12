@@ -855,6 +855,27 @@ function CodeBlock({ lang, code }) {
     </div>
   )
 }
+// 一个 Markdown 块（段落、代码、标题、列表、引用、表格）
+function mdBlockEl(b, i) {
+  if (b.t === 'code') return <CodeBlock key={i} lang={b.lang} code={b.code} />
+  if (b.t === 'h') return <div key={i} className={`md-h md-h${Math.min(b.level, 3)}`}>{mdInline(b.text, i)}</div>
+  if (b.t === 'hr') return <hr key={i} className="md-hr" />
+  if (b.t === 'quote') return <div key={i} className="md-quote">{mdInline(b.text, i)}</div>
+  if (b.t === 'list') return (
+    <div key={i} className="md-list">
+      {b.items.map((it, j) => <div key={j} className="md-li" style={it.depth ? { paddingLeft: `${it.depth * 1.2}em` } : undefined}><span className="md-bullet">{it.marker}</span><span className="md-li-text">{mdInline(it.text, `${i}-${j}`)}</span></div>)}
+    </div>
+  )
+  if (b.t === 'table') return (
+    <div key={i} className="md-table-wrap">
+      <table className="md-table">
+        <thead><tr>{b.head.map((c, j) => <th key={j}>{mdInline(c, `${i}-h${j}`)}</th>)}</tr></thead>
+        <tbody>{b.rows.map((r, ri) => <tr key={ri}>{b.head.map((_, j) => <td key={j}>{mdInline(r[j] || '', `${i}-${ri}-${j}`)}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  )
+  return <div key={i} className="md-p">{mdInline(b.text, i)}</div>
+}
 // 助手消息的文字气泡：按 Markdown 渲染；有代码块或表格时气泡放宽，免得太窄
 function MdBubble({ text, className = '' }) {
   const blocks = useMemo(() => mdBlocks(text), [text])
@@ -864,41 +885,23 @@ function MdBubble({ text, className = '' }) {
   if (blocks.length > 1 && blocks.every(b => b.t === 'p')) {
     return blocks.map((b, i) => <div key={i} className={`bubble md ${className}`}><div className="md-p">{mdInline(b.text, i)}</div></div>)
   }
-  return (
-    <div className={`bubble md ${wide ? 'wide' : ''} ${className}`}>
-      {blocks.map((b, i) => {
-        if (b.t === 'code') return <CodeBlock key={i} lang={b.lang} code={b.code} />
-        if (b.t === 'h') return <div key={i} className={`md-h md-h${Math.min(b.level, 3)}`}>{mdInline(b.text, i)}</div>
-        if (b.t === 'hr') return <hr key={i} className="md-hr" />
-        if (b.t === 'quote') return <div key={i} className="md-quote">{mdInline(b.text, i)}</div>
-        if (b.t === 'list') return (
-          <div key={i} className="md-list">
-            {b.items.map((it, j) => <div key={j} className="md-li" style={it.depth ? { paddingLeft: `${it.depth * 1.2}em` } : undefined}><span className="md-bullet">{it.marker}</span><span className="md-li-text">{mdInline(it.text, `${i}-${j}`)}</span></div>)}
-          </div>
-        )
-        if (b.t === 'table') return (
-          <div key={i} className="md-table-wrap">
-            <table className="md-table">
-              <thead><tr>{b.head.map((c, j) => <th key={j}>{mdInline(c, `${i}-h${j}`)}</th>)}</tr></thead>
-              <tbody>{b.rows.map((r, ri) => <tr key={ri}>{b.head.map((_, j) => <td key={j}>{mdInline(r[j] || '', `${i}-${ri}-${j}`)}</td>)}</tr>)}</tbody>
-            </table>
-          </div>
-        )
-        return <div key={i} className="md-p">{mdInline(b.text, i)}</div>
-      })}
-    </div>
-  )
+  return <div className={`bubble md ${wide ? 'wide' : ''} ${className}`}>{blocks.map(mdBlockEl)}</div>
+}
+// 沐 (CC) 的回复：不要气泡，照 claude.ai 助手回答的样子，纯文字铺满宽度
+function MdFlat({ text, className = '' }) {
+  const blocks = useMemo(() => mdBlocks(text), [text])
+  return <div className={`cc-md ${className}`}>{blocks.map(mdBlockEl)}</div>
 }
 
 function TranscriptToggle({ open, onClick }) {
   return <button className="voice-transcript-btn" onClick={onClick}>{open ? '收起' : '转文字'}</button>
 }
 
-function VoiceAwareContent({ raw, msgKey, player, showTranscript }) {
+function VoiceAwareContent({ raw, msgKey, player, showTranscript, flat = false }) {
   const segs = useMemo(() => parseVoiceSegments(raw), [raw])
   const { ttsState, ttsDurations, toggleTts, seekTts } = player
   return segs.map((seg, si) => {
-    if (seg.type === 'text') return <MdBubble key={si} className="msg-seg" text={seg.text} />
+    if (seg.type === 'text') return flat ? <MdFlat key={si} className="msg-seg" text={seg.text} /> : <MdBubble key={si} className="msg-seg" text={seg.text} />
     const key = `${msgKey}:${si}`
     return (
       <div key={si} className="msg-seg">
@@ -2897,6 +2900,7 @@ function ccFromServer(m) {
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
     ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
+    ...(typeof m.pid === 'string' ? { pid: m.pid } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
@@ -2921,6 +2925,51 @@ function ccUnresolvedFailures(history) {
 // 晚到、补上的话带 displayBefore：排在那个序号那条的前面（几条补在同一处时按各自序号排）
 const ccPos = m => (m.displayBefore != null ? m.displayBefore - 0.5 : m.seq)
 const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq) : new Date(a.time) - new Date(b.time))
+// 他同一轮（bridge 给的 pid）里的几段话合成一块显示；没有 pid 的旧记录，挨着的、前后不超过 3 分钟的算一轮
+const CC_TURN_GAP_MS = 3 * 60 * 1000
+function ccRows(messages) {
+  const rows = []
+  const seen = new Map() // pid → 出现过几块（同一轮被她的消息隔开时，块的 key 不撞）
+  for (const m of messages) {
+    const prev = rows[rows.length - 1]
+    if (m.role === 'assistant' && prev?.turn) {
+      const last = prev.items[prev.items.length - 1]
+      const same = m.pid || last.pid ? m.pid === last.pid : Math.abs(new Date(m.time) - new Date(last.time)) <= CC_TURN_GAP_MS
+      if (same) { prev.items.push(m); continue }
+    }
+    if (m.role === 'assistant') {
+      const n = m.pid ? (seen.get(m.pid) || 0) : 0
+      if (m.pid) seen.set(m.pid, n + 1)
+      rows.push({ turn: true, key: m.pid ? `turn-${m.pid}-${n}` : `turn-${m.key}`, items: [m] })
+    } else rows.push({ turn: false, key: m.key, m })
+  }
+  return rows
+}
+
+// 他边写边到的新内容淡入：从上往下慢慢显出来。字是一到就完整写进页面的（能复制、能长按选字），动画只是一层遮罩。
+// 时长按字数算：每字 CC_REVEAL_MS_PER_CHAR，最短 CC_REVEAL_MIN_MS、最长 CC_REVEAL_MAX_MS。想快一点就把这几个数调小
+const CC_REVEAL_MS_PER_CHAR = 18
+const CC_REVEAL_MIN_MS = 350
+const CC_REVEAL_MAX_MS = 1500
+const ccRevealed = new Set() // 已经浮现过的：块重新挂载（前面插进来补上的话）时不再播一遍
+const ccReduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+function CcPiece({ m, player, showTranscript }) {
+  const [anim, setAnim] = useState(() => !!m.live && !ccRevealed.has(m.key) && !ccReduceMotion())
+  const ms = useMemo(() => Math.min(CC_REVEAL_MAX_MS, Math.max(CC_REVEAL_MIN_MS, [...m.text].length * CC_REVEAL_MS_PER_CHAR)), [m.text])
+  useEffect(() => {
+    ccRevealed.add(m.key)
+    if (!anim) return
+    const t = setTimeout(() => setAnim(false), ms + 300) // 动画事件没来（切走页面之类）也一定去掉遮罩
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className={`cc-piece${anim ? ' cc-reveal' : ''}`} style={anim ? { '--cc-reveal-ms': `${ms}ms` } : undefined} onAnimationEnd={e => { if (e.target === e.currentTarget) setAnim(false) }}>
+      <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat />
+      {m.late && <div className="cc-late">补上的</div>}
+    </div>
+  )
+}
+
 // 每条消息一个 client_id，重发时带同一个，bridge 据此去重，沐不会收到两条
 const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
@@ -3160,7 +3209,10 @@ function CCChatPage({ onBack }) {
       try { ev = JSON.parse(line) } catch { return }
       if (ev && ev.type === 'typing') return onTyping(ev)
       if (!ev || !ev.id || (typeof ev.text !== 'string' && ev.role !== 'system')) return
-      mergeHistory([ccFromServer(ev)], 'bottom')
+      const m = ccFromServer(ev)
+      // 实时新到的他的话才浮现；补上的、她自己的、切到后台时到的都直接显示
+      if (m.role === 'assistant' && !m.late && document.visibilityState === 'visible') m.live = true
+      mergeHistory([m], 'bottom')
     }
 
     const connect = async () => {
@@ -3274,6 +3326,7 @@ function CCChatPage({ onBack }) {
     () => [...history.filter(m => m.role !== 'system'), ...temp].sort(ccOrder),
     [history, temp]
   )
+  const rows = useMemo(() => ccRows(messages), [messages])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -3461,21 +3514,37 @@ function CCChatPage({ onBack }) {
       <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
-        {messages.map(m => {
+        {rows.map(row => {
+          if (row.turn) {
+            // 他的一轮：几段合成一块，没有气泡；时间、复制整块、转文字放在块下面
+            const items = row.items
+            const last = items[items.length - 1]
+            const voiced = items.some(it => hasVoiceSegment(it.text))
+            const open = !!transcripts[row.key]
+            return (
+              <div key={row.key} className="msg assistant cc-turn">
+                <div className="cc-turn-body">
+                  {items.map(it => <CcPiece key={it.key} m={it} player={voice} showTranscript={open} />)}
+                </div>
+                <div className="msg-meta">
+                  <span className="msg-time">{fmtShortTime(last.time)}</span>
+                  <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
+                  {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
+                </div>
+              </div>
+            )
+          }
+          const m = row.m
           const failure = failures.get(m.key)
           const showFailure = failure && !calledAgain.has(failure.key)
           const editing = editingKey === m.key
           return (
           <div key={m.key} className={`msg ${m.role}`}>
-            {m.role === 'assistant'
-              ? <VoiceAwareContent raw={m.text} msgKey={m.key} player={voice} showTranscript={!!transcripts[m.key]} />
-              : <>
-                  {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
-                  {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
-                  {m.text && (editing
-                    ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
-                    : <div className="bubble">{m.text}</div>)}
-                </>}
+            {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
+            {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
+            {m.text && (editing
+              ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
+              : <div className="bubble">{m.text}</div>)}
             <div className="msg-meta">
               {m.failed
                 ? <>
@@ -3484,13 +3553,9 @@ function CCChatPage({ onBack }) {
                   </>
                 : <span className="msg-time">{fmtShortTime(m.time)}</span>}
               {m.editedAt && <span className="msg-time">已编辑</span>}
-              {m.late && <span className="msg-time">补上的</span>}
-              {m.text && !editing && <CopyButton getText={() => m.role === 'assistant' ? messageCopyText(m.text) : m.text} />}
-              {m.role === 'user' && m.text && !m.local && !editing && (
+              {m.text && !editing && <CopyButton getText={() => m.text} />}
+              {m.text && !m.local && !editing && (
                 <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
-              )}
-              {m.role === 'assistant' && hasVoiceSegment(m.text) && (
-                <TranscriptToggle open={!!transcripts[m.key]} onClick={() => setTranscripts(prev => ({ ...prev, [m.key]: !prev[m.key] }))} />
               )}
             </div>
             {showFailure && (
@@ -3500,7 +3565,7 @@ function CCChatPage({ onBack }) {
           </div>
           )
         })}
-        {typingNow && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
+        {typingNow && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
         <div ref={messagesEndRef} />
       </div>
 
