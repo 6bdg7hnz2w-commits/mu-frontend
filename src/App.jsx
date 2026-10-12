@@ -2896,6 +2896,7 @@ function ccFromServer(m) {
   if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
+    ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
@@ -2917,7 +2918,9 @@ function ccUnresolvedFailures(history) {
   return out
 }
 // 先后：两条都有 bridge 给的序号就比序号（同一秒的几条也排得对），否则比时间（旧记录、发送中的本地消息）
-const ccOrder = (a, b) => (a.seq != null && b.seq != null ? a.seq - b.seq : new Date(a.time) - new Date(b.time))
+// 晚到、补上的话带 displayBefore：排在那个序号那条的前面（几条补在同一处时按各自序号排）
+const ccPos = m => (m.displayBefore != null ? m.displayBefore - 0.5 : m.seq)
+const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq) : new Date(a.time) - new Date(b.time))
 // 每条消息一个 client_id，重发时带同一个，bridge 据此去重，沐不会收到两条
 const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
@@ -3481,6 +3484,7 @@ function CCChatPage({ onBack }) {
                   </>
                 : <span className="msg-time">{fmtShortTime(m.time)}</span>}
               {m.editedAt && <span className="msg-time">已编辑</span>}
+              {m.late && <span className="msg-time">补上的</span>}
               {m.text && !editing && <CopyButton getText={() => m.role === 'assistant' ? messageCopyText(m.text) : m.text} />}
               {m.role === 'user' && m.text && !m.local && !editing && (
                 <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
