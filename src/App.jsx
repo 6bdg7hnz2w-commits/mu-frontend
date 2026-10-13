@@ -755,9 +755,9 @@ function CopyButton({ getText, className = 'copy-btn', label }) {
   }
   return <button className={className} onClick={onClick} aria-label="Copy">{done ? I.check : I.copy}{label && <span>{done ? 'Copied' : label}</span>}</button>
 }
-// 一条消息复制出去的文字：去掉 <voice> 标签，语音段留原文
+// 一条消息复制出去的文字：去掉 <voice> 标签，语音段留说的话（方括号音频标签也去掉）
 function messageCopyText(raw) {
-  return parseVoiceSegments(raw).map(seg => seg.text).join('\n\n')
+  return parseVoiceSegments(raw).map(seg => seg.type === 'voice' ? stripAudioTags(seg.text) : seg.text).join('\n\n')
 }
 
 // ─── Markdown（不引依赖，只做聊天里用得到的那部分）──
