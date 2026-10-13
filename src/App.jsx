@@ -2902,6 +2902,7 @@ function ccFromServer(m) {
     ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
     ...(typeof m.pid === 'string' ? { pid: m.pid } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
+    ...(m.via === 'app' ? { viaApp: true } : {}), // 她在官方 Claude App（Remote Control）里直接跟他说的，bridge 认出来补记的
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
   }
@@ -3563,8 +3564,9 @@ function CCChatPage({ onBack }) {
                   </>
                 : <span className="msg-time">{fmtShortTime(m.time)}</span>}
               {m.editedAt && <span className="msg-time">已编辑</span>}
+              {m.viaApp && <span className="msg-time">来自 Claude App</span>}
               {m.text && !editing && <CopyButton getText={() => m.text} />}
-              {m.text && !m.local && !editing && (
+              {m.text && !m.local && !m.viaApp && !editing && (
                 <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
               )}
             </div>
