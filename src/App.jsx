@@ -715,6 +715,10 @@ function parseVoiceSegments(raw) {
   pushText(raw.slice(last))
   return segs
 }
+// 转文字只显示说的话：[softly]、[sighs] 这类音频标签是给 ElevenLabs 的，不给人看
+function stripAudioTags(text) {
+  return text.replace(/\[[^\]\n]*\]\s*/g, '').replace(/[ \t]{2,}/g, ' ').trim()
+}
 function hasVoiceSegment(raw) {
   return parseVoiceSegments(raw).some(seg => seg.type === 'voice')
 }
@@ -1002,7 +1006,7 @@ function VoiceMessage({ status, progress, duration, text, zh, showText, onToggle
       </div>
       {showText && (
         <div className="bubble voice-transcript">
-          <div>{text}</div>
+          <div>{stripAudioTags(text)}</div>
           {zh && <div className="voice-transcript-zh">{zh}</div>}
         </div>
       )}
