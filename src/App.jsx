@@ -1446,11 +1446,7 @@ function ChatRoom({ session, onBack }) {
         </div>
       </div>
 
-      {lightboxImage && (
-        <div className="image-lightbox-overlay" onClick={() => setLightboxImage(null)}>
-          <img src={lightboxImage} alt="" />
-        </div>
-      )}
+      {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
       {thinkingText && <ThinkingPanel text={thinkingText} onClose={() => setThinkingText(null)} />}
       {showAvatarUpload && <AvatarUploadModal sessionId={session.id} onClose={() => setShowAvatarUpload(false)} />}
     </div>
@@ -3089,6 +3085,31 @@ function CcFile({ file }) {
 }
 
 // 聊天里自己发的图：刚发的用本地预览，刷新后的历史按 path 向后端取；bridge 只留 7 天，过期了显示占位
+// 点开的大图：右上角三个点 → 苹果原生分享面板（里面有"存储图像"），原图原画质
+// 分享必须在点击的那一下同步调用（iOS 会拦掉异步之后的调用），所以一打开就先把图读成 File
+const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif' }
+function ImageLightbox({ src, onClose }) {
+  const [file, setFile] = useState(null)
+  useEffect(() => {
+    let alive = true
+    fetch(src).then(r => r.blob()).then(b => {
+      const f = new File([b], `mu-${Date.now()}.${LIGHTBOX_EXT[b.type] || 'jpg'}`, { type: b.type || 'image/jpeg' })
+      if (alive && navigator.canShare?.({ files: [f] })) setFile(f)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [src])
+  const share = (e) => {
+    e.stopPropagation()
+    navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
+  }
+  return (
+    <div className="image-lightbox-overlay" onClick={onClose}>
+      {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label="分享或存储图像">{I.more}</button>}
+      <img src={src} alt="" />
+    </div>
+  )
+}
+
 function CcImage({ img, onOpen }) {
   const [url, setUrl] = useState(img.localUrl || (img.path && ccImageCache.get(img.path)) || null)
   const [failed, setFailed] = useState(false)
@@ -3628,11 +3649,7 @@ function CCChatPage({ onBack }) {
         </div>
       </div>
 
-      {lightboxImage && (
-        <div className="image-lightbox-overlay" onClick={() => setLightboxImage(null)}>
-          <img src={lightboxImage} alt="" />
-        </div>
-      )}
+      {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
 
     </div>
   )
