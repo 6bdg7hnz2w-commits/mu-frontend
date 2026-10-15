@@ -235,6 +235,17 @@ function daysBetween(a, b) { return Math.floor((b - a) / (1000 * 60 * 60 * 24)) 
 function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24)) }
 
 function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
+// 聊天消息的时间：今天 21:30；昨天 Yesterday；2–6 天前 星期几（Monday）；更早 日期（10/9，跨年带年份）。按日历天算，不按 24 小时
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+function fmtMsgTime(t) {
+  if (!t) return ''
+  const d = new Date(t), now = new Date()
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000)
+  if (days <= 0) return fmtShortTime(t)
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return WEEKDAYS[d.getDay()]
+  return d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
 function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
 
 // ─── Icons ──────────────────────────────────────────
@@ -1415,7 +1426,7 @@ function ChatRoom({ session, onBack }) {
               </div>
             )}
             <div className="msg-meta">
-              <span className="msg-time">{fmtShortTime(m.created_at)}</span>
+              <span className="msg-time">{fmtMsgTime(m.created_at)}</span>
               {(() => { const t = m.role === 'assistant' ? messageCopyText(cleanAssistantText(m.content)) : parseImageContent(m.content).text; return t ? <CopyButton getText={() => t} /> : null })()}
               {m.role === 'assistant' && hasVoiceSegment(cleanAssistantText(m.content)) && (
                 <TranscriptToggle open={!!transcripts[i]} onClick={() => setTranscripts(prev => ({ ...prev, [i]: !prev[i] }))} />
@@ -3586,7 +3597,7 @@ function CCChatPage({ onBack }) {
                 </div>
                 {!live && (
                   <div className="msg-meta">
-                    <span className="msg-time">{fmtShortTime(last.time)}</span>
+                    <span className="msg-time">{fmtMsgTime(last.time)}</span>
                     <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
                     {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
                   </div>
@@ -3611,7 +3622,7 @@ function CCChatPage({ onBack }) {
                     <button className="cc-note-btn" onClick={() => deliver(m)}>发送失败 · 点一下重发</button>
                     <button className="copy-btn" onClick={() => discardFailed(m)} aria-label="Delete">{I.close}</button>
                   </>
-                : <span className="msg-time">{fmtShortTime(m.time)}</span>}
+                : <span className="msg-time">{fmtMsgTime(m.time)}</span>}
               {m.editedAt && <span className="msg-time">已编辑</span>}
               {m.viaApp && <span className="msg-time">来自 Claude App</span>}
               {m.text && !editing && <CopyButton getText={() => m.text} />}
