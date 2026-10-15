@@ -3133,6 +3133,12 @@ function CCChatPage({ onBack }) {
     if (ev.reason === 'timeout') { setWaitSince(null); setStuck(true) } else stopWaiting()
   }, [stopWaiting])
   const typingNow = waiting || !!serverTyping?.on
+  // bridge 推的"正在压缩"：压缩期间她发的消息 bridge 先攒着，压完再交给他；这段时间不算他卡住
+  const [compacting, setCompacting] = useState(false)
+  const onCompacting = useCallback((ev) => {
+    setCompacting(!!ev.on)
+    if (!ev.on) setStuck(s => { if (s) setWaitSince(Date.now()); return false })
+  }, [])
   const [editingKey, setEditingKey] = useState(null) // 正在原地改的那条
   const [calledAgain, setCalledAgain] = useState(() => new Set()) // 点过"再叫他一下"的 reply_failed 事件
   const [input, setInput] = useState(() => getDraft(CC_SESSION.id)) // 没发出去的字留作草稿，下次进来还在
@@ -3213,6 +3219,7 @@ function CCChatPage({ onBack }) {
       let ev
       try { ev = JSON.parse(line) } catch { return }
       if (ev && ev.type === 'typing') return onTyping(ev)
+      if (ev && ev.type === 'compacting') return onCompacting(ev)
       if (!ev || !ev.id || (typeof ev.text !== 'string' && ev.role !== 'system')) return
       const m = ccFromServer(ev)
       // 实时新到的他的话才浮现；补上的、她自己的、切到后台时到的都直接显示
@@ -3272,7 +3279,7 @@ function CCChatPage({ onBack }) {
       window.removeEventListener('online', wake)
       window.removeEventListener('pageshow', onVisible)
     }
-  }, [passcode, mergeHistory, onTyping])
+  }, [passcode, mergeHistory, onTyping, onCompacting])
 
   // SSE 没连上（连接中/断线）时每 5 秒轮询一次历史，连上后停止
   useEffect(() => {
@@ -3521,6 +3528,7 @@ function CCChatPage({ onBack }) {
         </div>
       </div>
 
+      {compacting && <div className="cc-compacting" role="status" aria-label="正在压缩">compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
       <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
@@ -3577,7 +3585,7 @@ function CCChatPage({ onBack }) {
             {showFailure && (
               <div className="cc-msg-note">{failure.partial ? '话没说完就断了' : '他这次没回上来'} · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>再叫他一下</button></div>
             )}
-            {!showFailure && stuck && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
+            {!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
           </div>
           )
         })}

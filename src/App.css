@@ -692,6 +692,13 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-typing-dot{width:6px;height:6px;border-radius:50%;background:var(--text-secondary);opacity:.35;animation:ccPulse 1.2s ease-in-out infinite}
 .cc-typing-dot:nth-child(2){animation-delay:.2s}
 .cc-typing-dot:nth-child(3){animation-delay:.4s}
+/* 正在压缩：聊天页正中一行小字，省略号一个个跳 */
+.cc-room{position:relative}
+.cc-compacting{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;pointer-events:none;padding:8px 16px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--text-secondary);font-size:14px;letter-spacing:.02em}
+.cc-compacting-dot{display:inline-block;animation:ccCompactDot 1.2s ease-in-out infinite}
+.cc-compacting-dot:nth-child(2){animation-delay:.2s}
+.cc-compacting-dot:nth-child(3){animation-delay:.4s}
+@keyframes ccCompactDot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
 @keyframes ccPulse{0%,100%{opacity:.25}40%{opacity:.85}}
 @media(prefers-reduced-motion:reduce){
   .cc-reveal{animation:none}
