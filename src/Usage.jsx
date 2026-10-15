@@ -45,12 +45,18 @@ export function useCcUsageBrief(apiFetch, refreshKey) {
   return brief
 }
 
+// 额度用完的提示：直接显示在聊天页顶上（关系到他为什么不回），不收进菜单
+export function CcLimitedNotice({ brief }) {
+  if (!brief?.limited_until) return null
+  return <div className="cc-usage-limited" role="status">额度用完 · {fmtWhen(brief.limited_until)} 恢复</div>
+}
+
+// 上下文条：收在聊天页右上角 ⋮ → Usage 里
 export function CcUsageStrip({ brief }) {
-  if (!brief) return null
-  const { context_tokens: ctx, day_cap: cap, nightly_threshold: night, limited_until: until } = brief
+  if (!brief || brief.context_tokens == null) return <div className="cc-usage-empty">还没有数据，沐回完下一轮就有</div>
+  const { context_tokens: ctx, day_cap: cap, nightly_threshold: night } = brief
   return (
     <div className="cc-usage-strip">
-      {until && <div className="cc-usage-limited" role="status">额度用完 · {fmtWhen(until)} 恢复</div>}
       {ctx != null && cap > 0 && (
         <div className="cc-usage-ctx" title={`上下文 ${ctx}，超过 ${night} 每晚压缩，超过 ${cap} 白天也压`}>
           <div className="cc-usage-track" role="progressbar" aria-label="上下文" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={ctx}>

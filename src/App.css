@@ -714,7 +714,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 @media(prefers-color-scheme:dark){.usage-icon{background:#1c2a3a;color:#6da7ec}}
 
 .cc-usage-strip{display:flex;flex-direction:column;gap:6px}
-.cc-room>.cc-usage-strip{padding:0 16px 6px}
+.cc-room>.cc-usage-limited{margin:0 16px 6px}
+.cc-usage-pop{min-width:260px;padding:14px 16px}
+.cc-usage-empty{font-size:13px;color:var(--text-secondary)}
+.dropdown-chevron{color:var(--text-dim);font-size:18px;line-height:1}
 .cc-usage-limited{font-size:13px;color:var(--danger);background:var(--accent-light);border-radius:var(--radius-sm);padding:6px 10px;text-align:center}
 .cc-usage-ctx{display:flex;align-items:center;gap:8px}
 .cc-usage-track{position:relative;flex:1;height:4px;border-radius:2px;background:var(--border);overflow:visible}

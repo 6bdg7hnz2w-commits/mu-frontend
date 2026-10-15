@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
-import { UsagePage, CcUsageStrip, useCcUsageBrief } from './Usage'
+import { UsagePage, CcUsageStrip, CcLimitedNotice, useCcUsageBrief } from './Usage'
 
 const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
@@ -3158,6 +3158,7 @@ function CCChatPage({ onBack }) {
   // bridge 推的"正在压缩"：压缩期间她发的消息 bridge 先攒着，压完再交给他；这段时间不算他卡住
   const [compacting, setCompacting] = useState(false)
   // 上下文进度条、额度几点恢复：他每回完一轮（正在输入灭了）、压缩开始/结束时重拉
+  const [menu, setMenu] = useState(null) // 右上角 ⋮：null 收起 / 'menu' 菜单 / 'usage' 上下文条
   const usageBrief = useCcUsageBrief(apiFetch, `${!!serverTyping?.on}-${compacting}`)
   const onCompacting = useCallback((ev) => {
     setCompacting(!!ev.on)
@@ -3550,11 +3551,22 @@ function CCChatPage({ onBack }) {
           <div className="chatroom-name">沐 (CC)</div>
           <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
         </div>
+        <div className="chatroom-header-right">
+          <button className="icon-btn" onClick={() => setMenu(menu ? null : 'menu')} aria-label="更多">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          </button>
+        </div>
       </div>
 
-      <CcUsageStrip brief={usageBrief} />
+      {menu === 'menu' && (
+        <div className="chatroom-settings-dropdown">
+          <div className="dropdown-item" onClick={() => setMenu('usage')}><span>Usage</span><span className="dropdown-chevron">›</span></div>
+        </div>
+      )}
+      {menu === 'usage' && <div className="chatroom-settings-dropdown cc-usage-pop"><CcUsageStrip brief={usageBrief} /></div>}
+      <CcLimitedNotice brief={usageBrief} />
       {compacting && <div className="cc-compacting" role="status" aria-label="正在压缩">compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
+      <div className="messages" ref={listRef} onClick={() => menu && setMenu(null)} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
