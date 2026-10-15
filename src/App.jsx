@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
+import { UsagePage, CcUsageStrip, useCcUsageBrief } from './Usage'
 
 const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
 const START_DATE = new Date('2026-07-27')
@@ -3135,6 +3136,8 @@ function CCChatPage({ onBack }) {
   const typingNow = waiting || !!serverTyping?.on
   // bridge 推的"正在压缩"：压缩期间她发的消息 bridge 先攒着，压完再交给他；这段时间不算他卡住
   const [compacting, setCompacting] = useState(false)
+  // 上下文进度条、额度几点恢复：他每回完一轮（正在输入灭了）、压缩开始/结束时重拉
+  const usageBrief = useCcUsageBrief(apiFetch, `${!!serverTyping?.on}-${compacting}`)
   const onCompacting = useCallback((ev) => {
     setCompacting(!!ev.on)
     if (!ev.on) setStuck(s => { if (s) setWaitSince(Date.now()); return false })
@@ -3528,6 +3531,7 @@ function CCChatPage({ onBack }) {
         </div>
       </div>
 
+      <CcUsageStrip brief={usageBrief} />
       {compacting && <div className="cc-compacting" role="status" aria-label="正在压缩">compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
       <div className="messages" ref={listRef} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
         {loadingMore && <div className="empty-state">Loading…</div>}
@@ -3654,6 +3658,7 @@ function MorePage({ onEnterRoom }) {
     )
   }
   if (subPage === 'reading') return <NookPage onBack={() => setSubPage(null)} onEnterRoom={onEnterRoom} />
+  if (subPage === 'usage') return <UsagePage apiFetch={apiFetch} onBack={() => setSubPage(null)} backIcon={I.back} swipe={swipeGames} />
 
   return (
     <div className="more-page">
@@ -3662,6 +3667,7 @@ function MorePage({ onEnterRoom }) {
         <div className="more-item" onClick={() => setSubPage('games')}><div className="more-icon game-icon">{I.game}</div><span>Games</span></div>
         <div className="more-item" onClick={() => setSubPage('reading')}><div className="more-icon reading-icon">{I.book}</div><span>Reading</span></div>
         <div className="more-item" onClick={() => setSubPage('memory')}><div className="more-icon memory-icon">{I.brain}</div><span>Memory</span></div>
+        <div className="more-item" onClick={() => setSubPage('usage')}><div className="more-icon usage-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg></div><span>Usage</span></div>
         <div className="more-item" onClick={() => setSubPage('settings')}><div className="more-icon settings-icon">{I.settings}</div><span>Settings</span></div>
       </div>
     </div>

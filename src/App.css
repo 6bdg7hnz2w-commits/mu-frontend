@@ -704,3 +704,50 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
   .cc-reveal{animation:none}
   .cc-typing-dot{animation:none;opacity:.6}
 }
+
+/* ─── Usage：额度消耗（聊天页顶上一条 + More 里的 Usage 页）─── */
+/* 图表三色：验证过的分类色（读缓存 / 写缓存 / 输入输出），深色模式各自一档 */
+:root{--viz-read:#2a78d6;--viz-write:#eb6834;--viz-io:#1baf7a}
+@media(prefers-color-scheme:dark){:root{--viz-read:#3987e5;--viz-write:#d95926;--viz-io:#199e70}}
+.usage-icon{background:#e8f1fb;color:#2a78d6}
+@media(prefers-color-scheme:dark){.usage-icon{background:#1c2a3a;color:#6da7ec}}
+
+.cc-usage-strip{display:flex;flex-direction:column;gap:6px}
+.cc-room>.cc-usage-strip{padding:0 16px 6px}
+.cc-usage-limited{font-size:13px;color:var(--danger);background:var(--accent-light);border-radius:var(--radius-sm);padding:6px 10px;text-align:center}
+.cc-usage-ctx{display:flex;align-items:center;gap:8px}
+.cc-usage-track{position:relative;flex:1;height:4px;border-radius:2px;background:var(--border);overflow:visible}
+.cc-usage-fill{height:100%;border-radius:2px;background:var(--viz-read)}
+.cc-usage-tick{position:absolute;top:-2px;width:1px;height:8px;background:var(--text-secondary)}
+.cc-usage-label{font-size:11px;color:var(--text-secondary);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.usage-meta{font-size:12px;color:var(--text-secondary);margin-top:8px}
+.usage-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 12px}
+.usage-tile{background:var(--surface);border-radius:var(--radius-sm);padding:12px 6px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.usage-tile-num{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.usage-tile-label{font-size:11px;color:var(--text-secondary);margin-top:2px}
+.usage-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.usage-seg-ctl{display:flex;background:var(--card);border-radius:8px;padding:2px}
+.usage-seg-ctl button{border:0;background:none;padding:5px 12px;border-radius:6px;font-size:13px;color:var(--text-secondary)}
+.usage-seg-ctl button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.usage-link{border:0;background:none;font-size:13px;color:var(--accent)}
+.usage-legend{display:flex;gap:12px;font-size:12px;color:var(--text-secondary);margin-bottom:8px}
+.usage-legend span,.usage-detail-rows span{display:inline-flex;align-items:center;gap:5px}
+.usage-key{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none}
+.usage-detail{font-size:12px;color:var(--text-secondary);margin-bottom:6px;min-height:58px}
+.usage-detail-head{display:flex;justify-content:space-between;color:var(--text);font-size:13px;font-weight:500;margin-bottom:4px;font-variant-numeric:tabular-nums}
+.usage-detail-rows{display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums}
+.usage-chart{width:100%;touch-action:pan-y}
+.usage-chart svg{display:block}
+.usage-grid{stroke:var(--border);stroke-width:1}
+.usage-axis{font-size:10px;fill:var(--text-secondary);font-variant-numeric:tabular-nums}
+.usage-hover{fill:var(--text);opacity:.05}
+.usage-seg-read{fill:var(--viz-read);background:var(--viz-read)}
+.usage-seg-write{fill:var(--viz-write);background:var(--viz-write)}
+.usage-seg-io{fill:var(--viz-io);background:var(--viz-io)}
+.usage-note{font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 20px 12px}
+.usage-table-wrap{max-height:320px;overflow:auto}
+.usage-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.usage-table th{position:sticky;top:0;background:var(--surface);color:var(--text-secondary);font-weight:500;text-align:right;padding:4px 4px;border-bottom:1px solid var(--border)}
+.usage-table td{text-align:right;padding:4px 4px;border-bottom:1px solid var(--border);color:var(--text)}
+.usage-table th:first-child,.usage-table td:first-child{text-align:left}
