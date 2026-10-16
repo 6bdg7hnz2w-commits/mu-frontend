@@ -28,13 +28,6 @@ async function apiFetch(path, opts = {}) {
 }
 
 // ─── Avatar helpers (localStorage) — session list avatar ──
-function getAvatar(sessionId) {
-  try { return localStorage.getItem(`avatar_${sessionId}`) } catch { return null }
-}
-function setAvatarStorage(sessionId, dataUrl) {
-  try { if (dataUrl) localStorage.setItem(`avatar_${sessionId}`, dataUrl); else localStorage.removeItem(`avatar_${sessionId}`) } catch {}
-}
-
 // ─── Draft helpers ──────────────────────────────────
 function getDraft(sessionId) {
   try { return localStorage.getItem(`draft_${sessionId}`) || '' } catch { return '' }
@@ -200,26 +193,6 @@ function predictNextPeriod(periods) {
   return predicted
 }
 
-// ─── Extended thinking preference (per session) ─────
-function getExtendedThinking(sessionId) {
-  try { return localStorage.getItem(`ext_think_${sessionId}`) === 'true' } catch { return false }
-}
-function setExtendedThinkingStorage(sessionId, val) {
-  try { localStorage.setItem(`ext_think_${sessionId}`, val ? 'true' : 'false') } catch {}
-}
-
-// ─── Model helpers ──────────────────────────────────
-const MODEL_OPTIONS = [
-  { key: 'opus', mainLabel: '沐', subLabel: 'Opus 4.6', tag: 'Claude' },
-  { key: 'sonnet', mainLabel: '沐', subLabel: 'Sonnet 4.6', tag: 'Claude' },
-  { key: 'sonnet5', mainLabel: '沐', subLabel: 'Sonnet 5', tag: 'Claude' },
-]
-// 对话列表里只有沐（Claude）；以前的 DeepSeek 会话不显示，DeepSeek 只在后端做杂活
-const isChatModel = (model) => MODEL_OPTIONS.some(m => m.key === (model || 'opus'))
-function getModelInfo(model) {
-  return MODEL_OPTIONS.find(m => m.key === model) || MODEL_OPTIONS[0]
-}
-
 // ─── Date helpers ───────────────────────────────────
 function getWhisperCache() {
   try { const w = JSON.parse(localStorage.getItem('whisper_last') || 'null'); return w?.content ? w : null } catch { return null }
@@ -246,7 +219,6 @@ function fmtMsgTime(t) {
   if (days < 7) return `${WEEKDAYS[d.getDay()]} ${hm}`
   return `${d.getFullYear() === now.getFullYear() ? '' : `${d.getFullYear()}/`}${d.getMonth() + 1}/${d.getDate()} ${hm}`
 }
-function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
 
 // ─── Icons ──────────────────────────────────────────
 const I = {
@@ -311,46 +283,6 @@ function useKeyboardOpen(setKeyboardOpen) {
 }
 
 // ─── AvatarUploadModal — for session list avatar ────
-function AvatarUploadModal({ sessionId, onClose, onSaved }) {
-  const [preview, setPreview] = useState(getAvatar(sessionId))
-  const handleFile = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 200; canvas.height = 200
-        const ctx = canvas.getContext('2d')
-        const size = Math.min(img.width, img.height)
-        const sx = (img.width - size) / 2, sy = (img.height - size) / 2
-        ctx.drawImage(img, sx, sy, size, size, 0, 0, 200, 200)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-        setAvatarStorage(sessionId, dataUrl)
-        setPreview(dataUrl)
-        onSaved && onSaved(dataUrl)
-      }
-      img.src = ev.target.result
-    }
-    reader.readAsDataURL(file)
-  }
-  const removeAvatar = () => { setAvatarStorage(sessionId, null); setPreview(null); onSaved && onSaved(null) }
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={e => e.stopPropagation()}>
-        <h3>Set Session Avatar</h3>
-        <div className="avatar-preview-lg">{preview && <img src={preview} alt="" />}</div>
-        <div className="modal-actions-col">
-          <label className="btn-primary-full">Choose Image<input type="file" accept="image/*" onChange={handleFile} hidden /></label>
-          {preview && <button className="btn-danger-text-centered" onClick={removeAvatar}>Remove</button>}
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── AddDateModal ───────────────────────────────────
 function AddDateModal({ onClose, onSave }) {
   const [name, setName] = useState('')
@@ -512,165 +444,8 @@ function EventModal({ event, defaultDate, onClose, onSaved }) {
 }
 
 // ─── ThinkingPanel ──────────────────────────────────
-function ThinkingPanel({ text, onClose }) {
-  const [height, setHeight] = useState(320)
-  const startY = useRef(0), startH = useRef(0)
-  const onTS = (e) => { startY.current = e.touches[0].clientY; startH.current = height }
-  const onTM = (e) => { const dy = startY.current - e.touches[0].clientY; setHeight(Math.min(Math.max(startH.current + dy, 150), window.innerHeight * 0.8)) }
-  return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="thinking-panel" style={{ height }}>
-        <div className="thinking-panel-handle" onTouchStart={onTS} onTouchMove={onTM}><div className="handle-bar" /></div>
-        <div className="thinking-panel-header">
-          <button className="icon-btn small thinking-close-btn" onClick={onClose}>{I.close}</button>
-          <span className="thinking-panel-title">Thought process</span>
-          <span className="thinking-panel-spacer" />
-        </div>
-        <div className="thinking-panel-body">{text}</div>
-      </div>
-    </>
-  )
-}
-
 // ─── SearchPanel ────────────────────────────────────
-function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [searching, setSearching] = useState(false)
-  const inputRef = useRef(null)
-  const swipe = useSwipeBack(onClose)
-  useEffect(() => { inputRef.current?.focus() }, [])
-
-  const doSearch = async () => {
-    if (!query.trim()) return
-    setSearching(true)
-    try {
-      if (sessionId) {
-        const res = await apiFetch(`/api/sessions/${sessionId}/messages`)
-        const msgs = await res.json()
-        if (Array.isArray(msgs)) setResults(msgs.filter(m => m.content && m.content.toLowerCase().includes(query.toLowerCase())).slice(0, 50).map((m) => ({ ...m, sessionName: '', _idx: msgs.indexOf(m) })))
-      } else {
-        const sessRes = await apiFetch(`/api/sessions`); const all = await sessRes.json()
-        if (!Array.isArray(all)) { setSearching(false); return }
-        const sessions = all.filter(s => isChatModel(s.model))
-        const found = []
-        for (const s of sessions.slice(0, 20)) {
-          try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelInfo(s.model).tag, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
-        }
-        setResults(found.slice(0, 50))
-      }
-    } catch {}
-    setSearching(false)
-  }
-
-  const handleResultClick = (r) => {
-    if (onJumpToMessage) {
-      onJumpToMessage(r._session || { id: sessionId }, r._idx, r.id)
-    }
-  }
-
-  return (
-    <div className="search-panel" {...swipe}>
-      <div className="search-header">
-        <div className="search-input-row">{I.search}<input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Search..." /></div>
-        <button className="text-btn" onClick={onClose}>Cancel</button>
-      </div>
-      <div className="search-results">
-        {searching && <div className="loading-state"><span className="spinner" />Searching...</div>}
-        {!searching && results.length === 0 && query && <div className="empty-state">No results</div>}
-        {results.map((r, i) => (
-          <div key={i} className="search-result-item" onClick={() => handleResultClick(r)}>
-            <div className="search-result-meta">{r.sessionName && <span className="search-result-session">{r.sessionName}</span>}<span className="search-result-role">{r.role === 'user' ? '桦桦' : '沐'}</span></div>
-            <div className="search-result-content">{r.content.length > 100 ? r.content.slice(0, 100) + '...' : r.content}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ─── ChatListPage ───────────────────────────────────
-function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
-  const [sessions, setSessions] = useState([])
-  const [ccLast] = useState(getCcLast)
-  const [lastMessages, setLastMessages] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [showNew, setShowNew] = useState(false)
-
-  useEffect(() => {
-    setLoading(true)
-    apiFetch(`/api/sessions`).then(r => r.json()).then(async all => {
-      if (!Array.isArray(all)) { setLoading(false); return }
-      const data = all.filter(s => isChatModel(s.model))
-      setSessions(data); setLoading(false)
-      const msgs = {}
-      for (const s of data.slice(0, 10)) { try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const a = await r.json(); if (Array.isArray(a) && a.length > 0) msgs[s.id] = a[a.length - 1] } catch {} }
-      setLastMessages(msgs)
-    }).catch(() => setLoading(false))
-  }, [])
-
-  const createSession = async (model) => {
-    const res = await apiFetch(`/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '沐', model }) })
-    const session = await res.json()
-    setSessions(prev => [session, ...prev])
-    onOpen({ ...session, model })
-  }
-
-  const deleteSession = async (id) => { await apiFetch(`/api/sessions/${id}`, { method: 'DELETE' }); setSessions(prev => prev.filter(s => s.id !== id)); setAvatarStorage(id, null) }
-
-  const getPreview = (sid) => {
-    const draft = getDraft(sid)
-    if (draft) return `[Draft] ${draft.length > 25 ? draft.slice(0, 25) + '...' : draft}`
-    const m = lastMessages[sid]; if (!m) return ''; const t = m.content || ''; return t.length > 30 ? t.slice(0, 30) + '...' : t
-  }
-  const hasDraft = (sid) => !!getDraft(sid)
-  const getTime = (s) => fmtListTime(lastMessages[s.id]?.created_at || s.updated_at)
-
-  return (
-    <div className="chatlist-page">
-      <div className="page-header"><h1>Chats</h1><div className="header-actions"><button className="icon-btn" onClick={onOpenSearch}>{I.search}</button><button className="icon-btn" onClick={() => setShowNew(!showNew)}>{I.plus}</button></div></div>
-      {showNew && (<div className="card new-chat-card"><div className="card-title">New Chat</div>
-        {MODEL_OPTIONS.map(m => (
-          <div key={m.key} className="new-chat-option" onClick={() => { createSession(m.key); setShowNew(false) }}>
-            <div className="new-chat-name">{m.tag}</div>
-            <div className="new-chat-desc">{m.subLabel}</div>
-          </div>
-        ))}
-      </div>)}
-      <div className="session-list">
-        <div className="session-card pinned" onClick={onOpenCC}>
-          <div className="session-avatar">沐</div>
-          <div className="session-info">
-            <div className="session-top"><span className="session-name">沐 (CC)</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
-            <div className="session-sub-row"><span className="session-sublabel">Claude Code</span></div>
-            <div className="session-bottom"><span className={`session-preview ${hasDraft('cc') ? 'draft' : ''}`}>{hasDraft('cc') ? getPreview('cc') : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''}</span><span className="session-model-tag">CC</span></div>
-          </div>
-        </div>
-        {loading && <div className="loading-state"><span className="spinner" />Loading...</div>}
-        {!loading && sessions.length === 0 && <div className="empty-state">Tap + to start your first chat</div>}
-        {!loading && sessions.map(s => {
-          const avatar = getAvatar(s.id)
-          const draft = hasDraft(s.id)
-          const info = getModelInfo(s.model)
-          return (
-            <SwipeRow key={s.id} onDelete={() => deleteSession(s.id)}>
-              <div className="session-card" onClick={() => onOpen(s)}>
-                <div className="session-avatar">{avatar ? <img src={avatar} alt="" /> : '沐'}</div>
-                <div className="session-info">
-                  <div className="session-top"><span className="session-name">{info.mainLabel}</span><span className="session-time">{getTime(s)}</span></div>
-                  <div className="session-sub-row"><span className="session-sublabel">{info.subLabel}</span></div>
-                  <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{getPreview(s.id)}</span><span className="session-model-tag">{info.tag}</span></div>
-                </div>
-              </div>
-            </SwipeRow>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 // ─── Voice audio duration resolution ────────────────
 // Blob-sourced MP3s in Chrome often report duration as Infinity until
 // the media element is forced to seek near the end once, a known
@@ -692,11 +467,6 @@ function resolveAudioDuration(audio, cb) {
     try { audio.currentTime = 1e101 } catch { /* ignore */ }
   }
   audio.addEventListener('loadedmetadata', onLoaded)
-}
-
-function cleanAssistantText(text) {
-  if (!text) return '';
-  return text.replace(/\[助手[^\]]*\]\s*/g, '').replace(/^(中文|英文|俄语|日语|法语|韩语)[：:]\s*/g, '').trim();
 }
 
 const VOICE_MIN_WIDTH = 120
@@ -1234,257 +1004,14 @@ function compressImage(file, maxWidth = 1200, quality = 0.8) {
   })
 }
 
-// 用户消息content里可能带 "[图片: url]" 标记，把文本和图片URL拆开
-function parseImageContent(content) {
-  if (!content) return { text: content, imageUrl: null }
-  const match = content.match(/\[图片: (.+?)\]/)
-  if (!match) return { text: content, imageUrl: null }
-  return { text: content.slice(0, match.index).trim(), imageUrl: match[1] }
-}
-
 // ─── ChatRoom ───────────────────────────────────────
-function ChatRoom({ session, onBack }) {
-  const [messages, setMessages] = useState([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [thinkingText, setThinkingText] = useState(null)
-  const [showSearch, setShowSearch] = useState(false)
-  const [showAvatarUpload, setShowAvatarUpload] = useState(false)
-  const [extThinking, setExtThinking] = useState(getExtendedThinking(session.id))
-  const [showSettings, setShowSettings] = useState(false)
-  const [highlightIdx, setHighlightIdx] = useState(null)
-  const [pendingImage, setPendingImage] = useState(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [lightboxImage, setLightboxImage] = useState(null)
-  const messagesEndRef = useRef(null)
-  const messageRefs = useRef({})
-  const textareaRef = useRef(null)
-  const photoInputRef = useRef(null)
-  const cameraInputRef = useRef(null)
-  const model = session.model || 'opus'
-  const info = getModelInfo(model)
-  const voice = useVoicePlayer()
-  const { fetchDurationEstimate, resetVoice } = voice
-  const [transcripts, setTranscripts] = useState({})
-
-
-  useEffect(() => { const d = getDraft(session.id); if (d) setInput(d) }, [session.id])
-  useEffect(() => { setDraftStorage(session.id, input) }, [input, session.id])
-
-  // ─── fingertips 打字节奏探针 ─────────────────────────
-  // 只上报"正在打字"这个事实，4秒节流，不携带任何内容。
-  const lastPingRef = useRef(0)
-  const handleInputChange = (e) => {
-    const value = e.target.value
-    setInput(value)
-    const now = Date.now()
-    if (value.trim() && now - lastPingRef.current >= 4000) {
-      lastPingRef.current = now
-      apiFetch(`/api/typing/ping`, { method: 'POST' }).catch(() => {}) // 不用 keepalive：带口令头要先预检，Safari 上 keepalive+预检没法实测；它是打字时发的，用不着
-    }
-  }
-
-  useEffect(() => {
-    resetVoice()
-    setTranscripts({})
-    apiFetch(`/api/sessions/${session.id}/messages`).then(r => r.json()).then(data => {
-      if (Array.isArray(data)) {
-        setMessages(data)
-        data.forEach((m, i) => { if (m.role === 'assistant') estimateVoiceDurations(i, cleanAssistantText(m.content), fetchDurationEstimate) })
-      }
-    })
-  }, [session.id, resetVoice, fetchDurationEstimate])
-
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-  useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px' } }, [input])
-
-  const toggleExtThinking = () => { const v = !extThinking; setExtThinking(v); setExtendedThinkingStorage(session.id, v) }
-
-  const handleImageSelect = async (e) => {
-    const file = e.target.files && e.target.files[0]
-    e.target.value = ''
-    if (!file) return
-    try {
-      const blob = await compressImage(file)
-      const previewUrl = URL.createObjectURL(blob)
-      setPendingImage(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return { blob, previewUrl } })
-    } catch {}
-  }
-
-  const cancelPendingImage = () => {
-    setPendingImage(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null })
-  }
-
-  const sendMessage = async () => {
-    if ((!input.trim() && !pendingImage) || loading || uploadingImage) return
-    const text = input.trim(); setInput(''); setDraftStorage(session.id, '')
-    const imageToSend = pendingImage
-    setPendingImage(null)
-
-    let imageUrl = null
-    if (imageToSend) {
-      setUploadingImage(true)
-      try {
-        const ext = imageToSend.blob.type === 'image/webp' ? 'webp' : 'jpg'
-        const formData = new FormData()
-        formData.append('file', imageToSend.blob, `photo.${ext}`)
-        const uploadRes = await apiFetch(`/api/upload`, { method: 'POST', body: formData })
-        const uploadData = await uploadRes.json()
-        imageUrl = uploadData.url || null
-      } catch {}
-      URL.revokeObjectURL(imageToSend.previewUrl)
-      setUploadingImage(false)
-      if (!imageUrl) {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Image upload failed...', created_at: new Date().toISOString() }])
-        return
-      }
-    }
-
-    const newIdx = messages.length
-    const displayContent = imageUrl ? `${text}\n[图片: ${imageUrl}]` : text
-    setMessages(prev => [...prev, { role: 'user', content: displayContent, created_at: new Date().toISOString() }])
-    setLoading(true)
-    try {
-      const res = await apiFetch(`/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, message: text, model, extended_thinking: extThinking, image_url: imageUrl }) })
-      const data = await res.json()
-      const assistIdx = newIdx + 1
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, thinking: data.thinking, created_at: new Date().toISOString(), voice: data.voice }])
-      estimateVoiceDurations(assistIdx, cleanAssistantText(data.reply), fetchDurationEstimate)
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection failed...', created_at: new Date().toISOString() }])
-    }
-    setLoading(false)
-  }
-
-  const jumpToMessage = (_, idx) => {
-    setShowSearch(false)
-    setHighlightIdx(idx)
-    setTimeout(() => {
-      const el = messageRefs.current[idx]
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setTimeout(() => setHighlightIdx(null), 2000)
-    }, 100)
-  }
-
-  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
-  const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
-  const swipe = useSwipeBack(onBack)
-
-  if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} sessionId={session.id} onJumpToMessage={jumpToMessage} />
-
-  return (
-    <div className="chatroom" {...swipe}>
-      <div className="chatroom-header">
-        <button className="icon-btn" onClick={onBack}>{I.back}</button>
-        <div className="chatroom-title">
-          <div className="chatroom-name">{info.mainLabel}</div>
-          <div className="chatroom-model">{info.subLabel}</div>
-        </div>
-        <div className="chatroom-header-right">
-          <button className="icon-btn" onClick={() => setShowSearch(true)}>{I.search}</button>
-          <button className="icon-btn" onClick={() => setShowSettings(!showSettings)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          </button>
-        </div>
-      </div>
-
-      {showSettings && (
-        <div className="chatroom-settings-dropdown">
-          <div className="dropdown-item" onClick={toggleExtThinking}>
-            <span>Extended Thinking</span>
-            <div className={`toggle-btn-sm ${extThinking ? 'on' : ''}`}><div className="toggle-knob-sm" /></div>
-          </div>
-          <div className="dropdown-item" onClick={() => { setShowAvatarUpload(true); setShowSettings(false) }}>
-            <span>Session Avatar</span>
-            {I.upload}
-          </div>
-        </div>
-      )}
-
-      <div className="messages" onClick={() => showSettings && setShowSettings(false)}>
-        {messages.length === 0 && <div className="empty-state">Start chatting</div>}
-        {messages.map((m, i) => (
-          <div key={i} ref={el => messageRefs.current[i] = el} className={`msg ${m.role} ${highlightIdx === i ? 'highlight' : ''}`}>
-            {m.thinking && (
-              <div className="thinking-trigger" onClick={() => setThinkingText(m.thinking)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-                <span>Thought process</span>
-                {I.chevron}
-              </div>
-            )}
-            {m.role === 'assistant' && m.content ? (
-              <VoiceAwareContent raw={cleanAssistantText(m.content)} msgKey={i} player={voice} showTranscript={!!transcripts[i]} />
-            ) : (
-              <div className="bubble">
-                {(() => {
-                  const { text, imageUrl } = parseImageContent(m.content)
-                  return (
-                    <>
-                      {imageUrl && <img src={imageUrl} alt="" className="msg-image" onClick={() => setLightboxImage(imageUrl)} />}
-                      {text && <div>{text}</div>}
-                    </>
-                  )
-                })()}
-              </div>
-            )}
-            <div className="msg-meta">
-              <span className="msg-time">{fmtMsgTime(m.created_at)}</span>
-              {(() => { const t = m.role === 'assistant' ? messageCopyText(cleanAssistantText(m.content)) : parseImageContent(m.content).text; return t ? <CopyButton getText={() => t} /> : null })()}
-              {m.role === 'assistant' && hasVoiceSegment(cleanAssistantText(m.content)) && (
-                <TranscriptToggle open={!!transcripts[i]} onClick={() => setTranscripts(prev => ({ ...prev, [i]: !prev[i] }))} />
-              )}
-            </div>
-          </div>
-        ))}
-        {loading && <div className="msg assistant"><div className="bubble typing"><span className="dot" /><span className="dot" /><span className="dot" /></div></div>}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="composer">
-        {pendingImage && (
-          <div className="composer-image-preview">
-            <img src={pendingImage.previewUrl} alt="" />
-            <button onClick={cancelPendingImage} aria-label="Remove image">{I.close}</button>
-          </div>
-        )}
-        <div className="composer-input-row">
-          <div className="composer-attachments">
-            <button className="attach-btn" onClick={() => cameraInputRef.current?.click()}>{I.camera}</button>
-            <button className="attach-btn" onClick={() => photoInputRef.current?.click()}>{I.photo}</button>
-            <input ref={photoInputRef} type="file" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
-          </div>
-          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} />
-          <button className="send-btn" onClick={sendMessage} disabled={loading || uploadingImage || (!input.trim() && !pendingImage)}>{uploadingImage ? <span className="spinner tiny light" /> : I.send}</button>
-        </div>
-      </div>
-
-      {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
-      {thinkingText && <ThinkingPanel text={thinkingText} onClose={() => setThinkingText(null)} />}
-      {showAvatarUpload && <AvatarUploadModal sessionId={session.id} onClose={() => setShowAvatarUpload(false)} />}
-    </div>
-  )
-}
-
 // ─── ChatPage ───────────────────────────────────────
+// Chats 只有沐 (CC) 这一条线（CC / API 在聊天页右上角 ⋮ → 回复方式里切），没有会话列表了
 const CC_SESSION = { id: 'cc' }
 
 function ChatPage({ onEnterRoom }) {
-  // 每次切到 Chats 都会重新挂载，所以默认直接进 CC；返回进会话列表
-  const [openSession, setOpenSession] = useState(CC_SESSION)
-  const [showSearch, setShowSearch] = useState(false)
-  // CC 是 Chats 的落地页，保留 tab 栏；其他聊天室照旧全屏
-  useEffect(() => { onEnterRoom((!!openSession && openSession !== CC_SESSION) || showSearch) }, [openSession, showSearch])
-
-  const handleSearchJump = (session) => {
-    setShowSearch(false)
-    setOpenSession(session)
-  }
-
-  if (showSearch) return <SearchPanel onClose={() => setShowSearch(false)} onJumpToMessage={handleSearchJump} />
-  if (openSession === CC_SESSION) return <CCChatPage onBack={() => setOpenSession(null)} />
-  if (openSession) return <ChatRoom session={openSession} onBack={() => setOpenSession(null)} />
-  return <ChatListPage onOpen={setOpenSession} onOpenCC={() => setOpenSession(CC_SESSION)} onOpenSearch={() => setShowSearch(true)} />
+  useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return <CCChatPage />
 }
 
 // ─── SplashScreen ────────────────────────────────────
@@ -3304,14 +2831,7 @@ function CcImage({ img, onOpen }) {
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
   return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(url)} />
 }
-function getCcLast() {
-  try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
-}
-function setCcLastStorage(m) {
-  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
-}
-
-function CCChatPage({ onBack }) {
+function CCChatPage() {
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
   const [history, setHistory] = useState([]) // 服务器上的记录（双方），按时间
@@ -3363,7 +2883,6 @@ function CCChatPage({ onBack }) {
   const listRef = useRef(null)
   const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，保持原位置
   const prevHeightRef = useRef(0)
-  const swipe = useSwipeBack(onBack)
   const voice = useVoicePlayer()
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
@@ -3562,7 +3081,6 @@ function CCChatPage({ onBack }) {
     if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
     else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, typingNow])
-  useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
   // 回复方式：进来拉一次，回复方式页关掉时再拉一次（那边改了会直接把新状态交回来）
   const loadBrain = useCallback(async () => {
@@ -3745,9 +3263,9 @@ function CCChatPage({ onBack }) {
 
   return (
     <>
-    <div className="chatroom cc-room" {...swipe}>
+    <div className="chatroom cc-room">
       <div className="chatroom-header">
-        <button className="icon-btn" onClick={onBack}>{I.back}</button>
+        <span className="icon-btn" aria-hidden="true" />{/* Chats 只有这一页，不用返回；占位让标题居中 */}
         <div className="chatroom-title">
           <div className="chatroom-name">沐 (CC)</div>
           <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
