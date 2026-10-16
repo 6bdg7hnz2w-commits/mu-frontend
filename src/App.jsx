@@ -213,9 +213,9 @@ const MODEL_OPTIONS = [
   { key: 'opus', mainLabel: '沐', subLabel: 'Opus 4.6', tag: 'Claude' },
   { key: 'sonnet', mainLabel: '沐', subLabel: 'Sonnet 4.6', tag: 'Claude' },
   { key: 'sonnet5', mainLabel: '沐', subLabel: 'Sonnet 5', tag: 'Claude' },
-  { key: 'deepseek', mainLabel: 'DeepSeek', subLabel: 'V4 flash', tag: 'DeepSeek' },
-  { key: 'deepseek-pro', mainLabel: 'DeepSeek', subLabel: 'V4 pro', tag: 'DeepSeek' },
 ]
+// 对话列表里只有沐（Claude）；以前的 DeepSeek 会话不显示，DeepSeek 只在后端做杂活
+const isChatModel = (model) => MODEL_OPTIONS.some(m => m.key === (model || 'opus'))
 function getModelInfo(model) {
   return MODEL_OPTIONS.find(m => m.key === model) || MODEL_OPTIONS[0]
 }
@@ -551,8 +551,9 @@ function SearchPanel({ onClose, sessionId, onJumpToMessage }) {
         const msgs = await res.json()
         if (Array.isArray(msgs)) setResults(msgs.filter(m => m.content && m.content.toLowerCase().includes(query.toLowerCase())).slice(0, 50).map((m) => ({ ...m, sessionName: '', _idx: msgs.indexOf(m) })))
       } else {
-        const sessRes = await apiFetch(`/api/sessions`); const sessions = await sessRes.json()
-        if (!Array.isArray(sessions)) { setSearching(false); return }
+        const sessRes = await apiFetch(`/api/sessions`); const all = await sessRes.json()
+        if (!Array.isArray(all)) { setSearching(false); return }
+        const sessions = all.filter(s => isChatModel(s.model))
         const found = []
         for (const s of sessions.slice(0, 20)) {
           try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const ms = await r.json(); if (Array.isArray(ms)) ms.forEach((m, i) => { if (m.content && m.content.toLowerCase().includes(query.toLowerCase())) found.push({ ...m, sessionName: getModelInfo(s.model).tag, sessionId: s.id, _idx: i, _session: s }) }) } catch {}
@@ -599,8 +600,9 @@ function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/sessions`).then(r => r.json()).then(async data => {
-      if (!Array.isArray(data)) { setLoading(false); return }
+    apiFetch(`/api/sessions`).then(r => r.json()).then(async all => {
+      if (!Array.isArray(all)) { setLoading(false); return }
+      const data = all.filter(s => isChatModel(s.model))
       setSessions(data); setLoading(false)
       const msgs = {}
       for (const s of data.slice(0, 10)) { try { const r = await apiFetch(`/api/sessions/${s.id}/messages`); const a = await r.json(); if (Array.isArray(a) && a.length > 0) msgs[s.id] = a[a.length - 1] } catch {} }
@@ -654,7 +656,7 @@ function ChatListPage({ onOpen, onOpenCC, onOpenSearch }) {
           return (
             <SwipeRow key={s.id} onDelete={() => deleteSession(s.id)}>
               <div className="session-card" onClick={() => onOpen(s)}>
-                <div className="session-avatar">{avatar ? <img src={avatar} alt="" /> : info.mainLabel === 'DeepSeek' ? 'D' : '沐'}</div>
+                <div className="session-avatar">{avatar ? <img src={avatar} alt="" /> : '沐'}</div>
                 <div className="session-info">
                   <div className="session-top"><span className="session-name">{info.mainLabel}</span><span className="session-time">{getTime(s)}</span></div>
                   <div className="session-sub-row"><span className="session-sublabel">{info.subLabel}</span></div>
