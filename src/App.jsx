@@ -3257,6 +3257,19 @@ function CCChatPage() {
     return false
   }
 
+  // ─── fingertips 打字节奏探针 ─────────────────────────
+  // 只上报"正在打字"这个事实，4秒节流，不携带任何内容；发出去时后端结算，CC 和 API 谁接都能感受到
+  const lastPingRef = useRef(0)
+  const handleInputChange = (e) => {
+    const value = e.target.value
+    setInput(value)
+    const now = Date.now()
+    if (value.trim() && now - lastPingRef.current >= 4000) {
+      lastPingRef.current = now
+      apiFetch(`/api/typing/ping`, { method: 'POST' }).catch(() => {}) // 不用 keepalive：带口令头要先预检，Safari 上 keepalive+预检没法实测；它是打字时发的，用不着
+    }
+  }
+
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
   const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
   const statusLabel = { connecting: 'Connecting…', live: ccBrainLabel(brain) || 'Claude Code', offline: 'Offline · reconnecting' }[status]
@@ -3378,7 +3391,7 @@ function CCChatPage() {
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || full} aria-label="Add images">{I.photo}</button>
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
-          <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
+          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
           <button className="send-btn" onClick={sendMessage} disabled={!passcode || (!input.trim() && !pending.length)}>{I.send}</button>
         </div>
       </div>
