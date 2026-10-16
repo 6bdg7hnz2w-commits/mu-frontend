@@ -684,6 +684,14 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-turn-body .msg-seg+.msg-seg{margin-top:.8em}
 .cc-late{font-size:11px;color:var(--text-dim);margin-top:2px}
 .cc-turn .msg-meta{padding:0;margin-top:4px}
+.cc-via-api{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* API 回的思考过程：照 Claude App，一行小灰字"思考过程 ›"，默认收起；展开后小字、保留换行，太长在框里滚 */
+.cc-thinking{margin-bottom:6px}
+.cc-thinking-head{display:inline-flex;align-items:center;gap:2px;border:none;background:none;padding:2px 0;font:inherit;font-size:13px;line-height:1.4;color:var(--text-secondary);cursor:pointer}
+.cc-thinking-head:active{opacity:.6}
+.cc-thinking-head svg{width:14px;height:14px;color:var(--text-dim);transition:transform .2s}
+.cc-thinking.open .cc-thinking-head svg{transform:rotate(90deg)}
+.cc-thinking-body{margin-top:4px;padding:2px 0 2px 12px;border-left:2px solid var(--border);font-size:13px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;overflow-wrap:break-word;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 /* 新到的段落整段淡入：只改透明度，不遮罩、不位移；字早就在页面里 */
 .cc-reveal{animation:ccFade var(--cc-reveal-ms,400ms) ease-out both}
 @keyframes ccFade{from{opacity:0}to{opacity:1}}
@@ -704,7 +712,45 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 @media(prefers-reduced-motion:reduce){
   .cc-reveal{animation:none}
   .cc-typing-dot{animation:none;opacity:.6}
+  .cc-thinking-head svg,.cc-brain-thumb,.cc-brain-switch button{transition:none}
 }
+
+/* ─── 回复方式页：整页盖在聊天页上面（聊天页不卸载，SSE 不断）。开关照 iOS 分段控件，滑块在两半之间滑 ─── */
+:root{--cc-switch-track:#ebe8e1;--cc-switch-thumb:#ffffff}
+@media(prefers-color-scheme:dark){:root{--cc-switch-track:#222;--cc-switch-thumb:#3a3936}}
+.cc-brain-page{position:fixed;inset:0;z-index:120;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.cc-brain-page>.chatroom-header,.cc-brain-scroll{width:100%;max-width:600px;margin:0 auto}
+.cc-brain-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:8px 0 calc(24px + var(--safe-bottom))}
+.cc-brain-switch{position:relative;display:grid;grid-template-columns:1fr 1fr;margin:8px 16px 0;padding:3px;border-radius:999px;background:var(--cc-switch-track)}
+.cc-brain-switch.off{opacity:.55}
+.cc-brain-thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--cc-switch-thumb);box-shadow:0 1px 3px rgba(0,0,0,.12),0 1px 1px rgba(0,0,0,.04);transition:transform .28s cubic-bezier(.3,.7,.3,1)}
+.cc-brain-switch.api .cc-brain-thumb{transform:translateX(100%)}
+.cc-brain-switch button{position:relative;border:none;background:none;padding:9px 0;font:inherit;font-size:15px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:color .2s}
+.cc-brain-switch button[aria-checked="true"]{color:var(--text)}
+.cc-brain-switch button:disabled{cursor:default}
+.cc-brain-hint{margin:10px 20px 0;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.cc-brain-hint+.cc-brain-hint{margin-top:4px}
+.cc-brain-error{margin:10px 16px 0;padding:8px 12px;border-radius:var(--radius-sm);background:var(--accent-light);color:var(--danger);font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.cc-brain-scroll .card-title-outer{margin-top:24px}
+.cc-brain-row{display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;border:none;border-bottom:1px solid var(--border);background:none;font:inherit;color:var(--text);text-align:left;cursor:pointer}
+.cc-brain-row:last-child{border-bottom:none}
+.cc-brain-row:active:not(:disabled){background:var(--card)}
+.cc-brain-row:disabled{cursor:default}
+.cc-brain-row.off .cc-brain-row-main{opacity:.45}
+.cc-brain-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.cc-brain-row-name{font-size:15px;font-weight:600;line-height:1.35}
+.cc-brain-row-sub{font-size:12.5px;line-height:1.4;color:var(--text-secondary)}
+.cc-brain-row-model{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.4;color:var(--text-dim);overflow-wrap:anywhere}
+.cc-brain-row-note{flex:none;font-size:12px;color:var(--text-dim)}
+.cc-brain-check{flex:none;display:flex;color:var(--accent)}
+.cc-brain-check svg{width:16px;height:16px}
+.cc-brain-chevron{flex:none;display:flex;color:var(--text-dim)}
+.cc-brain-test{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:0 16px}
+.cc-brain-test-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:7px 16px;font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+.cc-brain-test-btn:active:not(:disabled){opacity:.7}
+.cc-brain-test-btn:disabled{opacity:.5;cursor:default}
+.cc-brain-test-result{padding:0 4px;font-size:13px;line-height:1.45;color:var(--danger);overflow-wrap:anywhere}
+.cc-brain-test-result.ok{color:var(--green)}
 
 /* ─── Usage：额度消耗（聊天页顶上一条 + More 里的 Usage 页）─── */
 /* 图表三色：验证过的分类色（读缓存 / 写缓存 / 输入输出），深色模式各自一档 */
@@ -718,6 +764,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-usage-pop{min-width:260px;padding:14px 16px}
 .cc-usage-empty{font-size:13px;color:var(--text-secondary)}
 .dropdown-chevron{color:var(--text-dim);font-size:18px;line-height:1}
+.dropdown-value{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)}
 .cc-usage-limited{font-size:13px;color:var(--danger);background:var(--accent-light);border-radius:var(--radius-sm);padding:6px 10px;text-align:center}
 .cc-usage-ctx{display:flex;align-items:center;gap:8px}
 .cc-usage-track{position:relative;flex:1;height:4px;border-radius:2px;background:var(--border);overflow:visible}

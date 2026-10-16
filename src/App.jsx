@@ -2915,6 +2915,9 @@ function ccFromServer(m) {
     ...(typeof m.pid === 'string' ? { pid: m.pid } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.via === 'app' ? { viaApp: true } : {}), // 她在官方 Claude App（Remote Control）里直接跟他说的，bridge 认出来补记的
+    // 切到 API 时后端调模型回的：记下是哪个模型，有思考过程就带上（块里折叠显示，复制不带）
+    ...(m.role === 'assistant' && m.via === 'api' ? { viaApi: true, model: typeof m.model === 'string' ? m.model : '' } : {}),
+    ...(m.role === 'assistant' && typeof m.thinking === 'string' && m.thinking.trim() ? { thinking: m.thinking } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
   }
@@ -2975,8 +2978,173 @@ function CcPiece({ m, player, showTranscript }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className={`cc-piece${anim ? ' cc-reveal' : ''}`} style={anim ? { '--cc-reveal-ms': `${ms}ms` } : undefined} onAnimationEnd={e => { if (e.target === e.currentTarget) setAnim(false) }}>
+      {m.thinking && <CcThinking text={m.thinking} />}
       <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat />
       {m.late && <div className="cc-late">补上的</div>}
+    </div>
+  )
+}
+// API 回的那段的思考过程：照 Claude App，默认收起，点"思考过程"展开/收起；展开后小字、保留换行，太长在框里滚
+function CcThinking({ text }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`cc-thinking${open ? ' open' : ''}`}>
+      <button className="cc-thinking-head" onClick={() => setOpen(v => !v)} aria-expanded={open}><span>思考过程</span>{I.chevron}</button>
+      {open && <div className="cc-thinking-body">{text}</div>}
+    </div>
+  )
+}
+
+// ─── 回复方式：CC / API ───────────────────────────────
+// 盖在聊天页上面的整页（聊天页不卸载，SSE 不断）。开关和模型都以后端 /api/cc/brain 为准，目录来自 /api/cc/api-models
+// 聊天页标题下面那行：API 模式显示"API · Opus 4.6 · K · thinking"，目录里找不到就只显示模型名
+function ccBrainLabel(brain) {
+  if (brain?.target !== 'api') return null
+  if (brain.family?.name && brain.option?.label) return `API · ${brain.family.name} · ${brain.option.label}`
+  return brain.model ? `API · ${brain.model}` : 'API'
+}
+const ccSeries = (f) => [...new Set((f.options || []).map(o => o.series).filter(Boolean))].join(' · ')
+const ccClip = (s, n) => { const a = [...(s || '')]; return a.length > n ? `${a.slice(0, n).join('')}…` : a.join('') }
+// 选模型、测试都要发 JSON；401 时 apiFetch 已经让整个 App 回锁屏，这里只报错
+async function ccPostJson(path, body) {
+  const res = await apiFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (res.status === 401) throw new Error('unauthorized')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  return data
+}
+
+function CcBrainPage({ brain, brainError, onChange, onClose }) {
+  const [catalog, setCatalog] = useState(null) // /api/cc/api-models：{ default, families }
+  const [catalogError, setCatalogError] = useState(false)
+  const [famKey, setFamKey] = useState(null) // 点进去的那个系列（第二层），null = 系列列表
+  const [want, setWant] = useState(null) // 正在切过去的 target：开关先滑过去，失败再滑回来
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [test, setTest] = useState(null) // null / { running } / { ok, ms, text, error }
+  const fam = famKey ? catalog?.families?.find(f => f.key === famKey) : null
+  const back = () => fam ? setFamKey(null) : onClose()
+  const swipe = useSwipeBack(back)
+
+  useEffect(() => {
+    let alive = true
+    apiFetch(`/api/cc/api-models`)
+      .then(async res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
+      .then(d => { if (alive) setCatalog(d) })
+      .catch(() => { if (alive) setCatalogError(true) })
+    return () => { alive = false }
+  }, [])
+
+  const supported = brain?.supported !== false
+  const isApi = brain?.target === 'api'
+  const shown = want || (isApi ? 'api' : 'cc')
+  const locked = !brain || !supported || busy
+
+  // 切开关、选模型都走这里：用后端返回的状态，出错把原话显示出来
+  const save = async (body) => {
+    if (busy) return false
+    setBusy(true)
+    setError('')
+    try {
+      onChange(await ccPostJson(`/api/cc/brain`, body))
+      return true
+    } catch (err) {
+      if (err.message !== 'unauthorized' && err.message !== 'locked') setError(err.message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  const setTarget = async (target) => {
+    if (locked || shown === target) return
+    setWant(target)
+    await save({ target })
+    setWant(null)
+  }
+  const pick = async (o) => {
+    if (!o.ready || busy) return
+    if (await save({ target: 'api', model: o.model, group: o.group })) setFamKey(null)
+  }
+  // 测的是现在选中的那个；结果记着是哪个模型的，测的时候换了模型就不显示旧结果
+  const testKey = `${brain?.group}|${brain?.model}`
+  const runTest = async () => {
+    if (!brain?.model || test?.running) return
+    const key = testKey
+    setTest({ running: true, key })
+    try {
+      setTest({ ...(await ccPostJson(`/api/cc/api-test`, { model: brain.model, group: brain.group })), key })
+    } catch (err) {
+      setTest(err.message === 'unauthorized' || err.message === 'locked' ? null : { ok: false, error: err.message, key })
+    }
+  }
+
+  const famSelected = (f) => brain?.family ? brain.family.key === f.key : (f.options || []).some(o => o.model === brain?.model && o.group === brain?.group)
+
+  return (
+    <div className="cc-brain-page" {...swipe}>
+      <div className="chatroom-header">
+        <button className="icon-btn" onClick={back} aria-label="返回">{I.back}</button>
+        <div className="chatroom-title"><div className="chatroom-name">{fam ? fam.name : '回复方式'}</div></div>
+      </div>
+      <div className="cc-brain-scroll">
+        {fam ? (
+          <div className="card settings-card">
+            {(fam.options || []).map(o => {
+              const on = isApi && o.model === brain?.model && o.group === brain?.group
+              return (
+                <button key={o.id || `${o.group}|${o.model}`} className={`cc-brain-row${o.ready ? '' : ' off'}`} onClick={() => pick(o)} disabled={!o.ready || busy}>
+                  <span className="cc-brain-row-main">
+                    <span className="cc-brain-row-name">{o.label}</span>
+                    {o.desc && <span className="cc-brain-row-sub">{o.desc}</span>}
+                    <span className="cc-brain-row-model">{o.model}</span>
+                  </span>
+                  {!o.ready ? <span className="cc-brain-row-note">没配 key</span> : on && <span className="cc-brain-check">{I.check}</span>}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <>
+            <div className={`cc-brain-switch${shown === 'api' ? ' api' : ''}${!brain || !supported ? ' off' : ''}`} role="radiogroup" aria-label="回复方式">
+              <span className="cc-brain-thumb" aria-hidden="true" />
+              <button role="radio" aria-checked={shown === 'cc'} onClick={() => setTarget('cc')} disabled={locked}>CC</button>
+              <button role="radio" aria-checked={shown === 'api'} onClick={() => setTarget('api')} disabled={locked}>API</button>
+            </div>
+            <div className="cc-brain-hint">{!brain ? (brainError ? `拿不到现在的状态（${brainError}），过一会儿再进来试试` : '还没拿到现在的状态…') : isApi ? '沐用下面选的模型回你，没有工具，只能说话' : '沐在 VPS 上的 Claude Code 里回你'}</div>
+            {brain && !supported && <div className="cc-brain-hint">bridge 还没更新到能切换的版本，现在只能用 CC</div>}
+          </>
+        )}
+        {error && <div className="cc-brain-error" role="alert" onClick={() => setError('')}>{error}</div>}
+
+        {!fam && isApi && (
+          <>
+            <div className="card-title-outer">模型</div>
+            {!catalog && <div className="empty-state-sm">{catalogError ? '拉不到模型列表，过一会儿再试' : 'Loading…'}</div>}
+            {catalog?.families?.length > 0 && (
+              <div className="card settings-card">
+                {catalog.families.map(f => (
+                  <button key={f.key} className="cc-brain-row" onClick={() => setFamKey(f.key)}>
+                    <span className="cc-brain-row-main">
+                      <span className="cc-brain-row-name">{f.name}</span>
+                      {ccSeries(f) && <span className="cc-brain-row-sub">{ccSeries(f)}</span>}
+                    </span>
+                    {famSelected(f) && <span className="cc-brain-check">{I.check}</span>}
+                    <span className="cc-brain-chevron">{I.chevron}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="cc-brain-test">
+              <button className="cc-brain-test-btn" onClick={runTest} disabled={!brain?.model || !!test?.running}>{test?.running ? '测试中…' : '测试一下'}</button>
+              {test && !test.running && test.key === testKey && (
+                <div className={`cc-brain-test-result${test.ok ? ' ok' : ''}`}>
+                  {test.ok ? `✓ ${((test.ms || 0) / 1000).toFixed(1)} 秒 · ${ccClip(test.text, 40)}` : `✗ ${test.error || '没通'}`}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -3170,6 +3338,10 @@ function CCChatPage({ onBack }) {
   const [compacting, setCompacting] = useState(false)
   // 上下文进度条、额度几点恢复：他每回完一轮（正在输入灭了）、压缩开始/结束时重拉
   const [menu, setMenu] = useState(null) // 右上角 ⋮：null 收起 / 'menu' 菜单 / 'usage' 上下文条
+  // 回复方式（/api/cc/brain）：{ supported, target, model, group, option, family }；null = 还没拉到
+  const [brain, setBrain] = useState(null)
+  const [brainError, setBrainError] = useState('') // 拉不到时的原因（bridge 连不上之类），回复方式页上显示
+  const [brainOpen, setBrainOpen] = useState(false) // 回复方式页盖在聊天页上面，聊天页不卸载
   const usageBrief = useCcUsageBrief(apiFetch, `${!!serverTyping?.on}-${compacting}`)
   const onCompacting = useCallback((ev) => {
     setCompacting(!!ev.on)
@@ -3390,6 +3562,21 @@ function CCChatPage({ onBack }) {
   }, [messages, typingNow])
   useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
 
+  // 回复方式：进来拉一次，回复方式页关掉时再拉一次（那边改了会直接把新状态交回来）
+  const loadBrain = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/cc/brain`)
+      if (res.status === 401) return lockOut()
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      setBrain(await res.json())
+      setBrainError('')
+    } catch (err) {
+      if (err.message !== 'locked') setBrainError(err.message)
+    }
+  }, [lockOut])
+  useEffect(() => { if (passcode) loadBrain() }, [passcode, loadBrain])
+  const closeBrain = () => { setBrainOpen(false); loadBrain() }
+
   // 文件白名单：拿不到就不让选文件，发图不受影响
   useEffect(() => {
     if (!passcode) return
@@ -3552,9 +3739,10 @@ function CCChatPage({ onBack }) {
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
   const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
-  const statusLabel = { connecting: 'Connecting…', live: 'Claude Code', offline: 'Offline · reconnecting' }[status]
+  const statusLabel = { connecting: 'Connecting…', live: ccBrainLabel(brain) || 'Claude Code', offline: 'Offline · reconnecting' }[status]
 
   return (
+    <>
     <div className="chatroom cc-room" {...swipe}>
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
@@ -3571,6 +3759,7 @@ function CCChatPage({ onBack }) {
 
       {menu === 'menu' && (
         <div className="chatroom-settings-dropdown">
+          <div className="dropdown-item" onClick={() => { setMenu(null); setBrainOpen(true); if (!brain) loadBrain() }}><span>回复方式</span><span className="dropdown-value">{brain?.target === 'api' ? 'API' : 'CC'}<span className="dropdown-chevron">›</span></span></div>
           <div className="dropdown-item" onClick={() => setMenu('usage')}><span>Usage</span><span className="dropdown-chevron">›</span></div>
         </div>
       )}
@@ -3588,6 +3777,7 @@ function CCChatPage({ onBack }) {
             const items = row.items
             const last = items[items.length - 1]
             const voiced = items.some(it => hasVoiceSegment(it.text))
+            const viaApi = items.findLast(it => it.viaApi) // 这块是 API 替班回的：时间后面标上模型
             const open = !!transcripts[row.key]
             return (
               <div key={row.key} className="msg assistant cc-turn">
@@ -3598,6 +3788,7 @@ function CCChatPage({ onBack }) {
                 {!live && (
                   <div className="msg-meta">
                     <span className="msg-time">{fmtMsgTime(last.time)}</span>
+                    {viaApi && <span className="msg-time cc-via-api">{viaApi.model ? `API · ${viaApi.model}` : 'API'}</span>}
                     <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
                     {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
                   </div>
@@ -3675,6 +3866,9 @@ function CCChatPage({ onBack }) {
       {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
 
     </div>
+    {/* 放在聊天页外面：右滑返回只关这一页，不会连聊天页一起退掉 */}
+    {brainOpen && <CcBrainPage brain={brain} brainError={brainError} onChange={setBrain} onClose={closeBrain} />}
+    </>
   )
 }
 
