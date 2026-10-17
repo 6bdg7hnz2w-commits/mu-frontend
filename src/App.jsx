@@ -194,6 +194,7 @@ function predictNextPeriod(periods) {
 }
 
 // ─── Date helpers ───────────────────────────────────
+function fmtListTime(t) { if (!t) return ''; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return fmtShortTime(t); return `${d.getMonth() + 1}/${d.getDate()}` }
 function getWhisperCache() {
   try { const w = JSON.parse(localStorage.getItem('whisper_last') || 'null'); return w?.content ? w : null } catch { return null }
 }
@@ -1006,12 +1007,37 @@ function compressImage(file, maxWidth = 1200, quality = 0.8) {
 
 // ─── ChatRoom ───────────────────────────────────────
 // ─── ChatPage ───────────────────────────────────────
-// Chats 只有沐 (CC) 这一条线（CC / API 在聊天页右上角 ⋮ → 回复方式里切），没有会话列表了
+// 对话列表：现在只有沐 (CC) 这一条线（CC / API 在聊天页右上角 ⋮ → 回复方式里切）。
+// 列表留着，以后接 DeepSeek 之类别的对话就加在沐下面
+function ChatListPage({ onOpenCC }) {
+  const [ccLast] = useState(getCcLast)
+  const draft = getDraft('cc')
+  const preview = draft ? `[Draft] ${draft.length > 25 ? draft.slice(0, 25) + '...' : draft}` : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''
+  return (
+    <div className="chatlist-page">
+      <div className="page-header"><h1>Chats</h1></div>
+      <div className="session-list">
+        <div className="session-card pinned" onClick={onOpenCC}>
+          <div className="session-avatar">沐</div>
+          <div className="session-info">
+            <div className="session-top"><span className="session-name">沐</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
+            <div className="session-sub-row"><span className="session-sublabel">CC · API</span></div>
+            <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{preview}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const CC_SESSION = { id: 'cc' }
 
 function ChatPage({ onEnterRoom }) {
+  // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。两个都保留 tab 栏
+  const [inCc, setInCc] = useState(true)
   useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  return <CCChatPage />
+  if (inCc) return <CCChatPage onBack={() => setInCc(false)} />
+  return <ChatListPage onOpenCC={() => setInCc(true)} />
 }
 
 // ─── SplashScreen ────────────────────────────────────
@@ -2831,7 +2857,14 @@ function CcImage({ img, onOpen }) {
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
   return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(url)} />
 }
-function CCChatPage() {
+function getCcLast() {
+  try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
+}
+function setCcLastStorage(m) {
+  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
+}
+
+function CCChatPage({ onBack }) {
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
   const [history, setHistory] = useState([]) // 服务器上的记录（双方），按时间
@@ -2887,6 +2920,7 @@ function CCChatPage() {
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
 
+  const swipe = useSwipeBack(onBack)
   const lockOut = lockApp
 
   useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
@@ -3073,6 +3107,7 @@ function CCChatPage() {
   const lastRow = rows[rows.length - 1]
   const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
   const liveTurnKey = typingNow && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
+  useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -3276,9 +3311,9 @@ function CCChatPage() {
 
   return (
     <>
-    <div className="chatroom cc-room">
+    <div className="chatroom cc-room" {...swipe}>
       <div className="chatroom-header">
-        <span className="icon-btn" aria-hidden="true" />{/* Chats 只有这一页，不用返回；占位让标题居中 */}
+        <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
           <div className="chatroom-name">沐 (CC)</div>
           <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
