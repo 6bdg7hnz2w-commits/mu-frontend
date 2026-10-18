@@ -17,6 +17,7 @@ function setPasscodeStorage(code) {
 }
 function lockApp() {
   setPasscodeStorage('')
+  try { localStorage.removeItem(CC_CACHE_KEY) } catch {} // 锁上了就别在本机留聊天记录
   window.dispatchEvent(new Event('mu-lock'))
 }
 async function apiFetch(path, opts = {}) {
@@ -2863,11 +2864,32 @@ function getCcLast() {
 function setCcLastStorage(m) {
   try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
 }
+// 最近十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
+// 存的是 ccFromServer 之后的样子，格式改了就换 key（_v2…），旧的自然作废
+const CC_CACHE_KEY = 'cc_history_v1'
+const CC_CACHE_TURNS = 10 // 按她发的消息数轮：往回数到她第十条为止
+const CC_CACHE_MAX = 100
+function getCcCache() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CC_CACHE_KEY))
+    return Array.isArray(v) ? v.filter(m => m && typeof m.key === 'string' && m.time).sort(ccOrder) : []
+  } catch { return [] }
+}
+function setCcCacheStorage(history) {
+  let start = history.length, users = 0
+  while (start > 0 && history.length - start < CC_CACHE_MAX) {
+    if (history[start - 1].role === 'user' && ++users > CC_CACHE_TURNS) break
+    start--
+  }
+  // live（正在浮现）不存，不然每次打开都重播一遍
+  const out = history.slice(start).map(({ live: _live, ...m }) => m)
+  try { localStorage.setItem(CC_CACHE_KEY, JSON.stringify(out)) } catch {}
+}
 
 function CCChatPage({ onBack }) {
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
-  const [history, setHistory] = useState([]) // 服务器上的记录（双方），按时间
+  const [history, setHistory] = useState(getCcCache) // 服务器上的记录（双方），按时间；先用本机缓存的最近十轮垫着
   const [temp, setTemp] = useState([]) // 发送中/发送失败的本地消息
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -2928,7 +2950,8 @@ function CCChatPage({ onBack }) {
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
   // 同一个 id 更正过（edited_at 更新）的新版本要盖掉旧的；只是更正旧消息时不滚动
-  const knownRef = useRef(new Map()) // key → edited_at（没改过是 ''）
+  const knownRef = useRef(null) // key → edited_at（没改过是 ''）；缓存里的算已知
+  if (knownRef.current === null) knownRef.current = new Map(history.map(m => [m.key, m.editedAt || '']))
   const mergeHistory = useCallback((incoming, mode) => {
     const fresh = incoming.filter(m => { const v = knownRef.current.get(m.key); return v === undefined || (m.editedAt || '') > v })
     if (!fresh.length) return
@@ -3069,7 +3092,8 @@ function CCChatPage({ onBack }) {
     return () => clearTimeout(t)
   }, [waitSince])
 
-  // 打开会话：拉最近 30 条
+  // 打开会话：拉最近 30 条。这一页覆盖的时间段以服务器为准：缓存里有、服务器上没有的（bridge 那边删掉的）去掉；
+  // 比这页最新一条还晚的不动（等这页回来的时候 SSE 可能已经推来了新的）
   useEffect(() => {
     if (!passcode) return
     let alive = true
@@ -3077,12 +3101,32 @@ function CCChatPage({ onBack }) {
       try {
         const data = await fetchHistory()
         if (!alive) return
-        mergeHistory((data.messages || []).map(ccFromServer), 'bottom')
+        const incoming = (data.messages || []).map(ccFromServer)
+        const times = incoming.map(m => Date.parse(m.time)).filter(Number.isFinite)
+        if (times.length) {
+          const from = data.has_more ? Math.min(...times) : -Infinity
+          const to = Math.max(...times)
+          const keep = new Set(incoming.map(m => m.key))
+          const stale = m => { const t = Date.parse(m.time); return !keep.has(m.key) && !(t < from) && !(t > to) }
+          setHistory(prev => {
+            if (!prev.some(stale)) return prev
+            prev.filter(stale).forEach(m => knownRef.current.delete(m.key))
+            return prev.filter(m => !stale(m))
+          })
+        }
+        mergeHistory(incoming, 'bottom')
         setHasMore(!!data.has_more)
       } catch {}
     })()
     return () => { alive = false }
   }, [passcode, fetchHistory, mergeHistory])
+
+  // 缓存里垫上的他的话：语音段的时长也要估（mergeHistory 只估新来的）
+  useEffect(() => {
+    history.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => { setCcCacheStorage(history) }, [history])
 
   // 往上滑到顶加载更早的 30 条，保持当前位置不跳
   const loadOlder = async () => {
