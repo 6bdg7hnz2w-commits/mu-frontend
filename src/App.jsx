@@ -2864,11 +2864,11 @@ function getCcLast() {
 function setCcLastStorage(m) {
   try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
 }
-// 最近十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
+// 最近三十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
 // 存的是 ccFromServer 之后的样子，格式改了就换 key（_v2…），旧的自然作废
 const CC_CACHE_KEY = 'cc_history_v1'
-const CC_CACHE_TURNS = 10 // 按她发的消息数轮：往回数到她第十条为止
-const CC_CACHE_MAX = 100
+const CC_CACHE_TURNS = 30 // 按她发的消息数轮：往回数到她第三十条为止（10/11~18 平均一轮 3.6 条，30 轮约 100 条、30KB）
+const CC_CACHE_MAX = 100 // 不超过 bridge /history 一次最多给的条数：打开时一次拉回来就能把缓存整段对完
 function getCcCache() {
   try {
     const v = JSON.parse(localStorage.getItem(CC_CACHE_KEY))
@@ -2881,6 +2881,9 @@ function setCcCacheStorage(history) {
     if (history[start - 1].role === 'user' && ++users > CC_CACHE_TURNS) break
     start--
   }
+  // 从她的一条开始存，开头不留半轮（只有他的回复、没有她那条）
+  const firstUser = history.findIndex((m, i) => i >= start && m.role === 'user')
+  if (firstUser > start) start = firstUser
   // live（正在浮现）不存，不然每次打开都重播一遍
   const out = history.slice(start).map(({ live: _live, ...m }) => m)
   try { localStorage.setItem(CC_CACHE_KEY, JSON.stringify(out)) } catch {}
@@ -2968,8 +2971,8 @@ function CCChatPage({ onBack }) {
     if (fresh.some(m => m.role === 'assistant' || m.kind === 'reply_failed')) stopWaiting()
   }, [fetchDurationEstimate, stopWaiting])
 
-  const fetchHistory = useCallback(async (before) => {
-    const qs = new URLSearchParams({ limit: String(CC_PAGE), system: '1' })
+  const fetchHistory = useCallback(async (before, limit = CC_PAGE) => {
+    const qs = new URLSearchParams({ limit: String(limit), system: '1' })
     if (before) qs.set('before', before)
     const res = await apiFetch(`/api/cc/history?${qs}`)
     if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
@@ -3092,22 +3095,23 @@ function CCChatPage({ onBack }) {
     return () => clearTimeout(t)
   }, [waitSince])
 
-  // 打开会话：拉最近 30 条。这一页覆盖的时间段以服务器为准：缓存里有、服务器上没有的（bridge 那边删掉的）去掉；
+  // 打开会话：拉最近 CC_CACHE_MAX 条，和缓存整段对账，以服务器为准：
+  // 缓存里有、这页里没有的都去掉——被 bridge 删掉的，和比这页最早一条还早的（关着的时候来了很多新话，
+  // 缓存和这页之间可能断了一截；去掉以后往上翻从这页最早一条接着拉，就不会漏）。
   // 比这页最新一条还晚的不动（等这页回来的时候 SSE 可能已经推来了新的）
   useEffect(() => {
     if (!passcode) return
     let alive = true
     ;(async () => {
       try {
-        const data = await fetchHistory()
+        const data = await fetchHistory(undefined, CC_CACHE_MAX)
         if (!alive) return
         const incoming = (data.messages || []).map(ccFromServer)
         const times = incoming.map(m => Date.parse(m.time)).filter(Number.isFinite)
         if (times.length) {
-          const from = data.has_more ? Math.min(...times) : -Infinity
           const to = Math.max(...times)
           const keep = new Set(incoming.map(m => m.key))
-          const stale = m => { const t = Date.parse(m.time); return !keep.has(m.key) && !(t < from) && !(t > to) }
+          const stale = m => !keep.has(m.key) && !(Date.parse(m.time) > to)
           setHistory(prev => {
             if (!prev.some(stale)) return prev
             prev.filter(stale).forEach(m => knownRef.current.delete(m.key))
