@@ -2738,15 +2738,38 @@ const CC_PAGE = 30
 const CC_MAX_ITEMS_FALLBACK = 9
 const ccExt = (name) => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : '' }
 const fmtFileSize = (n) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
-// 带口令取回 bridge 上的图或文件（<img>/<a> 带不了 Authorization），blob 地址按 path 缓存在内存里
+// 带口令取回 bridge 上的图或文件（<img>/<a> 带不了 Authorization），blob 地址按 path 缓存在内存里。
+// 聊天里的图要缩略图（thumb：bridge 做的 360×360 webp，十几 KB），点开大图才要原图；内存里缩略图的 key 是 `${path}#thumb`。
+// 图还存进浏览器的 Cache Storage：文件名是 uuid、内容永远不变，存一次下次打开 App 直接读，不用再绕 Render 和梯子。
+// iPhone 好几天不打开可能被系统清掉，读不到、存不进（无痕模式、非 https）都当没有，照常走网络
 const ccImageCache = new Map()
-async function fetchCcImage(path) {
-  if (ccImageCache.has(path)) return ccImageCache.get(path)
-  const [date, file] = path.split('/').slice(-2)
-  const res = await apiFetch(`/api/cc/uploads/${encodeURIComponent(date)}/${encodeURIComponent(file)}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const url = URL.createObjectURL(await res.blob())
-  ccImageCache.set(path, url)
+const CC_IMG_CACHE = 'cc-images-v1'
+const ccImgKey = (path, thumb) => `/cc-img/${path.split('/').slice(-2).join('/')}${thumb ? '?thumb=1' : ''}`
+async function ccImgCacheGet(path, thumb) {
+  try {
+    const r = await (await caches.open(CC_IMG_CACHE)).match(ccImgKey(path, thumb))
+    return r ? await r.blob() : null
+  } catch { return null }
+}
+async function ccImgCachePut(path, thumb, blob) {
+  try { await (await caches.open(CC_IMG_CACHE)).put(ccImgKey(path, thumb), new Response(blob, { headers: { 'Content-Type': blob.type || 'application/octet-stream' } })) } catch {}
+}
+async function fetchCcImage(path, { thumb = false } = {}) {
+  const memKey = thumb ? `${path}#thumb` : path
+  if (ccImageCache.has(memKey)) return ccImageCache.get(memKey)
+  if (thumb && ccImageCache.has(path)) return ccImageCache.get(path) // 刚发的图：内存里有本地原图，直接用
+  const image = /\.(jpg|png|webp|heic)$/i.test(path)
+  let blob = image ? await ccImgCacheGet(path, thumb) || (thumb ? await ccImgCacheGet(path, false) : null) : null
+  if (!blob) {
+    const [date, file] = path.split('/').slice(-2)
+    const res = await apiFetch(`/api/cc/uploads/${encodeURIComponent(date)}/${encodeURIComponent(file)}${thumb ? '?thumb=1' : ''}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    blob = await res.blob()
+    // 缩略图只存真的缩略图（webp）：bridge 做不出来、或者后端还没更新时回的是原图，别把原图当缩略图永久存下
+    if (image && (!thumb || blob.type === 'image/webp')) ccImgCachePut(path, thumb, blob)
+  }
+  const url = URL.createObjectURL(blob)
+  ccImageCache.set(memKey, url)
   return url
 }
 // 上传失败时把后端的提示（"不支持 .docx 文件"、"文件不能超过 20MB"）带出来
@@ -2823,16 +2846,26 @@ function CcFile({ file }) {
 // 点开的大图：右上角三个点 → 苹果原生分享面板（里面有"存储图像"），原图原画质
 // 分享必须在点击的那一下同步调用（iOS 会拦掉异步之后的调用），所以一打开就先把图读成 File
 const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif' }
-function ImageLightbox({ src, onClose }) {
+// path：bridge 上的图。先用传进来的缩略图垫着，原图取到了再换上（分享的也是原图）
+function ImageLightbox({ src, path, onClose }) {
+  const [shown, setShown] = useState(src)
+  const [full, setFull] = useState(!path)
   const [file, setFile] = useState(null)
   useEffect(() => {
+    if (!path) return
     let alive = true
-    fetch(src).then(r => r.blob()).then(b => {
+    fetchCcImage(path).then(u => { if (alive) { setShown(u); setFull(true) } }).catch(() => { if (alive) setFull(true) })
+    return () => { alive = false }
+  }, [path])
+  useEffect(() => {
+    if (!full) return
+    let alive = true
+    fetch(shown).then(r => r.blob()).then(b => {
       const f = new File([b], `mu-${Date.now()}.${LIGHTBOX_EXT[b.type] || 'jpg'}`, { type: b.type || 'image/jpeg' })
       if (alive && navigator.canShare?.({ files: [f] })) setFile(f)
     }).catch(() => {})
     return () => { alive = false }
-  }, [src])
+  }, [shown, full])
   const share = (e) => {
     e.stopPropagation()
     navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
@@ -2840,23 +2873,24 @@ function ImageLightbox({ src, onClose }) {
   return (
     <div className="image-lightbox-overlay" onClick={onClose}>
       {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label="分享或存储图像">{I.more}</button>}
-      <img src={src} alt="" />
+      <img src={shown} alt="" />
     </div>
   )
 }
 
+// 聊天里显示缩略图；点开交给 ImageLightbox 去取原图（刚发的图本地就有原图，直接用）
 function CcImage({ img, onOpen }) {
-  const [url, setUrl] = useState(img.localUrl || (img.path && ccImageCache.get(img.path)) || null)
+  const [url, setUrl] = useState(img.localUrl || (img.path && (ccImageCache.get(`${img.path}#thumb`) || ccImageCache.get(img.path))) || null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     if (url || !img.path) return
     let alive = true
-    fetchCcImage(img.path).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
+    fetchCcImage(img.path, { thumb: true }).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
   }, [img.path, url])
   if (failed) return <div className="cc-thumb cc-thumb-gone">图片已过期</div>
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
-  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(url)} />
+  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen({ src: url, path: img.localUrl ? null : img.path })} />
 }
 function getCcLast() {
   try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
@@ -3270,6 +3304,7 @@ function CCChatPage({ onBack }) {
           path = p.kind === 'image' ? await uploadCcImage(p.blob) : await uploadCcFile(p.file)
           uploadedRef.current.set(p.key, path)
           ccImageCache.set(path, p.previewUrl || p.localUrl) // 刚发的直接用本地预览，不用再向服务器取
+          if (p.kind === 'image') ccImgCachePut(path, false, p.blob) // 下次打开 App 也不用下载自己发的图
         }
         sent.push({ p, path })
       }
@@ -3487,7 +3522,7 @@ function CCChatPage({ onBack }) {
         </div>
       </div>
 
-      {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
+      {lightboxImage && <ImageLightbox src={lightboxImage.src} path={lightboxImage.path} onClose={() => setLightboxImage(null)} />}
 
     </div>
     {/* 放在聊天页外面：右滑返回只关这一页，不会连聊天页一起退掉 */}
