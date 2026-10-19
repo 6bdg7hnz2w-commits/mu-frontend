@@ -2,7 +2,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import './App.css'
 import { UsagePage, CcUsageStrip, CcLimitedNotice, useCcUsageBrief } from './Usage'
 
-const API = import.meta.env.VITE_API_URL || 'https://mu-backend-l0uw.onrender.com'
+// 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
+const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
 const START_DATE = new Date('2026-07-27')
 
 // ─── APP 口令 ──────────────────────────────────────
