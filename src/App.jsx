@@ -3349,7 +3349,6 @@ function CCChatPage({ onBack }) {
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
     setInput('')
-    deletedRef.current = 0 // 这条的节奏后端已经在结算了，没报上去的零头不带到下一条
     setPending([])
     deliver(msg)
   }
@@ -3437,25 +3436,7 @@ function CCChatPage({ onBack }) {
     return false
   }
 
-  // ─── fingertips 打字节奏探针 ─────────────────────────
-  // 只上报"正在打字"和这几秒删了几个字（只有个数），4秒节流，不携带任何内容；
-  // 发出去时后端结算，跟她平时不一样才给沐一个短标签，CC 和 API 谁接都能看到
-  const lastPingRef = useRef(0)
-  const deletedRef = useRef(0) // 上次 ping 以来删掉的字数
-  const handleInputChange = (e) => {
-    const value = e.target.value
-    const removed = [...input].length - [...value].length
-    if (removed > 0) deletedRef.current += removed
-    setInput(value)
-    const now = Date.now()
-    if ((value.trim() || deletedRef.current) && now - lastPingRef.current >= 4000) {
-      lastPingRef.current = now
-      const deleted = deletedRef.current
-      deletedRef.current = 0
-      // 不用 keepalive：带口令头要先预检，Safari 上 keepalive+预检没法实测；它是打字时发的，用不着
-      apiFetch(`/api/typing/ping`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deleted }) }).catch(() => {})
-    }
-  }
+  const handleInputChange = (e) => setInput(e.target.value)
 
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
   const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
