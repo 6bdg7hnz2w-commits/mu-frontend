@@ -2464,6 +2464,8 @@ function NookPage({ onBack, onEnterRoom }) {
 // 服务器上的一条记录 → 页面上的消息。系统事件（沐那轮没回上来）不画成气泡，只用来在她那条下面挂提示
 function ccFromServer(m) {
   const seq = Number.isSafeInteger(m.seq) ? { seq: m.seq } : {}
+  // 他调过的工具：排进他那一轮里，几个挨着的合成一行"用了 N 个工具"
+  if (m.role === 'system' && m.kind === 'tool') return { key: m.id, role: 'system', kind: 'tool', tool: m.tool, sum: m.sum || '', ok: m.ok !== false, time: m.time, ...seq, ...(typeof m.pid === 'string' ? { pid: m.pid } : {}) }
   if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
@@ -2499,17 +2501,19 @@ const ccPos = m => (m.displayBefore != null ? m.displayBefore - 0.5 : m.seq)
 const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq) : new Date(a.time) - new Date(b.time))
 // 他同一轮（bridge 给的 pid）里的几段话合成一块显示；没有 pid 的旧记录，挨着的、前后不超过 3 分钟的算一轮
 const CC_TURN_GAP_MS = 3 * 60 * 1000
+const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
+const ccIsHis = m => m.role === 'assistant' || ccIsTool(m) // 算进他那一块的：他的话和他调的工具
 function ccRows(messages) {
   const rows = []
   const seen = new Map() // pid → 出现过几块（同一轮被她的消息隔开时，块的 key 不撞）
   for (const m of messages) {
     const prev = rows[rows.length - 1]
-    if (m.role === 'assistant' && prev?.turn) {
+    if (ccIsHis(m) && prev?.turn) {
       const last = prev.items[prev.items.length - 1]
       const same = m.pid || last.pid ? m.pid === last.pid : Math.abs(new Date(m.time) - new Date(last.time)) <= CC_TURN_GAP_MS
       if (same) { prev.items.push(m); continue }
     }
-    if (m.role === 'assistant') {
+    if (ccIsHis(m)) {
       const n = m.pid ? (seen.get(m.pid) || 0) : 0
       if (m.pid) seen.set(m.pid, n + 1)
       rows.push({ turn: true, key: m.pid ? `turn-${m.pid}-${n}` : `turn-${m.key}`, items: [m] })
@@ -2540,6 +2544,41 @@ function CcPiece({ m, player, showTranscript }) {
     </div>
   )
 }
+// 他调的工具：一个就直接写"读了 xx"；挨着的几个合成"用了 N 个工具"，点开一行一个。照 Claude App，小字、默认收起
+const CC_TOOL_VERB = {
+  Read: '读了', Edit: '改了', MultiEdit: '改了', Write: '写了', NotebookEdit: '改了', Bash: '跑了',
+  WebSearch: '搜了', WebFetch: '看了网页', Grep: '搜了', Glob: '找了', ToolSearch: '找了工具', TodoWrite: '记了待办', Task: '派了个帮手', Agent: '派了个帮手',
+}
+function ccToolLabel(t) {
+  const verb = CC_TOOL_VERB[t.tool] || `用了 ${t.tool}`
+  return <><span>{verb}</span>{t.sum && <code className="cc-tool-sum">{t.sum}</code>}{!t.ok && <span className="cc-tool-fail">没成功</span>}</>
+}
+function CcTools({ tools }) {
+  const [open, setOpen] = useState(false)
+  if (tools.length === 1) return <div className="cc-tools"><div className="cc-tool-line">{ccToolLabel(tools[0])}</div></div>
+  const failed = tools.filter(t => !t.ok).length
+  return (
+    <div className={`cc-tools${open ? ' open' : ''}`}>
+      <button className="cc-thinking-head" onClick={() => setOpen(v => !v)} aria-expanded={open}>
+        <span>用了 {tools.length} 个工具{failed ? `（${failed} 个没成功）` : ''}</span>{I.chevron}
+      </button>
+      {open && <div className="cc-tools-body">{tools.map(t => <div key={t.key} className="cc-tool-line">{ccToolLabel(t)}</div>)}</div>}
+    </div>
+  )
+}
+// 一块里的东西按先后分组：挨着的工具合成一组，话一段一个
+function ccTurnParts(items) {
+  const parts = []
+  for (const it of items) {
+    const prev = parts[parts.length - 1]
+    if (ccIsTool(it)) {
+      if (prev?.tools) prev.tools.push(it)
+      else parts.push({ key: `tools-${it.key}`, tools: [it] })
+    } else parts.push({ key: it.key, m: it })
+  }
+  return parts
+}
+
 // API 回的那段的思考过程：照 Claude App，默认收起，点"思考过程"展开/收起；展开后小字、保留换行，太长在框里滚
 function CcThinking({ text }) {
   const [open, setOpen] = useState(false)
@@ -3008,7 +3047,7 @@ function CCChatPage({ onBack }) {
   }, [fetchDurationEstimate, stopWaiting])
 
   const fetchHistory = useCallback(async (before, limit = CC_PAGE) => {
-    const qs = new URLSearchParams({ limit: String(limit), system: '1' })
+    const qs = new URLSearchParams({ limit: String(limit), system: '1', tools: '1' })
     if (before) qs.set('before', before)
     const res = await apiFetch(`/api/cc/history?${qs}`)
     if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
@@ -3201,7 +3240,7 @@ function CCChatPage({ onBack }) {
   }
 
   const messages = useMemo(
-    () => [...history.filter(m => m.role !== 'system'), ...temp].sort(ccOrder),
+    () => [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp].sort(ccOrder),
     [history, temp]
   )
   const rows = useMemo(() => ccRows(messages), [messages])
@@ -3210,7 +3249,7 @@ function CCChatPage({ onBack }) {
   const lastRow = rows[rows.length - 1]
   const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
   const liveTurnKey = typingNow && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
-  useEffect(() => { const last = messages[messages.length - 1]; if (last) setCcLastStorage(last) }, [messages])
+  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m)); if (last) setCcLastStorage(last) }, [messages])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -3455,21 +3494,24 @@ function CCChatPage({ onBack }) {
             // 还在说（服务器的"正在输入"亮着、这是最后一块）：不显示操作行，三个点跟在这块最后面
             const live = liveTurnKey === row.key
             const items = row.items
+            const said = items.filter(it => !ccIsTool(it)) // 他说的话（复制、转文字只管这些）
             const last = items[items.length - 1]
-            const voiced = items.some(it => hasVoiceSegment(it.text))
+            const voiced = said.some(it => hasVoiceSegment(it.text))
             const viaApi = items.findLast(it => it.viaApi) // 这块是 API 替班回的：时间后面标上模型
             const open = !!transcripts[row.key]
             return (
               <div key={row.key} className="msg assistant cc-turn">
                 <div className="cc-turn-body">
-                  {items.map(it => <CcPiece key={it.key} m={it} player={voice} showTranscript={open} />)}
+                  {ccTurnParts(items).map(part => part.tools
+                    ? <CcTools key={part.key} tools={part.tools} />
+                    : <CcPiece key={part.key} m={part.m} player={voice} showTranscript={open} />)}
                   {live && <div className="cc-typing cc-typing-inline" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
                 </div>
                 {!live && (
                   <div className="msg-meta">
                     <span className="msg-time">{fmtMsgTime(last.time)}</span>
                     {viaApi && <span className="msg-time cc-via-api">{viaApi.model ? `API · ${viaApi.model}` : 'API'}</span>}
-                    <CopyButton getText={() => items.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />
+                    {said.length > 0 && <CopyButton getText={() => said.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />}
                     {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
                   </div>
                 )}
