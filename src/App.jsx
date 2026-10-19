@@ -2804,7 +2804,7 @@ const isMobileUa = () => /iPhone|iPad|Android/i.test(navigator.userAgent)
 
 const CC_FILE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
 const CC_DOWNLOAD_ICON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-const CC_OFFICE_EXTS = new Set(['docx', 'xlsx', 'pptx'])
+const CC_OFFICE_EXTS = new Set(['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt'])
 function CcFileIcon({ name }) {
   return <span className="cc-file-icon">{CC_FILE_ICON}<span className="cc-file-ext">{ccExt(name).slice(0, 4).toUpperCase()}</span></span>
 }
