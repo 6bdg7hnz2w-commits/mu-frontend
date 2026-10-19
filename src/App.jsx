@@ -2474,6 +2474,7 @@ function ccFromServer(m) {
     ...(typeof m.pid === 'string' ? { pid: m.pid } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
     ...(m.via === 'app' ? { viaApp: true } : {}), // 她在官方 Claude App（Remote Control）里直接跟他说的，bridge 认出来补记的
+    ...(m.role === 'user' && typeof m.client_id === 'string' ? { clientId: m.client_id } : {}), // 前端发的：认出对应的临时消息
     // 切到 API 时后端调模型回的：记下是哪个模型，有思考过程就带上（块里折叠显示，复制不带）
     ...(m.role === 'assistant' && m.via === 'api' ? { viaApi: true, model: typeof m.model === 'string' ? m.model : '' } : {}),
     ...(m.role === 'assistant' && typeof m.thinking === 'string' && m.thinking.trim() ? { thinking: m.thinking } : {}),
@@ -3240,10 +3241,11 @@ function CCChatPage({ onBack }) {
     setLoadingMore(false)
   }
 
-  const messages = useMemo(
-    () => [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp].sort(ccOrder),
-    [history, temp]
-  )
+  // 服务器那条已经到了（SSE 往往比 /api/cc/send 的回应先到）：同一个 client_id 的临时消息就不再显示，不然会闪一下两条
+  const messages = useMemo(() => {
+    const arrived = new Set(history.map(m => m.clientId).filter(Boolean))
+    return [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
+  }, [history, temp])
   const rows = useMemo(() => ccRows(messages), [messages])
   // 正在说的那一块：还亮着"正在输入"，而且列表最后一行就是他的一块（她发完还没回时最后一行是她的，三个点单独一行）
   // 再加一道保险：这块的第一段得是"正在输入"亮起之后才到的，免得把上一轮已经说完的那块当成正在说
