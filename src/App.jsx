@@ -3016,11 +3016,30 @@ function CCChatPage({ onBack }) {
     return res.json()
   }, [passcode])
 
-  // 补拉一次最近的历史（轮询兜底、回到前台、SSE 重连后都用它），按 id 去重
+  // 补拉一次最近的历史（轮询兜底、回到前台、SSE 重连后都用它），按 id 去重。
+  // 切到后台时 SSE 会断，这段时间她在官方 App 里聊的、他回的都只能靠这里补：一次拉 CC_CACHE_MAX 条，
+  // 这一页最早那条（同一时刻的几条）手上一条都没有，说明中间断了一截（10/19 早上 35 分钟来了 43 条，以前只拉 30 条，前面十几条就丢了）。
+  // 补不上就把手上更早的扔掉，往上翻从这一页最早一条接着拉，不留洞。手上有就是连着的，照常合并
   const pollOnce = useCallback(async () => {
     try {
-      const data = await fetchHistory()
-      mergeHistory((data.messages || []).map(ccFromServer), 'bottom')
+      const data = await fetchHistory(undefined, CC_CACHE_MAX)
+      const incoming = (data.messages || []).map(ccFromServer)
+      const times = incoming.map(m => Date.parse(m.time)).filter(Number.isFinite)
+      if (data.has_more && times.length) {
+        const from = Math.min(...times)
+        const keep = new Set(incoming.map(m => m.key))
+        const to = Math.max(...times)
+        const head = new Set(incoming.filter(m => Date.parse(m.time) === from).map(m => m.key))
+        // 比这页最新一条还晚的（等这页回来时 SSE 刚推来的）留着
+        const drop = m => !keep.has(m.key) && !(Date.parse(m.time) > to)
+        setHistory(prev => {
+          if (!prev.length || prev.some(m => head.has(m.key))) return prev
+          prev.filter(drop).forEach(m => knownRef.current.delete(m.key))
+          return prev.filter(m => !drop(m))
+        })
+        setHasMore(true) // 服务器上还有更早的：往上翻能接着拉（没断档时多拉一次空页也无妨）
+      }
+      mergeHistory(incoming, 'bottom')
     } catch {}
   }, [fetchHistory, mergeHistory])
   const pollOnceRef = useRef(pollOnce)
