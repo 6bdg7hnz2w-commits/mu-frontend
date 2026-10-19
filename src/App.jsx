@@ -2804,6 +2804,7 @@ const isMobileUa = () => /iPhone|iPad|Android/i.test(navigator.userAgent)
 
 const CC_FILE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
 const CC_DOWNLOAD_ICON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+const CC_OFFICE_EXTS = new Set(['docx', 'xlsx', 'pptx'])
 function CcFileIcon({ name }) {
   return <span className="cc-file-icon">{CC_FILE_ICON}<span className="cc-file-ext">{ccExt(name).slice(0, 4).toUpperCase()}</span></span>
 }
@@ -2814,13 +2815,14 @@ function CcFile({ file }) {
   const getUrl = async () => file.localUrl || await fetchCcImage(file.path)
   const open = async (download) => {
     if (state !== 'idle') return
-    // 电脑上要先同步开窗，等拿到文件再跳，不然会被当成弹窗拦掉
-    const win = !download && !isMobileUa() ? window.open('', '_blank') : null
+    // 电脑上要先同步开窗，等拿到文件再跳，不然会被当成弹窗拦掉；Word/Excel/PPT 浏览器打不开，直接下载
+    const office = CC_OFFICE_EXTS.has(ccExt(file.name))
+    const win = !download && !office && !isMobileUa() ? window.open('', '_blank') : null
     setState('loading')
     try {
       const url = await getUrl()
       if (win) {
-        // 白名单里除了 pdf 都是文本：按纯文本打开，免得 csv/代码文件在新标签里被当成下载
+        // 剩下的除了 pdf 都是文本：按纯文本打开，免得 csv/代码文件在新标签里被当成下载
         if (ccExt(file.name) === 'pdf') win.location.href = url
         else win.location.href = URL.createObjectURL(new Blob([await (await fetch(url)).blob()], { type: 'text/plain; charset=utf-8' }))
       } else saveBlobUrl(url, file.name)
