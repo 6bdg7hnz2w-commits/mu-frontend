@@ -2969,6 +2969,11 @@ const CC_VOICE_MIN_S = 0.8
 // 输入框两边的圆圈按钮：语音（声波）/ 键盘、⊕
 const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.3 10.6a2 2 0 0 1 0 2.8" strokeWidth="1.8"/><path d="M11.8 8.6a5 5 0 0 1 0 6.8" strokeWidth="1.8"/><path d="M14.3 6.6a8 8 0 0 1 0 10.8" strokeWidth="1.8"/></svg>
 const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
+const CC_EMOJI_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><circle cx="15" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><path d="M7.8 13.5h8.4a4.2 4.2 0 0 1-8.4 0z" strokeWidth="1.6"/></svg>
+const CC_BACKSPACE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 5H8.5L3 12l5.5 7H21z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/></svg>
+// 表情面板：常用的这些，点一下插进输入框光标处
+const CC_EMOJIS = [...'😀😁😂🤣😊😇🙂😉😌😍🥰😘😗😙😚😋😛😜🤪😝🤗🤭🫢🤫🤔🫡😐😑😶🙄😏😒😮‍💨😬😴🥱😪🤤😷🤒🥴😵‍💫🤯🥳🥺🥹😢😭😤😠😡🤬😳😱😨😰😥😓🫠🙃😈👻💀🤡🙈🙉🙊💋💌💘💝💖💗💓💞💕❤️🧡💛💚💙💜🤍🖤💔❣️🫶👍👎👌✌️🤞🫰🤟🤙👋👏🙌🙏💪🤝🫂👀✨🌙⭐️🔥🌸🌹🍀🎉🎁🍰☕️🧋🍜🐱🐶🐰🐻🐼🦊']
+const CC_EMOJI_LIST = (() => { try { return [...new Intl.Segmenter('zh', { granularity: 'grapheme' }).segment(CC_EMOJIS.join(''))].map(x => x.segment) } catch { return CC_EMOJIS } })()
 const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
 const CC_PLAY_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
 const CC_PAUSE_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>
@@ -3103,6 +3108,7 @@ function CCChatPage({ onBack }) {
   const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
   const [lightboxImage, setLightboxImage] = useState(null)
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
+  const [emojiOpen, setEmojiOpen] = useState(false) // 表情面板
   const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
   const [recNow, setRecNow] = useState(0)
   const recRef = useRef(null)
@@ -3112,8 +3118,18 @@ function CCChatPage({ onBack }) {
     const next = !voiceMode
     setVoiceMode(next)
     try { localStorage.setItem('cc_voice_mode', next ? '1' : '0') } catch {}
-    if (!next) setTimeout(() => textareaRef.current?.focus(), 0)
+    if (next) setEmojiOpen(false)
+    // 切到语音前先让输入框失焦：直接卸掉的话浏览器不发 focusout，底部 tab 会一直藏着；切回键盘也不自动聚焦，点了输入框才藏 tab
+    if (next) textareaRef.current?.blur()
   }
+  // 插在光标处（没聚焦过就接在最后），不弹键盘；语音模式下先切回键盘
+  const insertEmoji = (em) => {
+    const ta = textareaRef.current
+    const sel = ta && document.activeElement === ta ? [ta.selectionStart, ta.selectionEnd] : null
+    setInput(v => sel ? v.slice(0, sel[0]) + em + v.slice(sel[1]) : v + em)
+    if (voiceMode) { setVoiceMode(false); try { localStorage.setItem('cc_voice_mode', '0') } catch {} }
+  }
+  const deleteBack = () => setInput(v => { const parts = [...new Intl.Segmenter('zh', { granularity: 'grapheme' }).segment(v)]; return parts.slice(0, -1).map(x => x.segment).join('') })
   const photoInputRef = useRef(null)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
@@ -3760,7 +3776,7 @@ function CCChatPage({ onBack }) {
           <div className={`cc-recording${recording.cancel ? ' cancel' : ''}`} role="status">
             <span className="cc-recording-dot" />
             <span className="cc-recording-time">{recording.start ? `${Math.floor(Math.max(0, recNow - recording.start) / 1000)}"` : '…'}</span>
-            <span>{!recording.start ? '正在打开麦克风' : recording.cancel ? '松开取消' : '松开发送 · 上滑取消'}</span>
+            <span>{!recording.start ? 'Opening mic…' : recording.cancel ? 'Release to cancel' : 'Release to send · slide up to cancel'}</span>
           </div>
         )}
         {attachOpen && (
@@ -3775,15 +3791,22 @@ function CCChatPage({ onBack }) {
           {voiceMode ? (
             <button className={`cc-hold-btn${recording ? ' recording' : ''}${recording?.cancel ? ' cancel' : ''}`} disabled={!passcode}
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
-              onContextMenu={e => e.preventDefault()}>{!recording ? '按住 说话' : recording.cancel ? '松开 取消' : '松开 发送'}</button>
+              onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
-          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => setAttachOpen(o => !o)} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
+          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => { setAttachOpen(false); setEmojiOpen(o => !o); textareaRef.current?.blur() }} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
+          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => { setEmojiOpen(false); setAttachOpen(o => !o) }} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
           {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
         </div>
+        {emojiOpen && (
+          <div className="cc-emoji-panel">
+            <div className="cc-emoji-grid">{CC_EMOJI_LIST.map(em => <button key={em} onClick={() => insertEmoji(em)}>{em}</button>)}</div>
+            <button className="cc-emoji-del" onClick={deleteBack} disabled={!input} aria-label="Delete">{CC_BACKSPACE_ICON}</button>
+          </div>
+        )}
       </div>
 
       {lightboxImage && <ImageLightbox src={lightboxImage.src} path={lightboxImage.path} onClose={() => setLightboxImage(null)} />}
