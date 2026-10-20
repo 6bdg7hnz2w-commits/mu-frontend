@@ -809,3 +809,35 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .usage-table th{position:sticky;top:0;background:var(--surface);color:var(--text-secondary);font-weight:500;text-align:right;padding:4px 4px;border-bottom:1px solid var(--border)}
 .usage-table td{text-align:right;padding:4px 4px;border-bottom:1px solid var(--border);color:var(--text)}
 .usage-table th:first-child,.usage-table td:first-child{text-align:left}
+
+/* 沐聊天页：按住说话、"+"（照片 / 文件）、她发的语音 */
+.cc-composer-row{align-items:center}
+.cc-composer-row .attach-btn{width:34px;height:34px;flex-shrink:0;color:var(--text-secondary)}
+.cc-hold-btn{flex:1;height:38px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:15px;font-weight:500;font-family:inherit;letter-spacing:.05em;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.cc-hold-btn.recording{background:var(--cc-user-bg);border-color:var(--text-secondary)}
+.cc-hold-btn.cancel{color:#d94444;border-color:#d94444;background:rgba(217,68,68,.08)}
+.cc-hold-btn:disabled{opacity:.4;cursor:default}
+.attach-btn.active{color:var(--text)}
+.attach-btn:disabled{opacity:.35;cursor:default}
+.cc-attach-menu{display:flex;gap:8px;margin:0 6px 8px}
+.cc-attach-menu button{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer}
+.cc-attach-menu button:disabled{opacity:.4;cursor:default}
+.cc-attach-menu button:active{opacity:.7}
+.cc-recording{display:flex;align-items:center;gap:8px;margin:0 6px 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px}
+.cc-recording.cancel{color:#d94444;border-color:#d94444}
+.cc-recording-dot{width:8px;height:8px;border-radius:50%;background:#d94444;animation:cc-rec-blink 1s ease-in-out infinite}
+.cc-recording-time{font-variant-numeric:tabular-nums;color:var(--text);min-width:24px}
+@keyframes cc-rec-blink{50%{opacity:.25}}
+.cc-voice{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:78%;margin-bottom:4px}
+.cc-voice-bar{display:flex;align-items:center;gap:8px;background:var(--cc-user-bg);color:var(--text);border-radius:18px;padding:9px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box;min-width:110px;max-width:100%}
+.cc-voice-bar:active{opacity:.8}
+.cc-voice-bar.loading{opacity:.6;cursor:default}
+.cc-voice-bar.gone{opacity:.5;cursor:default}
+.cc-voice-play{display:inline-flex;flex-shrink:0}
+.cc-voice-wave{display:flex;align-items:center;gap:3px;flex:1;height:16px;overflow:hidden}
+.cc-voice-wave i{display:block;width:3px;border-radius:1.5px;background:var(--text-dim);flex-shrink:0;transition:background .15s}
+.cc-voice-wave i.on{background:var(--text)}
+.cc-voice-dur{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;flex-shrink:0}
+.cc-voice-text{font-size:14px;line-height:1.45;color:var(--text);text-align:left;padding:0 6px;white-space:pre-wrap;word-break:break-word}
+.cc-voice-dim{color:var(--text-dim)}
+.cc-voice-tone{font-size:12px;color:var(--text-dim);padding:0 6px;text-align:right}

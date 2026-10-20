@@ -2480,6 +2480,18 @@ function ccFromServer(m) {
     ...(m.role === 'assistant' && typeof m.thinking === 'string' && m.thinking.trim() ? { thinking: m.thinking } : {}),
     ...(m.images?.length ? { images: m.images.map(path => ({ path })) } : {}),
     ...(m.files?.length ? { files: m.files.map(f => ({ path: f.path, name: f.name, size: f.size })) } : {}),
+    ...(m.voices?.length ? { voices: m.voices.map(v => ({ path: v.path, ...ccVoiceView(v) })) } : {}),
+  }
+}
+// 一条语音（bridge /listen 回的、或者 history 里的）：ears 转出来的字、语气、和她平时比偏了多少、时长
+function ccVoiceView(v) {
+  return {
+    text: typeof v.text === 'string' ? v.text : '',
+    emotion: typeof v.emotion === 'string' ? v.emotion : '',
+    hint: typeof v.hint === 'string' ? v.hint : '',
+    relative: v.relative && typeof v.relative === 'object' ? v.relative : {},
+    ...(Number.isFinite(v.duration) ? { duration: v.duration } : {}),
+    ...(v.learning ? { learning: true } : {}),
   }
 }
 // 兜底：发出后这么久没回、也没收到"没回上来"的事件（bridge 挂了之类），就停三个点说"他好像卡住了"。
@@ -2935,11 +2947,90 @@ function CcImage({ img, onOpen }) {
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
   return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen({ src: url, path: img.localUrl ? null : img.path })} />
 }
+// 按住说话：录音交给后端 /api/cc/listen（→ bridge → VPS 本机的 ears 转写 + 听语气），回 { path, text, emotion, … }
+// 声纹锁认不出是她（422）、太短（400）：这段不发，err.drop 让发送那边直接撤掉临时消息
+async function listenCcVoice(blob, duration) {
+  const form = new FormData()
+  form.append('duration', String(Math.round(duration * 10) / 10))
+  form.append('audio', blob, /mp4/.test(blob.type) ? 'voice.m4a' : /ogg/.test(blob.type) ? 'voice.ogg' : 'voice.webm')
+  const res = await apiFetch(`/api/cc/listen`, { method: 'POST', body: form })
+  if (res.status === 401) throw new Error('unauthorized')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { drop: res.status === 400 || res.status === 422 })
+  return data
+}
+// 录音格式：Chrome 录 webm/opus，iPhone Safari 只会 mp4
+function ccRecorderMime() {
+  if (typeof MediaRecorder === 'undefined') return null
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported?.(t)) || ''
+}
+const CC_VOICE_MAX_S = 60 // 一段最多录这么久，到点自动发
+const CC_VOICE_MIN_S = 0.8
+// 输入框两边的圆圈按钮：语音（声波）/ 键盘、⊕
+const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.3 10.6a2 2 0 0 1 0 2.8" strokeWidth="1.8"/><path d="M11.8 8.6a5 5 0 0 1 0 6.8" strokeWidth="1.8"/><path d="M14.3 6.6a8 8 0 0 1 0 10.8" strokeWidth="1.8"/></svg>
+const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
+const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
+const CC_PLAY_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
+const CC_PAUSE_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>
+
+// 她发的语音：点一下放 / 停，下面是 ears 转出来的字和语气（和她平时比偏了多少）
+// 录音先取好放着，点的那一下同步 play()，iPhone 才不会因为"不是用户点的"拦掉
+let ccVoiceNow = null // 同一时间只放一条
+function CcVoice({ v }) {
+  const [url, setUrl] = useState(v.localUrl || (v.path && ccImageCache.get(v.path)) || null)
+  const [state, setState] = useState('idle') // idle | playing | gone
+  const [progress, setProgress] = useState(0)
+  const audioRef = useRef(null)
+  useEffect(() => {
+    if (url || !v.path) return
+    let alive = true
+    fetchCcImage(v.path).then(u => { if (alive) setUrl(u) }).catch(err => { if (alive && err.message === 'HTTP 404') setState('gone') })
+    return () => { alive = false }
+  }, [v.path, url])
+  useEffect(() => () => audioRef.current?.pause(), [])
+  const toggle = () => {
+    if (!url || state === 'gone') return
+    const a = audioRef.current || (audioRef.current = new Audio(url))
+    if (!a.paused) { a.pause(); return }
+    if (ccVoiceNow && ccVoiceNow !== a) ccVoiceNow.pause()
+    ccVoiceNow = a
+    a.ontimeupdate = () => {
+      const total = isFinite(a.duration) && a.duration > 0 ? a.duration : v.duration
+      setProgress(total ? Math.min(a.currentTime / total, 1) : 0)
+    }
+    a.onplay = () => setState('playing')
+    a.onpause = () => setState(s => s === 'gone' ? s : 'idle')
+    a.onended = () => { setProgress(0); a.currentTime = 0 }
+    a.play().catch(() => setState('idle'))
+  }
+  const dots = useMemo(() => {
+    let h = 0
+    for (const c of v.path || v.localUrl || '') h = (h * 31 + c.charCodeAt(0)) >>> 0
+    const n = Math.max(6, Math.min(24, Math.round(4 + (v.duration || 2) * 1.5)))
+    return Array.from({ length: n }, (_, i) => 4 + ((h >>> (i % 24)) + i * 7) % 11)
+  }, [v.path, v.localUrl, v.duration])
+  const lit = state === 'playing' || progress > 0 ? Math.round(progress * dots.length) : 0
+  const rel = Object.entries(v.relative || {}).map(([k, d]) => `${k}${d}`).join('、')
+  return (
+    <div className="cc-voice">
+      <div className={`cc-voice-bar${state === 'gone' ? ' gone' : ''}${!url ? ' loading' : ''}`} onClick={toggle} role="button" aria-label={state === 'playing' ? '暂停' : '播放语音'}>
+        <span className="cc-voice-play">{state === 'playing' ? CC_PAUSE_ICON : CC_PLAY_ICON}</span>
+        <span className="cc-voice-wave">{dots.map((h, i) => <i key={i} className={i < lit ? 'on' : ''} style={{ height: h }} />)}</span>
+        <span className="cc-voice-dur">{state === 'gone' ? '已过期' : v.duration ? `${Math.max(1, Math.round(v.duration))}"` : ''}</span>
+      </div>
+      {v.listening
+        ? <div className="cc-voice-text cc-voice-dim">正在听…</div>
+        : v.text && <div className="cc-voice-text">{v.text}</div>}
+      {!v.listening && v.emotion && <div className="cc-voice-tone" title={v.hint || ''}>{v.emotion}{rel ? ` · ${rel}` : v.learning ? ' · 还在认识你的声音' : ''}</div>}
+    </div>
+  )
+}
+
 function getCcLast() {
   try { return JSON.parse(localStorage.getItem('cc_last') || 'null') } catch { return null }
 }
 function setCcLastStorage(m) {
-  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : ''), time: m.time })) } catch {}
+  try { localStorage.setItem('cc_last', JSON.stringify({ text: m.text || (m.images?.length ? '[图片]' : m.files?.length ? '[文件]' : m.voices?.length ? '[语音]' : ''), time: m.time })) } catch {}
 }
 // 最近三十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
 // 存的是 ccFromServer 之后的样子，格式改了就换 key（_v2…），旧的自然作废
@@ -3011,6 +3102,18 @@ function CCChatPage({ onBack }) {
   const [fileTypes, setFileTypes] = useState(null) // /api/cc/file-types：{ max_bytes, max_items, types: [{ ext }] }
   const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
   const [lightboxImage, setLightboxImage] = useState(null)
+  const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
+  const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
+  const [recNow, setRecNow] = useState(0)
+  const recRef = useRef(null)
+  const canRecord = ccRecorderMime() !== null && !!navigator.mediaDevices?.getUserMedia
+  const [voiceMode, setVoiceMode] = useState(() => { try { return canRecord && localStorage.getItem('cc_voice_mode') === '1' } catch { return false } }) // 上次用的是语音还是键盘，下次进来照旧
+  const toggleVoiceMode = () => {
+    const next = !voiceMode
+    setVoiceMode(next)
+    try { localStorage.setItem('cc_voice_mode', next ? '1' : '0') } catch {}
+    if (!next) setTimeout(() => textareaRef.current?.focus(), 0)
+  }
   const photoInputRef = useRef(null)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
@@ -3026,7 +3129,7 @@ function CCChatPage({ onBack }) {
   const lockOut = lockApp
 
   useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
-  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode])
+  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode, voiceMode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
   // 同一个 id 更正过（edited_at 更新）的新版本要盖掉旧的；只是更正旧消息时不滚动
@@ -3362,6 +3465,14 @@ function CCChatPage({ onBack }) {
       const sent = []
       for (const p of msg.items) {
         let path = uploadedRef.current.get(p.key)
+        if (!path && p.kind === 'voice') {
+          // 先交给 ears 听：转出来的字、语气记在附件上（重发时不用再听一遍），临时消息上马上显示
+          p.heard = await listenCcVoice(p.blob, p.duration)
+          setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, voices: m.voices.map(v => v.key === p.key ? { ...v, ...ccVoiceView(p.heard), duration: p.duration, listening: false } : v) } : m))
+          path = p.heard.path
+          uploadedRef.current.set(p.key, path)
+          ccImageCache.set(path, p.localUrl)
+        }
         if (!path) {
           path = p.kind === 'image' ? await uploadCcImage(p.blob) : await uploadCcFile(p.file)
           uploadedRef.current.set(p.key, path)
@@ -3372,7 +3483,8 @@ function CCChatPage({ onBack }) {
       }
       const paths = sent.filter(s => s.p.kind === 'image').map(s => s.path)
       const files = sent.filter(s => s.p.kind === 'file')
-      const body = { text: msg.text, kind: 'chat', client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}) }
+      const voices = sent.filter(s => s.p.kind === 'voice')
+      const body = { text: msg.text, kind: 'chat', client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}), ...(voices.length ? { voices: voices.map(s => s.path) } : {}) }
       const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
@@ -3382,6 +3494,7 @@ function CCChatPage({ onBack }) {
         key: data.id, role: 'user', text: msg.text, time: data.time || msg.time, ...(Number.isSafeInteger(data.seq) ? { seq: data.seq } : {}),
         ...(paths.length ? { images: paths.map(path => ({ path })) } : {}),
         ...(files.length ? { files: files.map(s => ({ path: s.path, name: s.p.file.name, size: s.p.file.size })) } : {}),
+        ...(voices.length ? { voices: voices.map(s => ({ path: s.path, ...ccVoiceView(s.p.heard || {}), duration: s.p.duration })) } : {}),
       }], 'bottom')
       msg.items.forEach(p => uploadedRef.current.delete(p.key))
       setTemp(prev => prev.filter(m => m.key !== msg.key))
@@ -3389,9 +3502,92 @@ function CCChatPage({ onBack }) {
       if (err.message === 'unauthorized') lockOut()
       else if (!/^HTTP \d+$/.test(err.message)) setNotice(err.message)
       stopWaiting()
-      setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
+      // 语音没认出是她 / 太短：这段不算发过，直接撤掉，提示留着
+      if (err.drop) discardFailed(msg)
+      else setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
     }
   }
+
+  // ─── 按住说话 ───
+  // 按下开麦克风开始录，松开就发；按着往上滑超过 60px 松开是取消。第一次按会弹麦克风权限，没开好就松手的这次不算
+  const sendVoice = (blob, duration) => {
+    const localUrl = URL.createObjectURL(blob)
+    const item = { key: `voice-${Date.now()}`, kind: 'voice', blob, duration, localUrl }
+    const msg = { key: `me-${Date.now()}`, local: true, clientId: ccClientId(), items: [item], role: 'user', text: '', time: new Date().toISOString(), voices: [{ key: item.key, localUrl, duration, listening: true }] }
+    scrollModeRef.current = 'bottom'
+    setTemp(prev => [...prev, msg])
+    deliver(msg)
+  }
+  const finishRecording = (rec) => {
+    rec.stream?.getTracks().forEach(t => t.stop())
+    if (recRef.current === rec) recRef.current = null
+    if (rec.cancel) return
+    if (rec.duration < CC_VOICE_MIN_S) { setNotice('太短了，按住多说一会儿'); return }
+    const type = rec.recorder?.mimeType || rec.chunks[0]?.type || 'audio/webm'
+    const blob = new Blob(rec.chunks, { type })
+    if (blob.size) sendVoice(blob, rec.duration)
+  }
+  const stopRecording = (cancel) => {
+    const rec = recRef.current
+    if (!rec || rec.released) return
+    rec.released = true
+    rec.cancel = cancel
+    rec.duration = rec.startedAt ? (Date.now() - rec.startedAt) / 1000 : 0
+    clearTimeout(rec.timer)
+    setRecording(null)
+    if (rec.recorder && rec.recorder.state !== 'inactive') rec.recorder.stop() // onstop 里收尾
+    else finishRecording({ ...rec, cancel: true })
+  }
+  const startRecording = async (e) => {
+    e.preventDefault()
+    if (recRef.current || !passcode) return
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const rec = { chunks: [], y0: e.clientY, released: false, cancel: false }
+    recRef.current = rec
+    setRecording({ start: null, cancel: false })
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+    } catch {
+      recRef.current = null
+      setRecording(null)
+      setNotice('没拿到麦克风权限（设置里允许这个网页用麦克风）')
+      return
+    }
+    rec.stream = stream
+    if (rec.released) { // 在弹权限的时候已经松手了
+      stream.getTracks().forEach(t => t.stop())
+      if (recRef.current === rec) recRef.current = null
+      if (!rec.cancel) setNotice('好了，再按住说一次')
+      return
+    }
+    const mime = ccRecorderMime()
+    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+    recorder.ondataavailable = ev => { if (ev.data?.size) rec.chunks.push(ev.data) }
+    recorder.onstop = () => finishRecording(rec)
+    rec.recorder = recorder
+    rec.startedAt = Date.now()
+    recorder.start()
+    rec.timer = setTimeout(() => stopRecording(false), CC_VOICE_MAX_S * 1000)
+    setRecording({ start: rec.startedAt, cancel: false })
+  }
+  const moveRecording = (e) => {
+    const rec = recRef.current
+    if (!rec || rec.released) return
+    const cancel = rec.y0 - e.clientY > 60
+    setRecording(r => r && r.cancel !== cancel ? { ...r, cancel } : r)
+  }
+  const releaseRecording = (e) => {
+    const rec = recRef.current
+    if (!rec) return
+    stopRecording(rec.y0 - e.clientY > 60)
+  }
+  useEffect(() => {
+    if (!recording?.start) return
+    const t = setInterval(() => setRecNow(Date.now()), 200)
+    return () => clearInterval(t)
+  }, [recording?.start])
+  useEffect(() => () => { const rec = recRef.current; if (rec) { rec.cancel = true; stopRecording(true) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const discardFailed = (msg) => {
     msg.items.forEach(p => { uploadedRef.current.delete(p.key); URL.revokeObjectURL(p.previewUrl || p.localUrl) })
     setTemp(prev => prev.filter(m => m.key !== msg.key))
@@ -3510,6 +3706,7 @@ function CCChatPage({ onBack }) {
           <div key={m.key} className={`msg ${m.role}`}>
             {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
             {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
+            {m.voices?.length > 0 && m.voices.map((v, i) => <CcVoice key={v.path || v.key || i} v={v} />)}
             {m.text && (editing
               ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
               : <div className="bubble">{m.text}</div>)}
@@ -3559,13 +3756,33 @@ function CCChatPage({ onBack }) {
             ))}
           </div>
         )}
-        <div className="composer-input-row">
-          <button className="attach-btn" onClick={() => fileInputRef.current?.click()} disabled={!passcode || !fileTypes || full} aria-label="Add files">{I.file}</button>
+        {recording && (
+          <div className={`cc-recording${recording.cancel ? ' cancel' : ''}`} role="status">
+            <span className="cc-recording-dot" />
+            <span className="cc-recording-time">{recording.start ? `${Math.floor(Math.max(0, recNow - recording.start) / 1000)}"` : '…'}</span>
+            <span>{!recording.start ? '正在打开麦克风' : recording.cancel ? '松开取消' : '松开发送 · 上滑取消'}</span>
+          </div>
+        )}
+        {attachOpen && (
+          <div className="cc-attach-menu">
+            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>照片</span></button>
+            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>文件</span></button>
+          </div>
+        )}
+        {/* 左边切语音 / 键盘；语音模式下输入框换成整条"按住 说话"；右边 ⊕ 是照片和文件，有东西要发时多一个发送 */}
+        <div className="composer-input-row cc-composer-row">
+          <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? '切换到键盘' : '切换到语音'}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
+          {voiceMode ? (
+            <button className={`cc-hold-btn${recording ? ' recording' : ''}${recording?.cancel ? ' cancel' : ''}`} disabled={!passcode}
+              onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
+              onContextMenu={e => e.preventDefault()}>{!recording ? '按住 说话' : recording.cancel ? '松开 取消' : '松开 发送'}</button>
+          ) : (
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
+          )}
+          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => setAttachOpen(o => !o)} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
-          <button className="attach-btn" onClick={() => photoInputRef.current?.click()} disabled={!passcode || full} aria-label="Add images">{I.photo}</button>
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
-          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} disabled={!passcode} />
-          <button className="send-btn" onClick={sendMessage} disabled={!passcode || (!input.trim() && !pending.length)}>{I.send}</button>
+          {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
         </div>
       </div>
 
