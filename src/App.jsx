@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
-import { UsagePage, CcUsageStrip, CcLimitedNotice, useCcUsageBrief } from './Usage'
+import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 
 // 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
 const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
@@ -1035,11 +1035,20 @@ function ChatListPage({ onOpenCC }) {
 const CC_SESSION = { id: 'cc' }
 
 function ChatPage({ onEnterRoom }) {
-  // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。两个都保留 tab 栏
-  const [inCc, setInCc] = useState(true)
+  // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。都保留 tab 栏
+  // 沐右上角 ⋮ 离开聊天页进 menu，里面三个入口各是一整页：search 查找聊天记录 / brain 回复方式 / usage
+  const [view, setView] = useState('cc') // cc / list / menu / search / brain / usage
+  const [jumpTo, setJumpTo] = useState(null) // 搜索结果点回来：{ id }，聊天页挂载时停在那条
+  const searchSaved = useRef({ q: '', res: null, scrollTop: 0 }) // 搜过的词和结果，再进来还在
+  const go = (v) => { setJumpTo(null); setView(v) }
+  const swipeUsage = useSwipeBack(() => go('menu'))
   useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  if (inCc) return <CCChatPage onBack={() => setInCc(false)} />
-  return <ChatListPage onOpenCC={() => setInCc(true)} />
+  if (view === 'cc') return <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} />
+  if (view === 'menu') return <CcMenuPage onBack={() => go('cc')} onOpen={go} />
+  if (view === 'search') return <CcSearchPage saved={searchSaved} onBack={() => go('menu')} onPick={r => { setJumpTo({ id: r.id, n: Date.now() }); setView('cc') }} />
+  if (view === 'brain') return <CcBrainScreen onBack={() => go('menu')} />
+  if (view === 'usage') return <UsagePage apiFetch={apiFetch} onBack={() => go('menu')} backIcon={I.back} swipe={swipeUsage} />
+  return <ChatListPage onOpenCC={() => go('cc')} />
 }
 
 // ─── SplashScreen ────────────────────────────────────
@@ -2623,6 +2632,146 @@ async function ccPostJson(path, body) {
   return data
 }
 
+// 回复方式现在是哪个：聊天页顶上的状态行、⋮ 那页、回复方式页都用
+async function fetchCcBrain() {
+  const res = await apiFetch(`/api/cc/brain`)
+  if (res.status === 401) throw new Error('unauthorized')
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+  return res.json()
+}
+
+// ⋮ → 回复方式：自己拉一次现在的状态再交给 CcBrainPage
+function CcBrainScreen({ onBack }) {
+  const [brain, setBrain] = useState(null)
+  const [brainError, setBrainError] = useState('') // 拉不到时的原因（bridge 连不上之类），页上显示
+  useEffect(() => {
+    let alive = true
+    fetchCcBrain().then(b => { if (alive) setBrain(b) }).catch(err => { if (alive && err.message !== 'unauthorized') setBrainError(err.message) })
+    return () => { alive = false }
+  }, [])
+  return <CcBrainPage brain={brain} brainError={brainError} onChange={setBrain} onClose={onBack} />
+}
+
+// ⋮ 那页：离开聊天页，三个入口各自又是一整页
+function CcMenuPage({ onBack, onOpen }) {
+  const swipe = useSwipeBack(onBack)
+  const [brain, setBrain] = useState(null)
+  useEffect(() => {
+    let alive = true
+    fetchCcBrain().then(b => { if (alive) setBrain(b) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  return (
+    <div className="more-sub-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label="返回聊天">{I.back}</button><h1>聊天信息</h1></div>
+      <div className="card settings-card">
+        <div className="setting-item" onClick={() => onOpen('search')}><span>查找聊天记录</span>{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('brain')}><span>回复方式</span>{brain && <span className="setting-value">{brain.target === 'api' ? 'API' : 'CC'}</span>}{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('usage')}><span>Usage</span>{I.chevron}</div>
+      </div>
+    </div>
+  )
+}
+
+// 搜索结果的时间：今年的不写年份
+function fmtSearchTime(t) {
+  const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', { timeZone: SH_TZ, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]))
+  const thisYear = new Intl.DateTimeFormat('en-CA', { timeZone: SH_TZ, year: 'numeric' }).format(new Date())
+  return `${p.year === thisYear ? '' : `${p.year}年`}${p.month}月${p.day}日 ${p.hour}:${p.minute}`
+}
+// 摘要里把搜的词标出来（不分大小写）
+function ccHighlight(text, terms) {
+  const ws = (terms || []).filter(Boolean)
+  if (!ws.length) return text
+  const re = new RegExp(`(${ws.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+  return text.split(re).map((part, i) => i % 2 ? <mark key={i}>{part}</mark> : part)
+}
+const CC_HIT_FROM = { image: '图片里的字', voice: '语音', file: '文件' }
+
+// 查找聊天记录：搜双方的话、语音转写、文件名、图片里的字（bridge 每次全读一遍比对），从新到旧。
+// 点一条跳回聊天页、停在那条。搜过的词和结果留在 saved 里，从聊天页再进来还在
+function CcSearchPage({ saved, onBack, onPick }) {
+  const swipe = useSwipeBack(onBack)
+  const [q, setQ] = useState(saved.current.q)
+  const [res, setRes] = useState(saved.current.res) // { q, terms, results, hasMore }；null = 还没搜
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const listRef = useRef(null)
+  const reqRef = useRef(0) // 只认最后一次请求的结果
+  useEffect(() => { saved.current = { ...saved.current, q, res } }, [q, res, saved])
+  useLayoutEffect(() => { if (listRef.current) listRef.current.scrollTop = saved.current.scrollTop || 0 }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const run = useCallback(async (query, before) => {
+    const id = ++reqRef.current
+    setLoading(true)
+    setError('')
+    try {
+      const qs = new URLSearchParams({ q: query, limit: '30' })
+      if (before) qs.set('before', before)
+      const r = await apiFetch(`/api/cc/search?${qs}`)
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+      if (id !== reqRef.current) return
+      setRes(prev => {
+        const old = before && prev?.q === query ? prev.results : []
+        const seen = new Set(old.map(x => x.id))
+        return { q: query, terms: data.terms || [], results: [...old, ...(data.results || []).filter(x => !seen.has(x.id))], hasMore: !!data.has_more }
+      })
+    } catch (err) {
+      if (id === reqRef.current) setError(err.message === 'unauthorized' ? '' : '搜不了，过一会儿再试')
+    }
+    if (id === reqRef.current) setLoading(false)
+  }, [])
+
+  // 停手 300ms 再搜；清空就清掉结果
+  useEffect(() => {
+    const query = q.trim()
+    if (query === (res?.q ?? '')) return
+    if (!query) { reqRef.current++; setRes(null); setLoading(false); setError(''); return }
+    const t = setTimeout(() => run(query), 300)
+    return () => clearTimeout(t)
+  }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onScroll = (e) => {
+    const el = e.currentTarget
+    saved.current.scrollTop = el.scrollTop
+    if (!loading && res?.hasMore && el.scrollHeight - el.scrollTop - el.clientHeight < 300) run(res.q, res.results[res.results.length - 1].time)
+  }
+
+  return (
+    <div className="more-sub-page cc-search-page" {...swipe}>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label="返回">{I.back}</button><h1>查找聊天记录</h1></div>
+      <div className="cc-search-box">
+        {I.search}
+        <input type="search" enterKeyHint="search" autoFocus={!q} value={q} onChange={e => setQ(e.target.value)} placeholder="搜说过的话、图片里的字" maxLength={100} />
+        {q && <button className="icon-btn" onClick={() => setQ('')} aria-label="清空">{I.close}</button>}
+      </div>
+      <div className="cc-search-results" ref={listRef} onScroll={onScroll}>
+        {res?.results.map(r => (
+          <div key={r.id} className="cc-search-hit" role="button" tabIndex={0} onClick={() => onPick(r)}>
+            {r.hit.image && <CcImage img={{ path: r.hit.image }} onOpen={() => onPick(r)} />}
+            <span className="cc-search-hit-main">
+              <span className="cc-search-hit-top">
+                <span className="cc-search-who">{r.role === 'user' ? '我' : '沐'}</span>
+                {CC_HIT_FROM[r.hit.in] && <span className="cc-search-from">{CC_HIT_FROM[r.hit.in]}</span>}
+                <span className="cc-search-time">{fmtSearchTime(r.time)}</span>
+              </span>
+              <span className="cc-search-snippet">{ccHighlight(r.hit.snippet, res.terms)}</span>
+            </span>
+          </div>
+        ))}
+        {error && <div className="empty-state">{error}</div>}
+        {loading && <div className="empty-state">搜索中…</div>}
+        {!loading && !error && res && !res.results.length && <div className="empty-state">没有找到「{res.q}」</div>}
+        {!loading && !error && res?.results.length > 0 && !res.hasMore && <div className="cc-search-end">没有更早的了</div>}
+        {!res && !loading && <div className="cc-search-end">空格隔开几个词，要都出现才算</div>}
+      </div>
+    </div>
+  )
+}
+
 function CcBrainPage({ brain, brainError, onChange, onClose }) {
   const [catalog, setCatalog] = useState(null) // /api/cc/api-models：{ default, families }
   const [catalogError, setCatalogError] = useState(false)
@@ -3062,10 +3211,11 @@ function setCcCacheStorage(history) {
   try { localStorage.setItem(CC_CACHE_KEY, JSON.stringify(out)) } catch {}
 }
 
-function CCChatPage({ onBack }) {
+function CCChatPage({ onBack, onMenu, jumpTo }) {
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
-  const [history, setHistory] = useState(getCcCache) // 服务器上的记录（双方），按时间；先用本机缓存的最近十轮垫着
+  // 服务器上的记录（双方），按时间；先用本机缓存的最近十轮垫着（从搜索跳过来的不垫，等那一段拉回来）
+  const [history, setHistory] = useState(() => jumpTo ? [] : getCcCache())
   const [temp, setTemp] = useState([]) // 发送中/发送失败的本地消息
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -3090,11 +3240,18 @@ function CCChatPage({ onBack }) {
   // bridge 推的"正在压缩"：压缩期间她发的消息 bridge 先攒着，压完再交给他；这段时间不算他卡住
   const [compacting, setCompacting] = useState(false)
   // 上下文进度条、额度几点恢复：他每回完一轮（正在输入灭了）、压缩开始/结束时重拉
-  const [menu, setMenu] = useState(null) // 右上角 ⋮：null 收起 / 'menu' 菜单 / 'usage' 上下文条
-  // 回复方式（/api/cc/brain）：{ supported, target, model, group, option, family }；null = 还没拉到
+  // 回复方式（/api/cc/brain）：{ supported, target, model, group, option, family }；null = 还没拉到。顶上状态行用；切换在 ⋮ → 回复方式
   const [brain, setBrain] = useState(null)
-  const [brainError, setBrainError] = useState('') // 拉不到时的原因（bridge 连不上之类），回复方式页上显示
-  const [brainOpen, setBrainOpen] = useState(false) // 回复方式页盖在聊天页上面，聊天页不卸载
+  // 从"查找聊天记录"点回来（jumpTo）：先只拉那条前后各 30 条，和最新的接不上（detached）；
+  // 往下翻接着拉更新的，翻到最新就接回去。这期间新来的消息先不接（中间会空一截），只在右下角箭头上记个数
+  const [detached, setDetached] = useState(!!jumpTo)
+  const detachedRef = useRef(!!jumpTo)
+  const [hasNewer, setHasNewer] = useState(false)
+  const [loadingNewer, setLoadingNewer] = useState(false)
+  const [newCount, setNewCount] = useState(0)
+  const countedRef = useRef(new Set()) // 箭头上已经数过的（SSE 和轮询可能送来同一条）
+  const [flashKey, setFlashKey] = useState(null) // 跳过去的那条闪一下
+  const [farFromBottom, setFarFromBottom] = useState(false) // 离底部超过一屏：显示向下箭头
   const usageBrief = useCcUsageBrief(apiFetch, `${!!serverTyping?.on}-${compacting}`)
   const onCompacting = useCallback((ev) => {
     setCompacting(!!ev.on)
@@ -3152,6 +3309,13 @@ function CCChatPage({ onBack }) {
   const knownRef = useRef(null) // key → edited_at（没改过是 ''）；缓存里的算已知
   if (knownRef.current === null) knownRef.current = new Map(history.map(m => [m.key, m.editedAt || '']))
   const mergeHistory = useCallback((incoming, mode) => {
+    if (detachedRef.current && mode === 'bottom') {
+      // 正在看搜出来的那一段：手上这段里的照常更新，新来的只在箭头上记个数
+      const later = incoming.filter(m => !knownRef.current.has(m.key) && !countedRef.current.has(m.key) && (m.role === 'user' || m.role === 'assistant'))
+      later.forEach(m => countedRef.current.add(m.key))
+      if (later.length) setNewCount(c => c + later.length)
+      incoming = incoming.filter(m => knownRef.current.has(m.key))
+    }
     const fresh = incoming.filter(m => { const v = knownRef.current.get(m.key); return v === undefined || (m.editedAt || '') > v })
     if (!fresh.length) return
     const onlyUpdates = fresh.every(m => knownRef.current.has(m.key))
@@ -3167,12 +3331,13 @@ function CCChatPage({ onBack }) {
     if (fresh.some(m => m.role === 'assistant' || m.kind === 'reply_failed')) stopWaiting()
   }, [fetchDurationEstimate, stopWaiting])
 
-  const fetchHistory = useCallback(async (before, limit = CC_PAGE) => {
-    const qs = new URLSearchParams({ limit: String(limit), system: '1', tools: '1' })
+  // params：before（往上翻）、around（搜索跳过来）、after（往下翻）
+  const fetchHistory = useCallback(async (before, limit = CC_PAGE, params = {}) => {
+    const qs = new URLSearchParams({ limit: String(limit), system: '1', tools: '1', ...params })
     if (before) qs.set('before', before)
     const res = await apiFetch(`/api/cc/history?${qs}`)
     if (res.status === 401) { lockOut(); throw new Error('unauthorized') }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status })
     return res.json()
   }, [passcode])
 
@@ -3181,6 +3346,7 @@ function CCChatPage({ onBack }) {
   // 这一页最早那条（同一时刻的几条）手上一条都没有，说明中间断了一截（10/19 早上 35 分钟来了 43 条，以前只拉 30 条，前面十几条就丢了）。
   // 补不上就把手上更早的扔掉，往上翻从这一页最早一条接着拉，不留洞。手上有就是连着的，照常合并
   const pollOnce = useCallback(async () => {
+    if (detachedRef.current) return // 看搜出来的那一段时不补拉最新的，回到最新时再补
     try {
       const data = await fetchHistory(undefined, CC_CACHE_MAX)
       const incoming = (data.messages || []).map(ccFromServer)
@@ -3314,38 +3480,100 @@ function CCChatPage({ onBack }) {
   // 缓存里有、这页里没有的都去掉——被 bridge 删掉的，和比这页最早一条还早的（关着的时候来了很多新话，
   // 缓存和这页之间可能断了一截；去掉以后往上翻从这页最早一条接着拉，就不会漏）。
   // 比这页最新一条还晚的不动（等这页回来的时候 SSE 可能已经推来了新的）
+  const openLatest = useCallback(async (alive = () => true) => {
+    try {
+      const data = await fetchHistory(undefined, CC_CACHE_MAX)
+      if (!alive()) return
+      const incoming = (data.messages || []).map(ccFromServer)
+      const times = incoming.map(m => Date.parse(m.time)).filter(Number.isFinite)
+      if (times.length) {
+        const to = Math.max(...times)
+        const keep = new Set(incoming.map(m => m.key))
+        const stale = m => !keep.has(m.key) && !(Date.parse(m.time) > to)
+        setHistory(prev => {
+          if (!prev.some(stale)) return prev
+          prev.filter(stale).forEach(m => knownRef.current.delete(m.key))
+          return prev.filter(m => !stale(m))
+        })
+      }
+      mergeHistory(incoming, 'bottom')
+      setHasMore(!!data.has_more)
+    } catch {}
+  }, [fetchHistory, mergeHistory])
+
+  // 搜索跳过来：拉那条前后各 30 条换掉手上的，滚到那条让它闪一下。那条没了（404）就照常打开最新的
+  const [jumping, setJumping] = useState(!!jumpTo)
+  const attach = useCallback(() => {
+    detachedRef.current = false
+    setDetached(false)
+    setHasNewer(false)
+    setNewCount(0)
+    countedRef.current.clear()
+  }, [])
+  // 换回最新的：先用本机缓存垫着，再对一遍服务器
+  const showLatest = useCallback((alive) => {
+    attach()
+    setFlashKey(null)
+    const cache = getCcCache()
+    knownRef.current = new Map(cache.map(m => [m.key, m.editedAt || '']))
+    scrollModeRef.current = 'bottom'
+    setHistory(cache)
+    openLatest(alive)
+  }, [attach, openLatest])
+  const openAround = useCallback(async (id, alive) => {
+    try {
+      const data = await fetchHistory(undefined, 60, { around: id })
+      if (!alive()) return
+      const incoming = (data.messages || []).map(ccFromServer).sort(ccOrder)
+      knownRef.current = new Map(incoming.map(m => [m.key, m.editedAt || '']))
+      incoming.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
+      scrollModeRef.current = 'jump'
+      setFlashKey(id)
+      setHistory(incoming)
+      setHasMore(!!data.has_more)
+      if (data.has_newer) setHasNewer(true)
+      else attach() // 这一段就到最新了
+    } catch (err) {
+      if (!alive()) return
+      if (err.status === 404) setNotice('那条消息找不到了')
+      showLatest(alive)
+    }
+    setJumping(false)
+  }, [fetchHistory, fetchDurationEstimate, attach, showLatest])
+
   useEffect(() => {
     if (!passcode) return
     let alive = true
-    ;(async () => {
-      try {
-        const data = await fetchHistory(undefined, CC_CACHE_MAX)
-        if (!alive) return
-        const incoming = (data.messages || []).map(ccFromServer)
-        const times = incoming.map(m => Date.parse(m.time)).filter(Number.isFinite)
-        if (times.length) {
-          const to = Math.max(...times)
-          const keep = new Set(incoming.map(m => m.key))
-          const stale = m => !keep.has(m.key) && !(Date.parse(m.time) > to)
-          setHistory(prev => {
-            if (!prev.some(stale)) return prev
-            prev.filter(stale).forEach(m => knownRef.current.delete(m.key))
-            return prev.filter(m => !stale(m))
-          })
-        }
-        mergeHistory(incoming, 'bottom')
-        setHasMore(!!data.has_more)
-      } catch {}
-    })()
+    if (jumpTo) openAround(jumpTo.id, () => alive)
+    else openLatest(() => alive)
     return () => { alive = false }
-  }, [passcode, fetchHistory, mergeHistory])
+  }, [passcode]) // eslint-disable-line react-hooks/exhaustive-deps -- 只在打开时跑一次；jumpTo 每次跳都会重新挂载这一页
+
+  // 往下翻（只在 detached 时）：从手上最晚那条接着拉更新的，到头就接回最新
+  const loadNewer = async () => {
+    if (loadingNewer || !detachedRef.current || !hasNewer || !history.length) return
+    setLoadingNewer(true)
+    try {
+      const last = history.reduce((a, m) => (Date.parse(m.time) > Date.parse(a.time) ? m : a))
+      const data = await fetchHistory(undefined, CC_PAGE, { after: last.time })
+      mergeHistory((data.messages || []).map(ccFromServer), 'stay')
+      if (!data.has_newer) { attach(); pollOnceRef.current() }
+    } catch {}
+    setLoadingNewer(false)
+  }
+
+  // 向下箭头：看搜出来的那一段时换回最新的；平时平滑滚到底
+  const goLatest = () => {
+    if (detachedRef.current) showLatest()
+    else messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  }
 
   // 缓存里垫上的他的话：语音段的时长也要估（mergeHistory 只估新来的）
   useEffect(() => {
     history.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useEffect(() => { setCcCacheStorage(history) }, [history])
+  useEffect(() => { if (!detachedRef.current) setCcCacheStorage(history) }, [history, detached]) // 搜出来的那一段不进缓存
 
   // 往上滑到顶加载更早的 30 条，保持当前位置不跳
   const loadOlder = async () => {
@@ -3370,31 +3598,41 @@ function CCChatPage({ onBack }) {
   // 再加一道保险：这块的第一段得是"正在输入"亮起之后才到的，免得把上一轮已经说完的那块当成正在说
   const lastRow = rows[rows.length - 1]
   const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
-  const liveTurnKey = typingNow && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
-  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m)); if (last) setCcLastStorage(last) }, [messages])
+  const liveTurnKey = typingNow && !detached && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
+  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
     if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
-    else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, typingNow])
+    else if (scrollModeRef.current === 'jump') {
+      // 搜索跳过来：那条放到中间，之后的更新不再动位置
+      const target = flashKey && el.querySelector(`[data-mids~="${CSS.escape(flashKey)}"]`)
+      if (target) target.scrollIntoView({ block: 'center' })
+      if (messages.length) scrollModeRef.current = 'stay'
+    } else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, typingNow, flashKey])
+  useEffect(() => {
+    if (!flashKey) return
+    const t = setTimeout(() => setFlashKey(null), 2400)
+    return () => clearTimeout(t)
+  }, [flashKey])
+  const onListScroll = (e) => {
+    const el = e.currentTarget
+    const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (el.scrollTop < 80) loadOlder()
+    if (toBottom < 200) loadNewer()
+    setFarFromBottom(toBottom > el.clientHeight)
+  }
 
-  // 回复方式：进来拉一次，回复方式页关掉时再拉一次（那边改了会直接把新状态交回来）
-  const loadBrain = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/cc/brain`)
-      if (res.status === 401) return lockOut()
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
-      setBrain(await res.json())
-      setBrainError('')
-    } catch (err) {
-      if (err.message !== 'locked') setBrainError(err.message)
-    }
-  }, [lockOut])
-  useEffect(() => { if (passcode) loadBrain() }, [passcode, loadBrain])
-  const closeBrain = () => { setBrainOpen(false); loadBrain() }
+  // 回复方式：进来拉一次（顶上状态行显示是 CC 还是哪个模型）；在 ⋮ → 回复方式里改完回来会重新挂载这一页，再拉一次
+  useEffect(() => {
+    if (!passcode) return
+    let alive = true
+    fetchCcBrain().then(b => { if (alive) setBrain(b) }).catch(() => {})
+    return () => { alive = false }
+  }, [passcode])
 
   // 文件白名单：拿不到就不让选文件，发图不受影响
   useEffect(() => {
@@ -3467,6 +3705,7 @@ function CCChatPage({ onBack }) {
       ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}),
       ...(docs.length ? { files: docs.map(p => ({ key: p.key, name: p.file.name, size: p.file.size, localUrl: p.localUrl })) } : {}),
     }
+    if (detachedRef.current) showLatest() // 正在看搜出来的那一段：发的时候先回到最新
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
     setInput('')
@@ -3530,6 +3769,7 @@ function CCChatPage({ onBack }) {
     const localUrl = URL.createObjectURL(blob)
     const item = { key: `voice-${Date.now()}`, kind: 'voice', blob, duration, localUrl }
     const msg = { key: `me-${Date.now()}`, local: true, clientId: ccClientId(), items: [item], role: 'user', text: '', time: new Date().toISOString(), voices: [{ key: item.key, localUrl, duration, listening: true }] }
+    if (detachedRef.current) showLatest()
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
     deliver(msg)
@@ -3666,24 +3906,17 @@ function CCChatPage({ onBack }) {
           <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
         </div>
         <div className="chatroom-header-right">
-          <button className="icon-btn" onClick={() => setMenu(menu ? null : 'menu')} aria-label="更多">
+          <button className="icon-btn" onClick={onMenu} aria-label="更多">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </button>
         </div>
       </div>
 
-      {menu === 'menu' && (
-        <div className="chatroom-settings-dropdown">
-          <div className="dropdown-item" onClick={() => { setMenu(null); setBrainOpen(true); if (!brain) loadBrain() }}><span>回复方式</span><span className="dropdown-value">{brain?.target === 'api' ? 'API' : 'CC'}<span className="dropdown-chevron">›</span></span></div>
-          <div className="dropdown-item" onClick={() => setMenu('usage')}><span>Usage</span><span className="dropdown-chevron">›</span></div>
-        </div>
-      )}
-      {menu === 'usage' && <div className="chatroom-settings-dropdown cc-usage-pop"><CcUsageStrip brief={usageBrief} /></div>}
       <CcLimitedNotice brief={usageBrief} />
       {compacting && <div className="cc-compacting" role="status" aria-label="正在压缩">compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onClick={() => menu && setMenu(null)} onScroll={e => { if (e.currentTarget.scrollTop < 80) loadOlder() }}>
+      <div className="messages" ref={listRef} onScroll={onListScroll}>
         {loadingMore && <div className="empty-state">Loading…</div>}
-        {messages.length === 0 && <div className="empty-state">{passcode ? 'Start chatting' : ''}</div>}
+        {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
           if (row.turn) {
             // 他的一轮：几段合成一块，没有气泡；时间、复制整块、转文字放在块下面
@@ -3696,7 +3929,7 @@ function CCChatPage({ onBack }) {
             const viaApi = items.findLast(it => it.viaApi) // 这块是 API 替班回的：时间后面标上模型
             const open = !!transcripts[row.key]
             return (
-              <div key={row.key} className="msg assistant cc-turn">
+              <div key={row.key} className={`msg assistant cc-turn${items.some(it => it.key === flashKey) ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')}>
                 <div className="cc-turn-body">
                   {ccTurnParts(items).map(part => part.tools
                     ? <CcTools key={part.key} tools={part.tools} />
@@ -3719,7 +3952,7 @@ function CCChatPage({ onBack }) {
           const showFailure = failure && !calledAgain.has(failure.key)
           const editing = editingKey === m.key
           return (
-          <div key={m.key} className={`msg ${m.role}`}>
+          <div key={m.key} className={`msg ${m.role}${m.key === flashKey ? ' cc-flash' : ''}`} data-mids={m.key}>
             {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
             {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
             {m.voices?.length > 0 && m.voices.map((v, i) => <CcVoice key={v.path || v.key || i} v={v} />)}
@@ -3747,9 +3980,20 @@ function CCChatPage({ onBack }) {
           </div>
           )
         })}
-        {typingNow && !liveTurnKey && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
+        {loadingNewer && <div className="empty-state">Loading…</div>}
+        {typingNow && !liveTurnKey && !detached && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 向下箭头：离底部超过一屏、或者正在看搜出来的那一段时出现；那段时间新来的条数标在上面 */}
+      {(farFromBottom || detached) && (
+        <div className="cc-jump-wrap">
+          <button className="cc-jump-btn" onClick={goLatest} aria-label="回到最新">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+            {newCount > 0 && <span className="cc-jump-badge">{newCount > 99 ? '99+' : newCount}</span>}
+          </button>
+        </div>
+      )}
 
       <div className="composer">
         {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
@@ -3812,8 +4056,6 @@ function CCChatPage({ onBack }) {
       {lightboxImage && <ImageLightbox src={lightboxImage.src} path={lightboxImage.path} onClose={() => setLightboxImage(null)} />}
 
     </div>
-    {/* 放在聊天页外面：右滑返回只关这一页，不会连聊天页一起退掉 */}
-    {brainOpen && <CcBrainPage brain={brain} brainError={brainError} onChange={setBrain} onClose={closeBrain} />}
     </>
   )
 }
