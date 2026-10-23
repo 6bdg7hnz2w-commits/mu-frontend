@@ -46,7 +46,7 @@ function useMode() {
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
 function usePageChrome(look) {
   useEffect(() => {
-    if (document.getElementById('vesper-fonts')) return
+    if (document.getElementById('vesper-fonts')) return // index.html 已经加了（打开就是 Vesper 时）
     const link = Object.assign(document.createElement('link'), { id: 'vesper-fonts', rel: 'stylesheet', href: FONTS_HREF })
     document.head.appendChild(link)
   }, [])
@@ -198,13 +198,29 @@ function SettingPage({ mode, setMode, onBack }) {
   )
 }
 
-// 打开时和画布一样先亮一下星光：1.25 秒后整页淡入，2 秒后撤掉（也正好盖住壁纸加载）
+// 字体（样式表 + 首页用到的几种字重）和首页壁纸都到了才算好；最多等 4 秒，网不好也不一直盖着
+function vesperReady() {
+  const link = document.getElementById('vesper-fonts')
+  const sheet = link && !link.sheet ? new Promise(r => { link.addEventListener('load', r); link.addEventListener('error', r) }) : Promise.resolve()
+  const fonts = sheet.then(() => document.fonts ? Promise.all([
+    "500 31px 'Cormorant Garamond'", "600 19px 'Cormorant Garamond'", "italic 17px 'Cormorant Garamond'", "400 15px 'Noto Serif SC'",
+  ].map(f => document.fonts.load(f, 'Aa你好').catch(() => {}))).then(() => document.fonts.ready) : null)
+  const wall = new Promise(r => { const i = new Image(); i.onload = i.onerror = r; i.src = '/vesper/home-bg.webp' })
+  return Promise.race([Promise.all([fonts, wall]), new Promise(r => setTimeout(r, 4000))])
+}
+
+// 打开时和画布一样先亮一下星光：至少 1.25 秒，字体和壁纸都到了再整页淡入，淡完撤掉
 function Splash() {
   const [out, setOut] = useState(false)
   const [gone, setGone] = useState(false)
   useEffect(() => {
-    const a = setTimeout(() => setOut(true), 1250), b = setTimeout(() => setGone(true), 2000)
-    return () => { clearTimeout(a); clearTimeout(b) }
+    let alive = true, b
+    const min = new Promise(r => setTimeout(r, 1250))
+    Promise.all([min, vesperReady()]).then(() => {
+      if (!alive) return
+      setOut(true); b = setTimeout(() => setGone(true), 750)
+    })
+    return () => { alive = false; clearTimeout(b) }
   }, [])
   if (gone) return null
   return <div className={`v-splash ${out ? 'out' : ''}`}><div><i className="glow" /><i className="h" /><i className="v" /><i className="core" /></div></div>
