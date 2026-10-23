@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { LockScreen, getPasscode } from '../App.jsx'
+import { useCallback, useEffect, useState } from 'react'
+import { LockScreen, getPasscode, useKeyboardOpen } from '../App.jsx'
 import { getSkin, setSkin } from '../skin.js'
+import { V, SubPage } from './ui.jsx'
+import HomeTab from './Home.jsx'
+import CalendarTab from './Calendar.jsx'
+import ChatTab from './Chat.jsx'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
 // 雾蓝皮肤，按 Claude Design 里的 MuApp 画布做。样式变量都带 --v- 前缀，挂在 .vesper 上，不碰 Clawd 的 :root。
-// 第一步只有外壳 + More + Setting；Home / Chats / Calendar 和 More 里的各页后面几步接真接口。
+// Home / Calendar 是自己的页面；Chats 借 Clawd 的聊天逻辑换颜色；More 里的各页后面几步再接
 
 // 浅色 / 夜间 / 跟随系统，只管 Vesper；Clawd 一直跟系统走
 const MODE_KEY = 'mu_vesper_mode'
@@ -52,56 +56,12 @@ function usePageChrome(look) {
   }, [look])
 }
 
-const svg = (kids, size = 20, sw = 1.6) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{kids}</svg>
-)
-const V = {
-  back: svg(<path d="M14.5 5.5 8 12l6.5 6.5" />, 18),
-  chevron: svg(<path d="M9 6l6 6-6 6" />, 14, 2),
-  check: svg(<path d="M20 6L9 17l-5-5" />, 12, 3),
-  memory: svg(<><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14" /><path d="M15 6v14" /></>),
-  album: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="10" r="1.5" /><path d="M21 16l-5-5-9 8" /></>),
-  reading: svg(<><path d="M4 4h4v16H4z" /><path d="M8 6h4v14H8z" /><path d="M14.2 5.3l3.6-1 4 15.2-3.6 1z" /></>),
-  game: svg(<><path d="M5 3h11l3 3v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" /><rect x="8" y="9" width="8" height="6" rx="1" /><path d="M9 3v3M12 3v3M15 3v3" /></>),
-  mcp: svg(<><path d="M9 2v5M15 2v5" /><path d="M6 7h12v4a6 6 0 0 1-12 0z" /><path d="M12 17v5" /></>),
-  usage: svg(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />),
-  setting: svg(<><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>),
-  light: svg(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>),
-  dark: svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />),
-  system: svg(<><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M12 2v20" /><path d="M6 12h6" /></>),
-}
-
 const TABS = [
-  { key: 'home', label: 'Home', icon: svg(<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></>, 22, 1.3) },
-  { key: 'chat', label: 'Chats', icon: svg(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />, 22, 1.3) },
-  { key: 'calendar', label: 'Calendar', icon: svg(<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>, 22, 1.3) },
-  { key: 'more', label: 'More', icon: svg(<><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></>, 22, 1.3) },
+  { key: 'home', label: 'Home', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg> },
+  { key: 'chat', label: 'Chats', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
+  { key: 'calendar', label: 'Calendar', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> },
+  { key: 'more', label: 'More', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg> },
 ]
-
-// 还没做好的页：说清楚，并给一个回 Clawd 的出口
-function SoonPage({ title }) {
-  return (
-    <div className="v-page">
-      <div className="v-big-title">{title}</div>
-      <div className="v-soon">
-        <p>Vesper's {title} is still on its way. Clawd has everything for now.</p>
-        <button className="v-btn" onClick={() => setSkin('clawd')}>Switch to Clawd</button>
-      </div>
-    </div>
-  )
-}
-
-function SubPage({ title, onBack, children }) {
-  return (
-    <div className="v-sub">
-      <div className="v-sub-head">
-        <button className="v-chip" onClick={onBack} aria-label="Back">{V.back}</button>
-        <div className="v-sub-title">{title}</div>
-      </div>
-      <div className="v-sub-body">{children}</div>
-    </div>
-  )
-}
 
 const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 
@@ -187,9 +147,13 @@ export default function VesperApp() {
   const [mode, setMode, look] = useMode()
   const [tab, setTab] = useState('home')
   const [moreView, setMoreView] = useState(null)
+  const [immersive, setImmersive] = useState(false)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   usePageChrome(look)
+  useKeyboardOpen(setKeyboardOpen)
+  const onImmersive = useCallback((v) => setImmersive(v), [])
 
   // 和 Clawd 一样：apiFetch 遇到 401 广播 mu-lock，整个回锁屏
   useEffect(() => {
@@ -202,12 +166,14 @@ export default function VesperApp() {
   if (!unlocked) return <LockScreen expired={lockExpired} onUnlock={() => setUnlocked(true)} />
 
   const goTab = (k) => { setTab(k); if (k !== 'more') setMoreView(null) }
+  const tabHidden = immersive || (tab === 'chat' && keyboardOpen)
 
   return (
-    <div className="vesper" data-look={look}>
-      {tab === 'home' && <SoonPage title="Home" />}
-      {tab === 'chat' && <SoonPage title="Chats" />}
-      {tab === 'calendar' && <SoonPage title="Calendar" />}
+    // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
+    <div className={`vesper ${tabHidden ? 'tab-hidden' : ''}`} data-look={look} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
+      {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
+      {tab === 'chat' && <ChatTab />}
+      {tab === 'calendar' && <CalendarTab />}
       {tab === 'more' && <MorePage mode={mode} onOpenSetting={() => setMoreView('setting')} />}
       {tab === 'more' && moreView === 'setting' && <SettingPage mode={mode} setMode={setMode} onBack={() => setMoreView(null)} />}
       <nav className="v-tabbar">

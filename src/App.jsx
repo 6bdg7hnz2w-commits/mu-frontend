@@ -11,7 +11,7 @@ const START_DATE = new Date('2026-07-27')
 // 所有 /api 请求都走 apiFetch，统一带 APP 口令。口令存在 localStorage 的 cc_passcode 里
 // （沿用沐聊天页原来的 key，以前在那儿解锁过的设备不用重输）。
 // 没口令或后端回 401 就清掉口令、广播 mu-lock，App 收到后整个切回锁屏。
-export function getPasscode() {
+function getPasscode() {
   try { return localStorage.getItem('cc_passcode') || '' } catch { return '' }
 }
 function setPasscodeStorage(code) {
@@ -4063,7 +4063,7 @@ function MorePage({ onEnterRoom }) {
 
 // ─── 锁屏 ───────────────────────────────────────────
 // 输完口令先打 /api/auth/check 验一下，对了才存下来进 App。Render 免费实例冷启动可能要等几十秒
-export function LockScreen({ expired, onUnlock }) {
+function LockScreen({ expired, onUnlock }) {
   const [input, setInput] = useState('')
   const [error, setError] = useState(expired ? 'Passcode expired, enter it again' : '')
   const [checking, setChecking] = useState(false)
@@ -4139,3 +4139,12 @@ function App() {
 }
 
 export default App
+
+// Vesper（src/vesper/）共用的接口、工具和组件：数据和 Clawd 是同一份，换皮肤不换逻辑
+export {
+  API, START_DATE, getPasscode, apiFetch, apiJson, LockScreen, useKeyboardOpen,
+  beijingDateStr, getWhisperCache, setWhisperCache,
+  ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache, importantFromEvent,
+  eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod,
+  ChatPage,
+}
