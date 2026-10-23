@@ -10,7 +10,7 @@ export default function ChatTab({ onUsage }) {
   useTopColor(BG.day, BG.night, 1)
   return (
     <div className="v-clawd v-chat">
-      <div className="v-chat-wall"><img src="/vesper/chat-bg.jpg" alt="" /><i /></div>
+      <div className="v-chat-wall"><img src="/vesper/chat-bg.webp" alt="" /><i /></div>
       <ChatPage onEnterRoom={noop} lang="en" onUsage={onUsage} />
     </div>
   )

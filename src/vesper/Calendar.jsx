@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
-import { V, MONS, ActionSheet, useToast } from './ui.jsx'
+import { V, MONS, MONF, ActionSheet, useToast } from './ui.jsx'
 
 // ─── Calendar ───────────────────────────────────────
 // 和 Clawd 的 CalendarPage 同一套接口：/api/events（日程 + kind=important 的重要日期）、/api/todos、/api/periods。
@@ -18,7 +18,7 @@ function Modal({ title, onClose, children }) {
   return (
     <div className="v-modal" onClick={onClose}>
       <div className="v-modal-card" onClick={e => e.stopPropagation()}>
-        <div className="v-modal-head"><span>{title}</span><button className="v-text-btn acc" onClick={onClose}>Close</button></div>
+        <div className="v-modal-head"><span>{title}</span><button className="v-text-btn acc" data-back onClick={onClose}>Close</button></div>
         {children}
       </div>
     </div>
@@ -242,6 +242,7 @@ export default function CalendarTab() {
   for (let d = 1; d <= dim; d++) cells.push(d)
 
   return (
+    <>
     <div className="v-page v-cal">
       <div className="v-cal-top">
         <div className="v-diary-titles">
@@ -257,7 +258,7 @@ export default function CalendarTab() {
       <div className="v-card v-month" {...monthSwipe}>
         <div className="v-month-nav">
           <button onClick={() => goMonth(year, month - 1)} aria-label="Previous month">{V.left}</button>
-          <div className="v-month-label" onClick={() => setModal({ type: 'month' })}>{MONS[month].charAt(0)}{MONS[month].slice(1).toLowerCase()}{year !== now.getFullYear() ? ` ${year}` : ''}</div>
+          <div className="v-month-label" onClick={() => setModal({ type: 'month' })}>{MONF[month].charAt(0)}{MONF[month].slice(1).toLowerCase()}{year !== now.getFullYear() ? ` ${year}` : ''}</div>
           <button onClick={() => goMonth(year, month + 1)} aria-label="Next month">{V.right}</button>
         </div>
         <div className="v-month-head">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => <div key={d}>{d}</div>)}</div>
@@ -281,7 +282,7 @@ export default function CalendarTab() {
           <span><i className="period" />Period</span>
           <span><i className="pred" />Predicted</span>
           <span><i className="todo" />Todo</span>
-          <span>{V.heartFill}Important</span>
+          <span><svg width="9" height="9" viewBox="0 0 24 24"><path fill="#c4a06a" d="M12 21s-9-5.6-9-12.2A5 5 0 0 1 12 5.6a5 5 0 0 1 9 3.2C21 15.4 12 21 12 21z" /></svg>Important</span>
           <span><i className="evt" />Events</span>
         </div>
       </div>
@@ -361,5 +362,7 @@ export default function CalendarTab() {
       )}
       {toast}
     </div>
+    <div className="v-page-fade" />
+    </>
   )
 }

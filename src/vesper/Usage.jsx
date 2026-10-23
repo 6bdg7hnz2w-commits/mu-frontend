@@ -159,7 +159,7 @@ export default function UsagePage({ onBack }) {
             <Chart rows={rows} weights={data.weights} sel={s} onSel={setSel} hours={range === 'hours'} />
           </>}
         </div>
-        <div className="v-tip">Estimated from tokens, weighted as plain input: cache read ×{data.weights.read}, cache write ×{data.weights.write}, output ×{data.weights.output}. Only the Resets card shows the plan percentages.</div>
+        <div className="v-tip mute">Estimated from tokens, weighted as plain input: cache read ×{data.weights.read}, cache write ×{data.weights.write}, output ×{data.weights.output}. Only the Resets card shows the plan percentages.</div>
       </>}
     </SubPage>
   )

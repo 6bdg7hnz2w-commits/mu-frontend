@@ -1,5 +1,7 @@
 /* ─── Vesper ─────────────────────────────────────────
    变量都带 --v- 前缀、只挂在 .vesper 上，和 Clawd 的 :root 变量互不影响 */
+/* Noto Serif SC 的省略号是竖直居中的中文写法；输入框里的 … 换成西文字形，落在基线上 */
+@font-face{font-family:'V Dots';src:local('Georgia'),local('Times New Roman'),local('Times');unicode-range:U+2026}
 .vesper{
   --v-bg:#f1f3f7;--v-card:#fafbfc;--v-card2:#e7ebf1;--v-line:rgba(28,38,66,.08);--v-line2:#e3e7ee;
   --v-ink:#1c2232;--v-ink2:#3d4556;--v-mute:#7f879a;--v-faint:#a9b0bf;
@@ -12,10 +14,10 @@
   --v-topFade:linear-gradient(180deg,rgba(65,79,115,.94) 0%,rgba(65,79,115,.7) 55%,rgba(65,79,115,0) 100%);
   --v-cover:linear-gradient(140deg,#7084ab 0%,#5a6c93 100%);--v-coverIn:#e6eaf1;--v-page:#f8f9fb;
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
-  --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'Noto Serif SC',serif;--v-serif:'Cormorant Garamond','Noto Serif SC',serif;
+  --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'Noto Serif SC',serif;--v-scIn:'V Dots','Noto Serif SC',serif;--v-serif:'Cormorant Garamond','Noto Serif SC',serif;
   --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
   position:relative;height:100%;height:var(--v-vh,100dvh);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
-  background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);-webkit-font-smoothing:antialiased;
+  background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
 .vesper[data-look="night"]{
@@ -34,7 +36,9 @@
 .vesper button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* 整页（tab 下的四页） */
-.v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--v-top) + 26px) 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
+/* 顶部那层和底色同色的雾：内容往上滚时淡进去（画布上 Calendar / More 都有） */
+.v-page-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 57px);z-index:2;pointer-events:none;background:linear-gradient(180deg,var(--v-bg) 0%,var(--v-bg) 45%,rgba(0,0,0,0) 100%);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(180deg,#000 45%,transparent);mask-image:linear-gradient(180deg,#000 45%,transparent)}
+.v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--v-top) + 33px) 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
 /* 滚动容器是 flex 列，里面的卡片不许被压扁 */
 .v-page>*,.v-sub-body>*{flex-shrink:0}
 .v-big-title{font-size:42px;font-weight:500;line-height:1;padding-bottom:20px;margin-bottom:6px}
@@ -80,7 +84,7 @@
 .v-skin-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .v-skin-no{font-family:var(--v-sans);font-size:10px;letter-spacing:.2em;color:var(--v-mute)}
 .v-skin-name{font-size:21px;font-weight:600;line-height:1.1}
-.v-skin-sub{font-family:var(--v-sc);font-size:11.5px;color:var(--v-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-skin-sub{font-family:var(--v-sc);font-size:11.5px;color:var(--v-mute)}
 .v-skin-check{width:22px;height:22px;flex:none;border-radius:50%;background:var(--v-acc);color:var(--v-acc-ink);display:flex;align-items:center;justify-content:center}
 .v-modes{padding:6px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .v-mode{height:76px;border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:var(--v-mute);transition:background .2s}
@@ -89,7 +93,7 @@
 .v-mode.on span{color:var(--v-ink)}
 
 /* 底部 tab */
-.v-tabbar{position:absolute;left:0;right:0;bottom:0;z-index:30;height:calc(64px + var(--v-bottom));display:grid;grid-template-columns:repeat(4,1fr);align-content:start;padding:9px 0 0;transition:transform .4s cubic-bezier(.3,.7,.2,1);background:var(--v-tabbar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--v-line)}
+.v-tabbar{position:absolute;left:0;right:0;bottom:0;z-index:30;height:calc(52px + var(--v-bottom));display:grid;grid-template-columns:repeat(4,1fr);align-content:start;padding:9px 0 0;transition:transform .4s cubic-bezier(.3,.7,.2,1);background:var(--v-tabbar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--v-line)}
 .v-tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--v-faint)!important;transition:color .25s}
 .v-tab span{font-size:13.5px}
 .v-tab i{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:0;transition:opacity .25s}
@@ -135,7 +139,7 @@
 .v-modal-actions{display:flex;align-items:center;justify-content:flex-end;gap:18px;margin-top:4px}
 .v-modal-note{font-family:var(--v-sc);font-size:13px;color:var(--v-mute);padding:4px 2px}
 .v-field{width:100%;min-width:0;height:46px;padding:0 14px;border-radius:13px;border:1px solid var(--v-line);background:var(--v-card);font-family:var(--v-sans)!important;font-size:15px;outline:0;-webkit-appearance:none;appearance:none}
-textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-family:var(--v-sc)!important}
+textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-family:var(--v-scIn)!important}
 .v-field:disabled{opacity:.7}
 .v-field-row{display:flex;align-items:center;gap:8px;color:var(--v-mute)}
 .v-error{font-family:var(--v-sans);font-size:13px;color:var(--v-danger)}
@@ -154,7 +158,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 
 /* ─── Home ─── */
 .v-home{position:absolute;inset:0;background:var(--v-wpBase)}
-.v-wall{position:absolute;inset:0;overflow:hidden}
+.v-wall{position:absolute;inset:0;overflow:hidden;background:#445475}
+.vesper[data-look="night"] .v-wall{background:#262e3f}
 .v-wall-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--v-wpF)}
 .v-wall-1{-webkit-mask-image:linear-gradient(180deg,transparent 32%,#000 46%);mask-image:linear-gradient(180deg,transparent 32%,#000 46%)}
 .v-wall-2{-webkit-mask-image:linear-gradient(180deg,transparent 44%,#000 60%);mask-image:linear-gradient(180deg,transparent 44%,#000 60%)}
@@ -169,33 +174,32 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-hello-date{font-style:italic;font-size:19px;letter-spacing:.02em;opacity:.9}
 .v-hello-greet{font-size:36px;font-weight:500;line-height:1.1;letter-spacing:-.005em}
 .v-whisper{padding:16px 18px 14px;border-radius:22px;background:var(--v-whisper);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--v-whisperLine);color:#fff;display:flex;flex-direction:column;gap:10px}
-.v-whisper-text{font-family:var(--v-sc);font-size:15px;line-height:1.75;letter-spacing:.02em}
-.v-whisper-foot{display:flex;align-items:center;gap:8px;font-style:italic;font-size:15px;opacity:.88}
+.v-whisper-text{font-family:var(--v-sc);font-size:16px;line-height:1.85;letter-spacing:.02em}
+.v-whisper-foot{display:flex;align-items:center;gap:8px;font-style:italic;font-size:16px;opacity:.88}
 .v-glass{border-radius:22px;background:var(--v-glass);backdrop-filter:blur(22px) saturate(1.25);-webkit-backdrop-filter:blur(22px) saturate(1.25);border:1px solid var(--v-glassLine);box-shadow:var(--v-glassShadow)}
 .v-us{padding:14px 18px 15px;display:flex;flex-direction:column;gap:6px}
 .v-us-row{display:flex;align-items:flex-end;justify-content:space-between}
 .v-us-col{display:flex;flex-direction:column;gap:2px}
 .v-us-label{font-style:italic;font-size:17px;color:var(--v-hmute)}
-.v-us-days{font-size:34px;font-weight:500;line-height:1;color:var(--v-acc)}
+.v-us-days{font-size:40px;font-weight:500;line-height:1;color:var(--v-acc)}
 .v-us-sub{font-family:var(--v-sc);font-size:13px;color:var(--v-hmute);letter-spacing:.02em}
 .v-cd{padding:15px 18px 4px}
 .v-cd-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:8px}
 .v-cd-col{display:flex;flex-direction:column;gap:4px;min-width:0}
 .v-cd-name{font-size:21px;font-weight:600;line-height:1.15}
 .v-cd-date{font-size:15px;color:var(--v-hmute);letter-spacing:.04em}
-.v-ring{position:relative;width:56px;height:56px;flex:none}
-.v-ring svg{width:100%;height:100%}
+.v-ring{position:relative;width:64px;height:64px;flex:none}
 .v-ring-track{stroke:var(--v-glassDiv)}
 .v-ring-bar{stroke:var(--v-acc)}
-.v-ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:500;color:var(--v-acc)}
+.v-ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:500;color:var(--v-acc)}
 .v-cd-list{margin-top:2px;display:flex;flex-direction:column}
-.v-cd-item{display:flex;align-items:center;gap:12px;height:44px;border-top:1px solid var(--v-glassDiv)}
+.v-cd-item{display:flex;align-items:center;gap:12px;height:48px;border-top:1px solid var(--v-glassDiv)}
 .v-cd-item>i{width:5px;height:5px;border-radius:50%;background:var(--v-acc);opacity:.7;flex:none}
 .v-cd-item-main{flex:1;min-width:0;display:flex;align-items:baseline;gap:10px}
 .v-cd-item-name{font-size:17px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .v-cd-item-date{font-size:14px;color:var(--v-hmute);flex:none}
 .v-cd-item-days{display:flex;align-items:baseline;gap:4px}
-.v-cd-item-days span{font-size:20px;font-weight:500}
+.v-cd-item-days span{font-size:22px;font-weight:500}
 .v-cd-item-days em{font-size:13px;color:var(--v-hmute)}
 .v-notebook{position:relative;height:118px;margin-top:10px;perspective:1300px;cursor:pointer}
 .v-nb-ribbon{position:absolute;left:62px;bottom:-15px;width:9px;height:24px;background:var(--v-her);clip-path:polygon(0 0,100% 0,100% 100%,50% 76%,0 100%)}
@@ -235,11 +239,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-wd.sel{background:var(--v-acc)!important;color:var(--v-acc-ink)!important;box-shadow:0 6px 16px rgba(60,80,130,.28)}
 .v-wd.sel i.has{background:var(--v-acc-ink)}
 .v-search{margin-top:14px;display:flex;align-items:center;gap:8px;height:44px;padding:0 6px 0 14px;border-radius:15px;color:var(--v-mute)}
-.v-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-family:var(--v-sc);font-size:15px}
+.v-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-family:var(--v-scIn);font-size:15px}
 .v-search button{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--v-mute)!important}
 .v-write{margin-top:14px;padding:16px 18px 12px;display:flex;flex-direction:column;gap:10px}
 .v-write-title{font-style:italic;font-size:18px;color:var(--v-mute)}
-.v-write textarea{width:100%;resize:none;border:0;outline:0;background:transparent;font-family:var(--v-sc);font-size:15px;line-height:1.9}
+.v-write textarea{width:100%;resize:none;border:0;outline:0;background:transparent;font-family:var(--v-scIn);font-size:15px;line-height:1.9}
 .v-write-actions{display:flex;justify-content:flex-end;align-items:center;gap:16px}
 .v-entries{margin-top:18px;display:flex;flex-direction:column;gap:16px}
 .v-entry{position:relative;overflow:hidden;padding:20px 20px 0;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -349,7 +353,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-switch.on i{transform:translateX(20px)}
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
-.v-chat{position:absolute;top:0;left:0;right:0;bottom:calc(64px + var(--v-bottom));overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.v-chat{position:absolute;top:0;left:0;right:0;bottom:calc(52px + var(--v-bottom));overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 .vesper.tab-hidden .v-chat{bottom:0}
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
@@ -366,11 +370,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 }
 
 /* 照画布：聊天壁纸 + 一层薄雾；顶栏和输入栏是雾面玻璃；她的话是主题色气泡，他的话是没有气泡的衬线正文 */
-.v-chat{--vc-top:rgba(241,243,247,.97);--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
+.v-chat{--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
   --vc-meta-shadow:0 0 6px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9);--vc-text-shadow:0 0 12px rgba(255,255,255,.75);
   --vc-veil:linear-gradient(180deg,rgba(241,243,247,.62) 0%,rgba(241,243,247,.46) 35%,rgba(241,243,247,.46) 70%,rgba(241,243,247,.64) 100%);
   --vc-f:none;--vc-base:#c9c3d6}
-.vesper[data-look="night"] .v-chat{--vc-top:rgba(10,12,17,.97);--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
+.vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:linear-gradient(180deg,rgba(5,7,12,.62) 0%,rgba(5,7,12,.42) 40%,rgba(5,7,12,.42) 70%,rgba(5,7,12,.64) 100%);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
@@ -379,7 +383,70 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
 .v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--v-top)}
-.v-chat .chatroom-header{padding:calc(var(--v-top) + 4px) 10px 4px;min-height:0;background:var(--vc-top);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-bottom:1px solid var(--v-line);z-index:3}
+/* 对话列表照画布：大标题 + 一条线，沐那张卡片（雾蓝方块里一颗星） */
+.v-chat .chatlist-page{padding:calc(var(--v-top) + 33px) 20px 0;font-family:var(--v-serif)}
+.v-chat .chatlist-page .page-header{padding:0 0 20px;border-bottom:1px solid var(--v-line)}
+.v-chat .chatlist-page .page-header h1{font-size:42px;font-weight:500;line-height:1;letter-spacing:0}
+.v-chat .chatlist-page .session-list{padding:0}
+.v-chat .chatlist-page .session-card{margin:18px 0 0;gap:14px;padding:14px;border-radius:20px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow)}
+.v-chat .chatlist-page .session-avatar{position:relative;width:50px;height:50px;border-radius:16px;background:var(--v-cover)}
+.cc-list-spark i{position:absolute;background:linear-gradient(180deg,rgba(255,255,255,0),#fff,rgba(255,255,255,0))}
+.cc-list-spark i:first-child{left:24.5px;top:13px;width:1px;height:24px}
+.cc-list-spark i+i{left:13px;top:24.5px;width:24px;height:1px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff,rgba(255,255,255,0))}
+.cc-list-spark b{position:absolute;left:22.5px;top:22.5px;width:5px;height:5px;border-radius:50%;background:#fff;box-shadow:0 0 8px 2px rgba(255,255,255,.6)}
+.v-chat .chatlist-page .session-info{display:flex;flex-direction:column;gap:3px}
+.v-chat .chatlist-page .session-top{align-items:baseline}
+.v-chat .chatlist-page .session-name{font-style:italic;font-size:22px;font-weight:500;line-height:1.1}
+.v-chat .chatlist-page .session-time{font-family:var(--v-sans);font-size:12px;color:var(--v-mute)}
+.v-chat .chatlist-page .session-bottom{margin:0}
+.v-chat .chatlist-page .session-preview{font-family:var(--v-sc);font-size:13.5px;color:var(--v-ink2)}
+/* ⋮ 进去的三页（Chat Info / Search Chat / Reply Mode）照画布：60 高的顶栏、左边一个方块返回键、中间宋体标题 */
+.v-chat .more-sub-page{padding-bottom:0}
+.v-chat .more-sub-page>.page-header,.v-chat .cc-brain-page>.chatroom-header{position:relative;height:60px;padding:0;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--v-line);background:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.v-chat .more-sub-page>.page-header .icon-btn,.v-chat .cc-brain-page>.chatroom-header .icon-btn{position:absolute;left:20px;top:10px;width:40px;height:40px;border-radius:13px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
+.v-chat .more-sub-page>.page-header .icon-btn svg,.v-chat .cc-brain-page>.chatroom-header .icon-btn svg{width:18px;height:18px;stroke-width:1.6}
+.v-chat .more-sub-page>.page-header h1,.v-chat .cc-brain-page .chatroom-name{font-family:var(--v-sc);font-size:18px;font-weight:500;font-style:normal;line-height:normal;letter-spacing:0}
+.v-chat .cc-brain-page{position:absolute;z-index:5;padding-top:var(--v-top)}
+.v-chat .more-sub-page>.settings-card{margin:22px 20px;padding:0;background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow);overflow:hidden}
+.v-chat .settings-card .setting-item{height:56px;padding:0 18px;gap:10px;border-bottom:1px solid var(--v-line);font-family:var(--v-sc);font-size:15px}
+.v-chat .settings-card .setting-item:last-child{border-bottom:0}
+.v-chat .settings-card .setting-value{font-family:var(--v-sans);font-size:13px;color:var(--v-mute)}
+.v-chat .settings-card .setting-item>svg,.v-chat .cc-brain-chevron svg{width:14px;height:14px;stroke-width:2;color:var(--v-faint)}
+.v-chat .cc-search-box{height:46px;margin:16px 20px 10px;padding:0 6px 0 14px;gap:8px;background:var(--v-card);border:1px solid var(--v-line);border-radius:15px;box-shadow:var(--v-shadow);color:var(--v-mute)}
+.v-chat .cc-search-box>svg{width:17px;height:17px;stroke-width:1.8;color:var(--v-mute)}
+.v-chat .cc-search-box input{font-family:var(--v-scIn);font-size:15px;color:var(--v-ink)}
+.v-chat .cc-search-box input::placeholder{color:var(--v-mute)}
+.v-chat .cc-search-box .icon-btn{width:32px;height:32px;border-radius:10px;color:var(--v-mute)}
+.v-chat .cc-search-results{padding:2px 20px 20px;display:flex;flex-direction:column;gap:8px}
+.v-chat .cc-search-hit{padding:12px 14px;background:var(--v-card);border:1px solid var(--v-line);border-radius:16px;box-shadow:var(--v-shadow)}
+.v-chat .cc-search-hit-main{gap:6px}
+.v-chat .cc-search-hit-top{align-items:center;gap:8px;font-family:var(--v-sans);font-size:12px;color:var(--v-mute)}
+.v-chat .cc-search-who{padding:1px 8px;border-radius:999px;background:var(--v-acc-soft);color:var(--v-acc);font-weight:600}
+.v-chat .cc-search-from{padding:0;background:none;color:var(--v-mute);font-size:12px}
+.v-chat .cc-search-time{color:var(--v-mute)}
+.v-chat .cc-search-snippet{font-family:var(--v-sc);font-size:14px;line-height:1.75;color:var(--v-ink2)}
+.v-chat .cc-search-snippet mark{background:rgba(212,174,189,.55);color:var(--v-ink);font-weight:400;border-radius:3px}
+.v-chat .cc-search-end,.v-chat .cc-search-results .empty-state{padding:14px 0;text-align:center;font-family:var(--v-sc);font-size:13px;color:var(--v-mute)}
+.v-chat .cc-brain-scroll{padding:22px 20px;display:flex;flex-direction:column;gap:14px}
+.v-chat .cc-brain-switch{height:46px;margin:0;padding:4px;border-radius:15px;background:var(--v-card2)}
+.v-chat .cc-brain-thumb{top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:11px;background:var(--v-card);box-shadow:0 1px 2px rgba(20,30,60,.08),0 4px 10px rgba(20,30,60,.06);transition:transform .38s cubic-bezier(.3,.7,.2,1)}
+.v-chat .cc-brain-switch button{padding:0;font-family:var(--v-sans);font-size:15px;font-weight:600;letter-spacing:.06em;color:var(--v-mute)}
+.v-chat .cc-brain-switch button[aria-checked="true"]{color:var(--v-ink)}
+.v-chat .cc-brain-hint{margin:0;padding:0 4px;font-family:var(--v-sc);font-size:13px;line-height:1.7;color:var(--v-mute)}
+.v-chat .cc-brain-scroll .card-title-outer{margin:0;padding:8px 4px 0;font-family:var(--v-sc);font-size:13px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--v-mute)}
+.v-chat .cc-brain-scroll .settings-card{margin:0;padding:0;background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow);overflow:hidden}
+.v-chat .cc-brain-row{min-height:62px;padding:10px 16px 10px 18px;border-bottom:1px solid var(--v-line)}
+.v-chat .cc-brain-row:last-child{border-bottom:0}
+.v-chat .cc-brain-row-main{gap:3px}
+.v-chat .cc-brain-row-name{font-family:var(--v-serif);font-size:19px;font-weight:600;line-height:1.15}
+.v-chat .cc-brain-row-sub{font-family:var(--v-sans);font-size:12px;color:var(--v-mute)}
+.v-chat .cc-brain-row-model{font-size:10.5px;color:var(--v-faint)}
+.v-chat .cc-brain-check{color:var(--v-acc)}
+.v-chat .cc-brain-test{flex-direction:row;align-items:center;flex-wrap:wrap;gap:12px;margin:0}
+.v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);font-family:var(--v-sc);font-size:14px;font-weight:400;color:var(--v-ink)}
+.v-chat .cc-brain-test-result{padding:0;font-family:var(--v-sans);font-size:13px}
+.v-chat .cc-brain-test-result.ok{color:#5d9b7a}
+.v-chat .chatroom-header{padding:calc(var(--v-top) + 4px) 10px 4px;min-height:0;background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-bottom:1px solid var(--v-line);z-index:3}
 .v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 .v-chat .cc-conn{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:4px 0 6px;font-size:11px;color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
 .v-chat .cc-room .chatroom-model{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:4px;font-size:11px;color:var(--v-mute)}
@@ -387,6 +454,17 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .cc-status-dot.live{background:#7fb89a}
 .cc-status-dot.connecting{background:#c4a06a}
 .v-chat .messages{padding:18px 16px 14px}
+/* 消息之间、一轮里的各段、时间行，按画布的间距：行距 14，一轮内 7（上下各留 4），时间行 11px、图标之间 10 */
+.v-chat .cc-room .msg.user .bubble{box-sizing:content-box}
+.v-chat .cc-room .msg.user .msg-meta{margin-top:5px;gap:10px;padding:0 4px}
+.v-chat .cc-turn{padding:4px 0}
+.v-chat .cc-turn-body{padding:0}
+.v-chat .cc-piece+.cc-piece{margin-top:7px}
+.v-chat .cc-turn .msg-meta{margin-top:7px;gap:10px;padding:0 4px}
+.v-chat .msg-meta .copy-btn{padding:0}
+.v-chat .cc-tools{margin:0 0 7px;font-family:var(--v-sans);font-size:12px;line-height:normal}
+.v-chat .cc-tools .cc-thinking-head{gap:4px;padding:0;font-size:12px;line-height:normal}
+.v-chat .cc-tools .cc-thinking-head svg{width:11px;height:11px}
 .v-chat .cc-room .msg.user .bubble{background:var(--v-acc);color:var(--v-acc-ink);border-radius:18px 18px 6px 18px;max-width:78%;padding:10px 14px;font-family:var(--v-sc);font-size:15px;line-height:1.7;letter-spacing:.01em;box-shadow:0 4px 14px rgba(40,55,90,.18)}
 .v-chat .cc-turn-body{font-family:var(--v-sc);font-size:15.5px;line-height:1.85;letter-spacing:.01em;color:var(--vc-ink);text-shadow:var(--vc-text-shadow)}
 .v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{text-shadow:none;background:var(--vc-glass)}
@@ -402,7 +480,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px;color:var(--v-mute)}
 .v-chat .cc-composer-row .attach-btn.active{color:var(--v-acc)}
-.v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);background:var(--v-card);font-family:var(--v-sc);font-size:15px}
+.v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);background:var(--v-card);font-family:var(--v-scIn);font-size:15px}
 .v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
 .v-chat .send-btn{width:36px;height:36px;background:var(--v-acc)}
 .v-chat .send-btn svg path{stroke:var(--v-acc-ink)}
@@ -437,6 +515,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-utiles span{font-family:var(--v-sans);font-size:11px;color:var(--v-mute)}
 .v-uchart{padding:14px 18px 12px;display:flex;flex-direction:column;gap:10px}
 .v-uchart-bar{display:flex;align-items:center;justify-content:space-between}
+.v-uchart-bar .v-text-btn{font-size:13px}
+.v-tip.mute{color:var(--v-mute)}
 .v-useg{display:flex;padding:3px;border-radius:12px;background:var(--v-card2)}
 .v-useg button{padding:6px 12px!important;border-radius:9px;font-family:var(--v-sans)!important;font-size:13px;color:var(--v-mute)!important}
 .v-useg button.on{background:var(--v-card)!important;box-shadow:0 1px 3px rgba(20,30,60,.1);color:var(--v-ink)!important}
@@ -704,3 +784,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 @keyframes vUnseal{from{filter:blur(8px);opacity:0}to{filter:none;opacity:1}}
 @keyframes vSheen{from{transform:translateX(-110%)}to{transform:translateX(110%)}}
 @keyframes vIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+/* Reply Mode 里点进某个系列后的型号列表：名字是无衬线 15、说明宋体 12.5、型号等宽 */
+.v-chat .cc-brain-row:has(.cc-brain-row-model){min-height:0;padding:12px 16px 12px 18px}
+.v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-name{font-family:var(--v-sans);font-size:15px;line-height:normal}
+.v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-sub{font-family:var(--v-sc);font-size:12.5px}

@@ -168,7 +168,7 @@ export default function MemoryPage({ onBack }) {
         </div>
       </div>
       {open && doc && (
-        <div className="v-map-reader-wrap" onClick={() => setOpen(false)}>
+        <div className="v-map-reader-wrap" data-back onClick={() => setOpen(false)}>
           <div className="v-map-reader" onClick={e => e.stopPropagation()}>
             <div className="v-map-reader-head">
               <div><div className="v-map-pop-meta">{doc.name.toUpperCase()} · {ymd(doc.mtime)}</div><div className="v-map-reader-title">{doc.title}</div></div>

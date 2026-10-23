@@ -205,12 +205,13 @@ function beijingDateStr() {
 function daysBetween(a, b) { return Math.floor((b - a) / (1000 * 60 * 60 * 24)) }
 function daysUntilCeil(a, b) { return Math.ceil((b - a) / (1000 * 60 * 60 * 24)) }
 
-function fmtShortTime(t) { if (!t) return ''; const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
+function fmtShortTime(t, pad) { if (!t) return ''; const d = new Date(t); return `${pad ? String(d.getHours()).padStart(2, '0') : d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` }
 // 聊天消息的时间，都带时刻：今天 21:30；昨天 Yesterday 21:30；2–6 天前 Monday 21:30；更早 10/9 21:30（跨年带年份）。按日历天算，不按 24 小时
+// pad：小时补两位（英文版 Vesper 照画布写 08:31）
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-function fmtMsgTime(t) {
+function fmtMsgTime(t, pad) {
   if (!t) return ''
-  const d = new Date(t), now = new Date(), hm = fmtShortTime(t)
+  const d = new Date(t), now = new Date(), hm = fmtShortTime(t, pad)
   const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000)
   if (days <= 0) return hm
   if (days === 1) return `Yesterday ${hm}`
@@ -1004,9 +1005,9 @@ function ChatListPage({ onOpenCC }) {
       <div className="page-header"><h1>Chats</h1></div>
       <div className="session-list">
         <div className="session-card pinned" onClick={onOpenCC}>
-          <div className="session-avatar">{say('沐', 'S')}</div>
+          <div className="session-avatar">{say('沐', <span className="cc-list-spark"><i /><i /><b /></span>)}</div>
           <div className="session-info">
-            <div className="session-top"><span className="session-name">{say('沐', 'Soren')}</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
+            <div className="session-top"><span className="session-name">{say('沐', 'Soren')}</span><span className="session-time">{say(fmtListTime(ccLast?.time), fmtMsgTime(ccLast?.time, true))}</span></div>
             {say(<div className="session-sub-row"><span className="session-sublabel">CC · API</span></div>, null)}
             <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{preview}</span></div>
           </div>
@@ -2642,10 +2643,10 @@ function CcMenuPage({ onBack, onOpen }) {
   }, [])
   return (
     <div className="more-sub-page" {...swipe}>
-      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回聊天', 'Back to chat')}>{I.back}</button><h1>{say('聊天信息', 'Chat')}</h1></div>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回聊天', 'Back to chat')}>{I.back}</button><h1>{say('聊天信息', 'Chat Info')}</h1></div>
       <div className="card settings-card">
-        <div className="setting-item" onClick={() => onOpen('search')}><span>{say('查找聊天记录', 'Search history')}</span>{I.chevron}</div>
-        <div className="setting-item" onClick={() => onOpen('brain')}><span>{say('回复方式', 'Reply mode')}</span>{brain && <span className="setting-value">{brain.target === 'api' ? 'API' : 'CC'}</span>}{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('search')}><span>{say('查找聊天记录', 'Search Chat')}</span>{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('brain')}><span>{say('回复方式', 'Reply Mode')}</span>{brain && <span className="setting-value">{brain.target === 'api' ? 'API' : 'CC'}</span>}{I.chevron}</div>
         <div className="setting-item" onClick={() => onOpen('usage')}><span>Usage</span>{I.chevron}</div>
       </div>
     </div>
@@ -2728,10 +2729,10 @@ function CcSearchPage({ saved, onBack, onPick }) {
 
   return (
     <div className="more-sub-page cc-search-page" {...swipe}>
-      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回', 'Back')}>{I.back}</button><h1>{say('查找聊天记录', 'Search history')}</h1></div>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回', 'Back')}>{I.back}</button><h1>{say('查找聊天记录', 'Search Chat')}</h1></div>
       <div className="cc-search-box">
         {I.search}
-        <input type="search" enterKeyHint="search" autoFocus={!q} value={q} onChange={e => setQ(e.target.value)} placeholder={say('搜说过的话、图片里的字', 'Words, or text in images')} maxLength={100} />
+        <input type="search" enterKeyHint="search" autoFocus={!q} value={q} onChange={e => setQ(e.target.value)} placeholder={say('搜说过的话、图片里的字', 'Words, or text in photos')} maxLength={100} />
         {q && <button className="icon-btn" onClick={() => setQ('')} aria-label={say('清空', 'Clear')}>{I.close}</button>}
       </div>
       <div className="cc-search-results" ref={listRef} onScroll={onScroll}>
@@ -2752,7 +2753,7 @@ function CcSearchPage({ saved, onBack, onPick }) {
         {loading && <div className="empty-state">{say('搜索中…', 'Searching…')}</div>}
         {!loading && !error && res && !res.results.length && <div className="empty-state">{say(`没有找到「${res.q}」`, `Nothing found for "${res.q}"`)}</div>}
         {!loading && !error && res?.results.length > 0 && !res.hasMore && <div className="cc-search-end">{say('没有更早的了', 'Nothing earlier')}</div>}
-        {!res && !loading && <div className="cc-search-end">{say('空格隔开几个词，要都出现才算', 'Separate words with spaces — all must appear')}</div>}
+        {!res && !loading && <div className="cc-search-end">{say('空格隔开几个词，要都出现才算', 'Separate words with spaces — all must match')}</div>}
       </div>
     </div>
   )
@@ -2829,7 +2830,7 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
     <div className="cc-brain-page" {...swipe}>
       <div className="chatroom-header">
         <button className="icon-btn" onClick={back} aria-label={say('返回', 'Back')}>{I.back}</button>
-        <div className="chatroom-title"><div className="chatroom-name">{fam ? fam.name : say('回复方式', 'Reply mode')}</div></div>
+        <div className="chatroom-title"><div className="chatroom-name">{fam ? fam.name : say('回复方式', 'Reply Mode')}</div></div>
       </div>
       <div className="cc-brain-scroll">
         {fam ? (
@@ -3939,7 +3940,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
                 </div>
                 {!live && (
                   <div className="msg-meta">
-                    <span className="msg-time">{fmtMsgTime(last.time)}</span>
+                    <span className="msg-time">{fmtMsgTime(last.time, say(false, true))}</span>
                     {viaApi && <span className="msg-time cc-via-api">{viaApi.model ? `API · ${viaApi.model}` : 'API'}</span>}
                     {said.length > 0 && <CopyButton getText={() => said.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />}
                     {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
@@ -3966,7 +3967,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
                     <button className="cc-note-btn" onClick={() => deliver(m)}>{say('发送失败 · 点一下重发', 'Not sent · tap to retry')}</button>
                     <button className="copy-btn" onClick={() => discardFailed(m)} aria-label="Delete">{I.close}</button>
                   </>
-                : <span className="msg-time">{fmtMsgTime(m.time)}</span>}
+                : <span className="msg-time">{fmtMsgTime(m.time, say(false, true))}</span>}
               {m.editedAt && <span className="msg-time">{say('已编辑', 'Edited')}</span>}
               {m.viaApp && <span className="msg-time">{say('来自 Claude App', 'From Claude App')}</span>}
               {m.text && !editing && <CopyButton getText={() => m.text} />}

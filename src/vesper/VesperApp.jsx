@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
+import { LockScreen, getPasscode, useKeyboardOpen, apiFetch, getMcpUrl, mcpRequest } from '../App.jsx'
 import { fmtWhenEn } from '../Usage.jsx'
 import { getSkin, setSkin, reloadIfStatusStyleChanged } from '../skin.js'
 import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
@@ -112,6 +112,14 @@ function useTileSubs() {
     }).catch(() => {})
     get('/api/cc/memory').then(d => { if (Array.isArray(d?.files)) put('memory', `${d.files.length} memory files`) }).catch(() => {})
     get('/api/cc/album').then(d => { if (Array.isArray(d?.photos)) put('album', `${d.photos.length} photos kept by Soren`) }).catch(() => {})
+    get('/api/nook/books').then(d => { if (Array.isArray(d)) put('reading', `Shelf · ${d.length} book${d.length === 1 ? '' : 's'}`) }).catch(() => {})
+    // MCP：存过地址就试着连一下数工具，连不上就写 Not connected（和画布一样）
+    const mcpUrl = getMcpUrl()
+    if (!mcpUrl) put('mcp', 'Not connected')
+    else mcpRequest(mcpUrl, 'initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'mu', version: '1.0' } })
+      .then(() => mcpRequest(mcpUrl, 'tools/list', {}))
+      .then(r => { const n = Array.isArray(r?.tools) ? r.tools.length : 0; put('mcp', `Connected · ${n} tool${n === 1 ? '' : 's'}`) })
+      .catch(() => put('mcp', 'Not connected'))
     return () => { alive = false }
   }, [])
   return subs
@@ -120,6 +128,7 @@ function useTileSubs() {
 function MorePage({ mode, onOpen, onOpenSetting }) {
   const subs = useTileSubs()
   return (
+    <>
     <div className="v-page">
       <div className="v-big-title v-ruled">More</div>
       <div className="v-tiles">
@@ -140,6 +149,8 @@ function MorePage({ mode, onOpen, onOpenSetting }) {
         <span className="v-row-chev">{V.chevron}</span>
       </div>
     </div>
+    <div className="v-page-fade" />
+    </>
   )
 }
 
@@ -165,7 +176,7 @@ function SettingPage({ mode, setMode, onBack }) {
             </div>
             <div className="v-skin-meta">
               <div className="v-skin-text">
-                <span className="v-skin-no">NO. {sk.no}</span>
+                <span className="v-skin-no">{`NO. ${sk.no}`}</span>
                 <span className="v-skin-name">{sk.n}</span>
                 <span className="v-skin-sub">{sk.sub}</span>
               </div>
@@ -182,7 +193,7 @@ function SettingPage({ mode, setMode, onBack }) {
           </div>
         ))}
       </div>
-      <div className="v-tip">System follows your phone — dark mode on the phone turns this dark too. Light and Dark apply to Vesper only; Clawd always follows the phone.</div>
+      <div className="v-tip">System follows your phone — dark mode on the phone turns this dark too.</div>
     </SubPage>
   )
 }

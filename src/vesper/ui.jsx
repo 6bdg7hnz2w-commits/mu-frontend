@@ -74,8 +74,9 @@ export function useEdgeSwipe(fallback) {
       const s = t.current; t.current = null
       if (!s) return
       const p = e.changedTouches[0], dx = p.clientX - s.x, dy = Math.abs(p.clientY - s.y)
-      if (dx < 70 || dy > dx * 0.7) return
-      const backs = e.currentTarget.querySelectorAll('[aria-label="Back"]')
+      if (dx < 70 || dy > dx * 0.7 || e.target.closest?.('.v-clawd')) return
+      // 一次只退一层：DOM 里最后一个返回键/关闭层就是最上面那层
+      const backs = e.currentTarget.querySelectorAll('[aria-label="Back"],[data-back]')
       if (backs.length) backs[backs.length - 1].click(); else fallback?.()
     },
   }
@@ -112,7 +113,7 @@ export function useToast() {
 // iOS 那种从底部弹出的操作菜单；actions 里的 false 会被跳过
 export function ActionSheet({ title, actions, onClose }) {
   return (
-    <div className="v-sheet" onClick={onClose}>
+    <div className="v-sheet" data-back onClick={onClose}>
       <div className="v-sheet-card" onClick={e => e.stopPropagation()}>
         {title && <div className="v-sheet-title">{title}</div>}
         {actions.filter(Boolean).map(a => (

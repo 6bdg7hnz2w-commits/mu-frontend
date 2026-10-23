@@ -13,6 +13,10 @@
         var mode = localStorage.getItem('mu_vesper_mode')
         var night = mode === 'night' || (mode !== 'day' && matchMedia('(prefers-color-scheme: dark)').matches)
         if (localStorage.getItem('mu_skin') === 'vesper' && night) document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'black-translucent'
+        // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
+        if (localStorage.getItem('mu_skin') === 'vesper') ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
+          var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
+        })
       } catch (e) {}
     </script>
     <meta name="apple-mobile-web-app-title" content="沐" />
