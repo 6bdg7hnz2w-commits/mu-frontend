@@ -113,7 +113,7 @@ function eventsErrorText(e) {
 // 数据库里 kind=important 的一条 → 旧的重要日期格式（日历的重要日期卡片和弹窗沿用它）
 // 重复的由后端展开，date 用系列原始日期（编辑时改的是整个系列），shownOn 是这次显示在哪天
 function importantFromEvent(e) {
-  return { id: e.series_id ?? e.id, name: e.title, emoji: e.emoji || '📌', date: e.series_start_date ?? eventFirstDay(e), shownOn: eventFirstDay(e), recurring: e.repeat === 'none' ? false : e.repeat }
+  return { id: e.series_id ?? e.id, name: e.title, date: e.series_start_date ?? eventFirstDay(e), shownOn: eventFirstDay(e), recurring: e.repeat === 'none' ? false : e.repeat }
 }
 
 // 重要日期搬家：浏览器里真存过的 important_dates（没存过就什么都不传），
@@ -134,7 +134,7 @@ function ensureImportantMigrated() {
         await apiJson('POST', '/api/events', {
           title: name, all_day: true, start_date: d.date, kind: 'important',
           repeat: d.recurring === 'yearly' || d.recurring === 'monthly' ? d.recurring : 'none',
-          emoji: d.emoji || null, external_id: `legacy:${d.id}`,
+          external_id: `legacy:${d.id}`,
         })
         uploaded++
       } catch (e) { if (e.status !== 409) throw e } // 409：别的设备已经传过这条
@@ -157,7 +157,7 @@ async function fetchUpcomingImportant() {
     if (e.kind !== 'important') continue
     const id = e.series_id ?? e.id, day = eventFirstDay(e)
     if (day < today) continue
-    if (!next.has(id) || day < next.get(id).date) next.set(id, { id, name: e.title, emoji: e.emoji || '📌', date: day, recurring: false })
+    if (!next.has(id) || day < next.get(id).date) next.set(id, { id, name: e.title, date: day, recurring: false })
   }
   const out = [...next.values()]
   try { localStorage.setItem(IMPORTANT_CACHE_KEY, JSON.stringify(out)) } catch {}
@@ -284,14 +284,13 @@ function useKeyboardOpen(setKeyboardOpen) {
 function AddDateModal({ onClose, onSave }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
-  const [emoji, setEmoji] = useState('📌')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // onSave 返回 Promise（存进数据库）；失败时弹窗不关，显示原因
   const save = async () => {
     if (!name.trim() || !date || busy) return
     setBusy(true); setError('')
-    try { await onSave({ id: 'u' + Date.now(), name: name.trim(), date, emoji, recurring: false }); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
+    try { await onSave({ id: 'u' + Date.now(), name: name.trim(), date, recurring: false }); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
   }
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -299,11 +298,6 @@ function AddDateModal({ onClose, onSave }) {
         <h3>Add Important Date</h3>
         <input className="modal-input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <input className="modal-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <div className="emoji-picker-row">
-          {['📌', '🎂', '💕', '🎓', '✈️', '🎄', '🏆', '📝', '💻'].map(em => (
-            <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
-          ))}
-        </div>
         {error && <div className="event-modal-error">{error}</div>}
         <div className="modal-actions-row">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -318,7 +312,6 @@ function AddDateModal({ onClose, onSave }) {
 function EditDateModal({ item, onClose, onSave, onDelete }) {
   const [name, setName] = useState(item.name)
   const [date, setDate] = useState(item.date)
-  const [emoji, setEmoji] = useState(item.emoji || '📌')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // onSave/onDelete 返回 Promise（写数据库）；失败时弹窗不关，显示原因
@@ -327,18 +320,13 @@ function EditDateModal({ item, onClose, onSave, onDelete }) {
     setBusy(true); setError('')
     try { await fn(); onClose() } catch (e) { setError(eventsErrorText(e)); setBusy(false) }
   }
-  const save = () => { if (!name.trim() || !date) return; run(() => onSave({ ...item, name: name.trim(), date, emoji })) }
+  const save = () => { if (!name.trim() || !date) return; run(() => onSave({ ...item, name: name.trim(), date })) }
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={e => e.stopPropagation()}>
         <h3>Edit Date</h3>
         <input className="modal-input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <input className="modal-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <div className="emoji-picker-row">
-          {['📌', '🎂', '💕', '🎓', '✈️', '🎄', '🏆', '📝', '💻'].map(em => (
-            <button key={em} className={`emoji-btn ${emoji === em ? 'active' : ''}`} onClick={() => setEmoji(em)}>{em}</button>
-          ))}
-        </div>
         {error && <div className="event-modal-error">{error}</div>}
         <div className="modal-actions-row">
           <button className="btn-danger-text" onClick={() => run(() => onDelete(item.id))} disabled={busy}>Delete</button>
@@ -1157,8 +1145,8 @@ function CalendarPage() {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
   // 重要日期存在 events（kind=important）；改的是整个系列，repeat 不动
-  const addImportantDate = (d) => apiJson('POST', '/api/events', { title: d.name, all_day: true, start_date: d.date, kind: 'important', repeat: 'none', emoji: d.emoji }).then(reloadEvents)
-  const updateImportantDate = (d) => apiJson('PUT', `/api/events/${d.id}`, { title: d.name, emoji: d.emoji, start_date: d.date }).then(reloadEvents)
+  const addImportantDate = (d) => apiJson('POST', '/api/events', { title: d.name, all_day: true, start_date: d.date, kind: 'important', repeat: 'none' }).then(reloadEvents)
+  const updateImportantDate = (d) => apiJson('PUT', `/api/events/${d.id}`, { title: d.name, start_date: d.date }).then(reloadEvents)
   const deleteImportantDate = (id) => apiJson('DELETE', `/api/events/${id}`).then(reloadEvents)
 
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -1191,14 +1179,7 @@ function CalendarPage() {
       if (dy === year && dm - 1 === month) pushImportant(dday, idate)
     })
   }
-  // Monthly + milestone-day anniversaries (same source as the Today page countdowns)
-  pushImportant(START_DATE.getDate(), { id: `monthly_${year}_${month}`, name: 'Monthly Anniversary', emoji: '💗', derived: true })
-  ;[50, 100, 200, 365, 500, 730, 1000].forEach(m => {
-    const target = new Date(START_DATE.getTime() + m * 86400000)
-    if (target.getFullYear() === year && target.getMonth() === month) {
-      pushImportant(target.getDate(), { id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', derived: true })
-    }
-  })
+  // 纪念日（生日、年纪念日、整百天）都是数据库里的重要日期，不再在前端另外算
   const isImportant = (d) => d && importantByDay[d] && importantByDay[d].length > 0
 
   // 有日程的日子（多天的每天都算）
@@ -1253,7 +1234,6 @@ function CalendarPage() {
           <div className="card-title">Important Dates</div>
           {selectedDayImportantDates.map(idate => (
             <div key={idate.id} className="important-day-item" onTouchStart={() => { if (idate.derived) return; const timer = setTimeout(() => setEditingDate(idate), 500); const clear = () => { clearTimeout(timer); document.removeEventListener('touchend', clear) }; document.addEventListener('touchend', clear) }} onContextMenu={e => { e.preventDefault(); if (!idate.derived) setEditingDate(idate) }}>
-              <span className="important-day-emoji">{idate.emoji}</span>
               <span className="important-day-name">{idate.name}</span>
             </div>
           ))}
@@ -1380,24 +1360,14 @@ function TodayPage() {
         if (targetDate.getTime() < todayMs) targetDate = new Date(now.getFullYear() + 1, targetDate.getMonth(), targetDate.getDate())
       }
       const days = daysUntilCeil(now, targetDate)
-      if (days >= 0) results.push({ ...d, daysLeft: days, targetDate, isMonthly: false })
+      if (days >= 0) results.push({ ...d, daysLeft: days, targetDate })
     })
-    const milestones = [50, 100, 200, 365, 500, 730, 1000]
-    milestones.forEach(m => {
-      const target = new Date(START_DATE.getTime() + m * 86400000)
-      const days = daysUntilCeil(now, target)
-      if (days > 0 && days <= 400) results.push({ id: `ms_${m}`, name: `Day ${m}`, emoji: '💕', daysLeft: days, targetDate: target, isMonthly: false })
-    })
-    const startDay = START_DATE.getDate()
-    let nextMonth = new Date(now.getFullYear(), now.getMonth(), startDay)
-    if (nextMonth <= now) nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, startDay)
-    const monthlyDays = daysUntilCeil(now, nextMonth)
-    results.push({ id: 'monthly', name: 'Monthly Anniversary', emoji: '💗', daysLeft: monthlyDays, targetDate: nextMonth, isMonthly: true })
     return results.sort((a, b) => a.daysLeft - b.daysLeft)
   }
 
   const allCountdowns = getAllCountdowns()
   const topCountdown = allCountdowns[0]
+  // 首页显示最近的三个重要日期倒数（数据库里今天起 400 天内的，每个取下一次）：最近的放在圆环里，后面两个在下面
   const remainingCountdowns = allCountdowns.filter(c => c.id !== topCountdown?.id).slice(0, 2)
 
   const monthDate = topCountdown ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][topCountdown.targetDate.getMonth()]} ${topCountdown.targetDate.getDate()}` : ''
@@ -1425,7 +1395,7 @@ function TodayPage() {
   const groupByDate = (entries) => { const g = {}; entries.forEach(d => { const k = diaryDay(d); const dt = new Date(`${k}T00:00:00`); if (!g[k]) g[k] = { date: dt, entries: [] }; g[k].entries.push(d) }); return Object.values(g).sort((a, b) => b.date - a.date) }
   const diaryGroups = groupByDate(filtered)
 
-  const ringMax = topCountdown?.isMonthly ? 31 : Math.min(topCountdown?.daysLeft + 10, 60)
+  const ringMax = Math.min(topCountdown?.daysLeft + 10, 60)
   const ringProgress = topCountdown ? Math.max(0, Math.min(1, (ringMax - topCountdown.daysLeft) / ringMax)) : 0
   const ringR = 26, ringC = 2 * Math.PI * ringR
 
@@ -1451,7 +1421,7 @@ function TodayPage() {
 
       <div className="countdown-card">
         <div className="countdown-monthly">
-          <div><div className="countdown-monthly-title">{topCountdown?.name || 'Monthly Anniversary'}</div><div className="countdown-monthly-date">{monthDate}</div></div>
+          <div><div className="countdown-monthly-title">{topCountdown?.name || 'No important dates'}</div><div className="countdown-monthly-date">{monthDate}</div></div>
           <div className="ring-wrap">
             <svg width="64" height="64" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r={ringR} fill="none" stroke="var(--border)" strokeWidth="4" />
@@ -1465,7 +1435,7 @@ function TodayPage() {
             {remainingCountdowns.map(c => (
               <div key={c.id} className="countdown-item">
                 <div className="countdown-bar" />
-                <div className="countdown-item-info"><div className="countdown-item-name">{c.emoji} {c.name}</div><div className="countdown-item-date">{c.targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div></div>
+                <div className="countdown-item-info"><div className="countdown-item-name">{c.name}</div><div className="countdown-item-date">{c.targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div></div>
                 <div className="countdown-item-days">{c.daysLeft}</div>
               </div>
             ))}
