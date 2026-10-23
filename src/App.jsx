@@ -3906,7 +3906,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         </div>
       </div>
 
-      <CcLimitedNotice brief={usageBrief} />
+      <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
       <div className="messages" ref={listRef} onScroll={onListScroll}>
         {loadingMore && <div className="empty-state">Loading…</div>}
@@ -4177,5 +4177,5 @@ export {
   beijingDateStr, getWhisperCache, setWhisperCache,
   ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache, importantFromEvent,
   eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod,
-  ChatPage,
+  ChatPage, getMcpUrl, setMcpUrlStorage, mcpRequest, DrawGuessGame,
 }

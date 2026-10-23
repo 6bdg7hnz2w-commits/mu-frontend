@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LockScreen, getPasscode, useKeyboardOpen } from '../App.jsx'
+import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
+import { fmtWhenEn } from '../Usage.jsx'
 import { getSkin, setSkin } from '../skin.js'
 import { V, SubPage } from './ui.jsx'
 import HomeTab from './Home.jsx'
 import CalendarTab from './Calendar.jsx'
 import ChatTab from './Chat.jsx'
+import UsagePage from './Usage.jsx'
+import McpPage from './Mcp.jsx'
+import GamePage from './Game.jsx'
+import ReadingPage from './Reading.jsx'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
 // 雾蓝皮肤，按 Claude Design 里的 MuApp 画布做。样式变量都带 --v- 前缀，挂在 .vesper 上，不碰 Clawd 的 :root。
-// Home / Calendar 是自己的页面；Chats 借 Clawd 的聊天逻辑换颜色；More 里的各页后面几步再接
+// Home / Calendar / More 各页是自己的页面；Chats 借 Clawd 的聊天逻辑，文字换英文、样子照画布
 
 // 浅色 / 夜间 / 跟随系统，只管 Vesper；Clawd 一直跟系统走
 const MODE_KEY = 'mu_vesper_mode'
@@ -66,25 +71,40 @@ const TABS = [
 const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 
 const MORE_TILES = [
-  { key: 'memory', name: 'Memory', icon: V.memory },
-  { key: 'album', name: 'Album', icon: V.album },
-  { key: 'game', name: 'Game', icon: V.game },
-  { key: 'reading', name: 'Reading', icon: V.reading },
-  { key: 'mcp', name: 'MCP', icon: V.mcp },
-  { key: 'usage', name: 'Usage', icon: V.usage },
+  { key: 'memory', name: 'Memory', icon: V.memory, sub: 'Coming soon', soon: true },
+  { key: 'album', name: 'Album', icon: V.album, sub: 'Coming soon', soon: true },
+  { key: 'game', name: 'Game', icon: V.game, sub: 'Gomoku · Draw & Guess' },
+  { key: 'reading', name: 'Reading', icon: V.reading, sub: 'Shelf' },
+  { key: 'mcp', name: 'MCP', icon: V.mcp, sub: 'Server & tools' },
+  { key: 'usage', name: 'Usage', icon: V.usage, sub: 'Limits & tokens' },
 ]
 
-function MorePage({ mode, onOpenSetting }) {
+// Usage 格子的小字：5 小时额度几点恢复（拉不到就用默认那句）
+function useUsageSub() {
+  const [sub, setSub] = useState(null)
+  useEffect(() => {
+    let alive = true
+    apiFetch('/api/cc/usage?brief=1').then(r => r.ok ? r.json() : null).then(b => {
+      const w = b?.rate_limits?.five_hour
+      if (alive && w?.resets_at && Date.parse(w.resets_at) > Date.now()) setSub(`5-hour limit resets ${fmtWhenEn(w.resets_at).replace('Today ', '')}`)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  return sub
+}
+
+function MorePage({ mode, onOpen, onOpenSetting }) {
+  const usageSub = useUsageSub()
   return (
     <div className="v-page">
       <div className="v-big-title v-ruled">More</div>
       <div className="v-tiles">
         {MORE_TILES.map(t => (
-          <div key={t.key} className="v-tile is-soon">
+          <div key={t.key} className={`v-tile ${t.soon ? 'is-soon' : ''}`} onClick={() => !t.soon && onOpen(t.key)}>
             <div className="v-tile-icon">{t.icon}</div>
             <div className="v-tile-text">
               <span className="v-tile-name">{t.name}</span>
-              <span className="v-tile-sub">Coming soon</span>
+              <span className="v-tile-sub">{t.key === 'usage' && usageSub ? usageSub : t.sub}</span>
             </div>
           </div>
         ))}
@@ -172,10 +192,14 @@ export default function VesperApp() {
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
     <div className={`vesper ${tabHidden ? 'tab-hidden' : ''}`} data-look={look} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
-      {tab === 'chat' && <ChatTab />}
+      {tab === 'chat' && <ChatTab onUsage={() => { setTab('more'); setMoreView('usage') }} />}
       {tab === 'calendar' && <CalendarTab />}
-      {tab === 'more' && <MorePage mode={mode} onOpenSetting={() => setMoreView('setting')} />}
+      {tab === 'more' && <MorePage mode={mode} onOpen={setMoreView} onOpenSetting={() => setMoreView('setting')} />}
       {tab === 'more' && moreView === 'setting' && <SettingPage mode={mode} setMode={setMode} onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'usage' && <UsagePage onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'mcp' && <McpPage onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'game' && <GamePage onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
       <nav className="v-tabbar">
         {TABS.map(t => (
           <button key={t.key} className={`v-tab ${tab === t.key ? 'on' : ''}`} onClick={() => goTab(t.key)}>

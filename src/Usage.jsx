@@ -16,13 +16,25 @@ function fmtK(n) {
   return String(Math.round(n))
 }
 
-const fmtWhen = (iso) => {
+const fmtWhen = (iso, en) => {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
+  if (en) return fmtWhenEn(iso)
   const p = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]))
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
   const same = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d) === today
   return same ? `${p.hour}:${p.minute}` : `${p.month}月${p.day}日 ${p.hour}:${p.minute}`
+}
+
+// 英文的时间：今天的只写 17:00，别的天写 Oct 27 09:00（Vesper 用）
+export function fmtWhenEn(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const tz = 'Asia/Shanghai'
+  const hm = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d)
+  const day = (x) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(x)
+  if (day(d) === day(new Date())) return `Today ${hm}`
+  return `${new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short', day: 'numeric' }).format(d)} ${hm}`
 }
 
 // 折算成"相当于多少普通输入 token"，分三段
@@ -46,9 +58,9 @@ export function useCcUsageBrief(apiFetch, refreshKey) {
 }
 
 // 额度用完的提示：直接显示在聊天页顶上（关系到他为什么不回），不收进菜单
-export function CcLimitedNotice({ brief }) {
+export function CcLimitedNotice({ brief, en }) {
   if (!brief?.limited_until) return null
-  return <div className="cc-usage-limited" role="status">额度用完 · {fmtWhen(brief.limited_until)} 恢复</div>
+  return <div className="cc-usage-limited" role="status">{en ? `Limit reached · resets ${fmtWhenEn(brief.limited_until)}` : `额度用完 · ${fmtWhen(brief.limited_until)} 恢复`}</div>
 }
 
 // 订阅额度（只在 Usage 页）：5 小时 / 7 天各还剩多少、几点恢复。过了恢复时间就只说"已恢复"（新的数要等沐下一轮才有）
