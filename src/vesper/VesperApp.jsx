@@ -10,6 +10,8 @@ import UsagePage from './Usage.jsx'
 import McpPage from './Mcp.jsx'
 import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
+import MemoryPage from './Memory.jsx'
+import AlbumPage from './Album.jsx'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -71,30 +73,34 @@ const TABS = [
 const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 
 const MORE_TILES = [
-  { key: 'memory', name: 'Memory', icon: V.memory, sub: 'Coming soon', soon: true },
-  { key: 'album', name: 'Album', icon: V.album, sub: 'Coming soon', soon: true },
+  { key: 'memory', name: 'Memory', icon: V.memory, sub: "Soren's memory files" },
+  { key: 'album', name: 'Album', icon: V.album, sub: 'Photos kept by Soren' },
   { key: 'game', name: 'Game', icon: V.game, sub: 'Gomoku · Draw & Guess' },
   { key: 'reading', name: 'Reading', icon: V.reading, sub: 'Shelf' },
   { key: 'mcp', name: 'MCP', icon: V.mcp, sub: 'Server & tools' },
   { key: 'usage', name: 'Usage', icon: V.usage, sub: 'Limits & tokens' },
 ]
 
-// Usage 格子的小字：5 小时额度几点恢复（拉不到就用默认那句）
-function useUsageSub() {
-  const [sub, setSub] = useState(null)
+// 格子上的小字用真数据：几个记忆文件、几张照片、5 小时额度几点恢复（拉不到就用默认那句）
+function useTileSubs() {
+  const [subs, setSubs] = useState({})
   useEffect(() => {
     let alive = true
-    apiFetch('/api/cc/usage?brief=1').then(r => r.ok ? r.json() : null).then(b => {
+    const put = (k, v) => { if (alive) setSubs(s => ({ ...s, [k]: v })) }
+    const get = (path) => apiFetch(path).then(r => r.ok ? r.json() : null)
+    get('/api/cc/usage?brief=1').then(b => {
       const w = b?.rate_limits?.five_hour
-      if (alive && w?.resets_at && Date.parse(w.resets_at) > Date.now()) setSub(`5-hour limit resets ${fmtWhenEn(w.resets_at).replace('Today ', '')}`)
+      if (w?.resets_at && Date.parse(w.resets_at) > Date.now()) put('usage', `5-hour limit resets ${fmtWhenEn(w.resets_at).replace('Today ', '')}`)
     }).catch(() => {})
+    get('/api/cc/memory').then(d => { if (Array.isArray(d?.files)) put('memory', `${d.files.length} memory files`) }).catch(() => {})
+    get('/api/cc/album').then(d => { if (Array.isArray(d?.photos)) put('album', `${d.photos.length} photos kept by Soren`) }).catch(() => {})
     return () => { alive = false }
   }, [])
-  return sub
+  return subs
 }
 
 function MorePage({ mode, onOpen, onOpenSetting }) {
-  const usageSub = useUsageSub()
+  const subs = useTileSubs()
   return (
     <div className="v-page">
       <div className="v-big-title v-ruled">More</div>
@@ -104,7 +110,7 @@ function MorePage({ mode, onOpen, onOpenSetting }) {
             <div className="v-tile-icon">{t.icon}</div>
             <div className="v-tile-text">
               <span className="v-tile-name">{t.name}</span>
-              <span className="v-tile-sub">{t.key === 'usage' && usageSub ? usageSub : t.sub}</span>
+              <span className="v-tile-sub">{subs[t.key] || t.sub}</span>
             </div>
           </div>
         ))}
@@ -199,6 +205,8 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'usage' && <UsagePage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'mcp' && <McpPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'game' && <GamePage onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
+      {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
       <nav className="v-tabbar">
         {TABS.map(t => (
