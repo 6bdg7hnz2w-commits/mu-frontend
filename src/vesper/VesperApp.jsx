@@ -65,18 +65,29 @@ function usePageChrome() {
 
 // 键盘弹出时 iOS 不缩页面、而是把整页往上推，顶栏被推出屏幕、输入框和键盘之间空一截。
 // 外框高度跟着可见区域走，再把页面滚回顶，输入框就贴着键盘
+// 另外：主屏幕打开、状态栏透明时，iOS 给的视口高度少了顶上状态栏那一截，页面画不到底，底下露出一条黑。
+// 所以没弹键盘时整页用整块屏幕的高度，html / body / #root 一起拉满
+function fullHeight() {
+  const portrait = window.matchMedia('(orientation: portrait)').matches
+  return Math.max(window.innerHeight, navigator.standalone && portrait ? screen.height : 0)
+}
 function useVisibleHeight(ref) {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
+    const root = document.documentElement
     const on = () => {
-      ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
+      const full = fullHeight()
+      root.style.setProperty('--app-h', `${full}px`)
+      const keyboard = vv.height < full - 150
+      ref.current?.style.setProperty('--v-vh', `${Math.round(keyboard ? vv.height : full)}px`)
       if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0)
     }
     on()
     vv.addEventListener('resize', on)
     vv.addEventListener('scroll', on)
-    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on) }
+    window.addEventListener('orientationchange', on)
+    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('orientationchange', on); root.style.removeProperty('--app-h') }
   }, [ref])
 }
 
