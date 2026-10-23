@@ -5,22 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#e8f0f8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- 状态栏透明，页面一直画到最上面（Vesper 和 Clawd 一样）；iOS 只认 HTML 里写死的这一项，脚本改它没用 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <script>
-      // Vesper 夜间：状态栏透明，页面（Home 的壁纸）一直铺到最上面，和画布一样。iOS 只在打开时读这一项，
-      // 所以要在第一帧之前定好；规则和 src/skin.js 的 wantedStatusStyle 一致
       try {
-        var mode = localStorage.getItem('mu_vesper_mode')
-        var night = mode === 'night' || (mode !== 'day' && matchMedia('(prefers-color-scheme: dark)').matches)
-        if (localStorage.getItem('mu_skin') === 'vesper' && night) document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'black-translucent'
         // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
         // 字体也一样：不等 React，这里就开始下（VesperApp 看到 #vesper-fonts 就不再加）
         if (localStorage.getItem('mu_skin') === 'vesper') {
-          // 状态栏那条露的是 html 底色，iOS 多半只在打开时取一次：一打开就是 Home，所以先定成 Home 顶上的雾蓝
-          //（和 Home.jsx 的 useTopColor 一样），开屏顶上也从这个颜色渐过去，React 起来后不用再换
+          // 全局一个底色：和开屏一样的黑（html、body、theme-color）
           var top = document.createElement('style'); top.id = 'vesper-top'
-          top.textContent = 'html:root,html:root body{background:' + (night ? '#262e45' : '#415075') + '}'
+          top.textContent = 'html:root,html:root body{background:#000}'
           document.head.appendChild(top)
+          document.querySelector('meta[name="theme-color"]').content = '#000000'
           ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
             var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
           })

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../App.jsx'
-import { useTopColor } from './ui.jsx'
 
 // ─── Reading ────────────────────────────────────────
 // 书架（壁纸 + 平面封面 + 搜索 + 上次打开的那本）和羊皮纸阅读器（划线、楼层回复、目录、进度）。
@@ -59,7 +58,6 @@ function Reader({ book, chapters, startChapter, startSheet, progress, onBack }) 
   const [ui, setUi] = useState(true)
   const [sheet, setSheet] = useState(startSheet) // 'contents' | { ann }
   const [sel, setSel] = useState(null) // 选中一段文字：{ top, left, para, quote }
-  useTopColor('#efebe2', '#12161f', 3) // 纸的颜色
   const [reply, setReply] = useState('')
   const [herCh, setHerCh] = useState(progress?.hua?.chapter || 0)
   const muCh = progress?.mu?.chapter || 0
@@ -270,7 +268,6 @@ export default function ReadingPage({ onBack, onImmersive }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(null) // { book, ch, sheet }
   const [last, setLast] = useState(() => { try { return localStorage.getItem(LAST_KEY) } catch { return null } })
-  useTopColor('#27405b', '#19293c', 2) // 书架壁纸顶上压暗后的颜色
 
   const loadInfo = useCallback(async (b) => {
     try {

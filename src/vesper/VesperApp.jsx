@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LockScreen, getPasscode, useKeyboardOpen, apiFetch, getMcpUrl, mcpRequest } from '../App.jsx'
-import { getSkin, setSkin, reloadIfStatusStyleChanged } from '../skin.js'
-import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
+import { getSkin, setSkin } from '../skin.js'
+import { V, SubPage, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
 import CalendarTab from './Calendar.jsx'
 import ChatTab from './Chat.jsx'
@@ -36,14 +36,13 @@ function useMode() {
   const setMode = (m) => {
     setModeState(m)
     try { localStorage.setItem(MODE_KEY, m) } catch {}
-    reloadIfStatusStyleChanged()
   }
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
 
-// html/body 的底色跟着 Vesper 走，换回 Clawd 时还原；状态栏颜色由各页 useTopColor 报上来（见 ui.jsx）
+// 状态栏是透明的（index.html），页面画到最上面；html / body / theme-color 全用开屏那个黑，换回 Clawd 时还原
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
-function usePageChrome(look) {
+function usePageChrome() {
   useEffect(() => {
     if (document.getElementById('vesper-fonts')) return // index.html 已经加了（打开就是 Vesper 时）
     const link = Object.assign(document.createElement('link'), { id: 'vesper-fonts', rel: 'stylesheet', href: FONTS_HREF })
@@ -52,15 +51,15 @@ function usePageChrome(look) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
-    return () => { if (meta && prevMeta != null) meta.content = prevMeta }
-  }, [])
-  useTopColor(BG.day, BG.night, 0)
-  useEffect(() => {
+    if (meta) meta.content = '#000000'
     const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
-    els.forEach(el => { el.style.background = BG[look] })
-    setTopLook(look)
-    return () => { els.forEach(el => { el.style.background = '' }); document.getElementById('vesper-top')?.remove() }
-  }, [look])
+    els.forEach(el => { el.style.background = '#000' })
+    return () => {
+      if (meta && prevMeta != null) meta.content = prevMeta
+      els.forEach(el => { el.style.background = '' })
+      document.getElementById('vesper-top')?.remove()
+    }
+  }, [])
 }
 
 // 键盘弹出时 iOS 不缩页面、而是把整页往上推，顶栏被推出屏幕、输入框和键盘之间空一截。
@@ -228,7 +227,7 @@ export default function VesperApp() {
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   const frame = useRef(null)
-  usePageChrome(look)
+  usePageChrome()
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])

@@ -172,7 +172,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-wall-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,22,42,.28) 0%,rgba(15,22,42,0) 24%)}
 .v-home-scroll{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
 .v-home-body{display:flex;flex-direction:column;gap:14px;padding:calc(var(--v-top) + 45px) 20px calc(var(--v-bottom) + 110px)}
-.v-home-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 30px);z-index:2;pointer-events:none;background:var(--v-topFade);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(180deg,#000 45%,transparent);mask-image:linear-gradient(180deg,#000 45%,transparent)}
+.v-home-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 44px);z-index:2;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.62) 0%,rgba(0,0,0,.32) 45%,rgba(0,0,0,0) 100%)}
 .v-hello{display:flex;flex-direction:column;gap:10px;padding:0 8px 22px;color:#fff}
 .v-hello-date{font-style:italic;font-size:17px;letter-spacing:.02em;opacity:.9}
 .v-hello-greet{font-size:31px;font-weight:500;line-height:1.1;letter-spacing:-.005em}
@@ -455,8 +455,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-room{position:relative}
 .v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;padding-bottom:26px}
 .v-chat .cc-room>.chatroom-header::before,.v-chat .cc-room>.chatroom-header::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none}
-.v-chat .cc-room>.chatroom-header::before{background:linear-gradient(180deg,var(--v-bg) 0%,var(--vc-head) 45%,rgba(0,0,0,0) 100%);backdrop-filter:blur(8px) saturate(1.5);-webkit-backdrop-filter:blur(8px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 50%,transparent);mask-image:linear-gradient(180deg,#000 50%,transparent)}
-.v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);-webkit-mask-image:linear-gradient(180deg,#000 25%,transparent 60%);mask-image:linear-gradient(180deg,#000 25%,transparent 60%)}
+.v-chat .cc-room>.chatroom-header::before{background:linear-gradient(180deg,var(--v-bg) 0%,var(--vc-head) calc(100% - 30px),rgba(0,0,0,0) 100%);backdrop-filter:blur(10px) saturate(1.5);-webkit-backdrop-filter:blur(10px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
+.v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
 .v-chat .cc-room>.messages{padding-top:calc(var(--v-top) + 60px)}
 .v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 .v-chat .cc-conn{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:4px 0 6px;font-size:11px;color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
@@ -781,9 +781,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-sub{font-family:var(--v-sc);font-size:12.5px}
 
 /* ─── 开场星光（画布的 splash） ─── */
-/* 状态栏那条是打开那一刻 html 的底色（= Home 顶上的雾蓝），之后 iOS 不一定跟着换；开屏顶上从同一个颜色渐到开屏色，接得上 */
-.v-splash{position:absolute;inset:0;z-index:200;background:linear-gradient(180deg,#415075 0,#66799e 160px);transition:opacity .65s ease;--sc:255,255,255}
-.vesper[data-look="night"] .v-splash{background:linear-gradient(180deg,#262e45 0,#000 160px);--sc:143,179,255}
+.v-splash{position:fixed;inset:0;z-index:200;background:#66799e;transition:opacity .65s ease;--sc:255,255,255}
+.vesper[data-look="night"] .v-splash{background:#000;--sc:143,179,255}
 .v-splash.out{opacity:0;pointer-events:none}
 .v-splash>div{position:absolute;left:50%;top:46%;width:0;height:0}
 .v-splash i{position:absolute;animation:1.3s cubic-bezier(.5,0,.3,1) both}
