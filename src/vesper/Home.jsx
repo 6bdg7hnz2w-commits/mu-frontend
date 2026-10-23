@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { START_DATE, apiFetch, beijingDateStr, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache } from '../App.jsx'
-import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, useTopColor } from './ui.jsx'
+import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet } from './ui.jsx'
 
 // ─── Home / Diary / Read ────────────────────────────
 // 首页（壁纸 + 每日一句 + Day N + 重要日期 + 日记本），点日记本翻开进 Diary，点一页进 Read。
@@ -160,13 +160,24 @@ function HomeScreen({ diaries, opening, onOpenNotebook }) {
   )
 }
 
-// 搜索时卡片上的小字：第一句带关键词的句子。开头那句只在后面加 …，结尾那句只在前面加，中间的两头都加
+// 搜索时卡片上的小字：第一句带关键词的句子。开头那句只在后面加 …，结尾那句只在前面加，中间的两头都加；
+// 句子太长（卡片只放两行）就截一段，让关键词落在里面；接 … 的那头去掉句末标点，不出现「。…」
+const SNIP = 30
 function snippetOf(text, query) {
   const parts = text.replace(/\n+/g, '\n').split(/(?<=[。！？!?；;…\n])/).map(s => s.trim()).filter(Boolean)
   const lower = query.toLowerCase()
   const i = parts.findIndex(s => s.toLowerCase().includes(lower))
   if (i < 0) return null
-  return `${i > 0 ? '…' : ''}${parts[i]}${i < parts.length - 1 ? '…' : ''}`
+  let line = parts[i], head = i > 0, tail = i < parts.length - 1
+  if (line.length > SNIP) {
+    const k = line.toLowerCase().indexOf(lower)
+    const from = Math.max(0, Math.min(k - 10, line.length - SNIP))
+    if (from > 0) head = true
+    if (from + SNIP < line.length) tail = true
+    line = line.slice(from, from + SNIP)
+  }
+  if (tail) line = line.replace(/[。！？!?；;，,、…\s]+$/, '')
+  return `${head ? '…' : ''}${line}${tail ? '…' : ''}`
 }
 function Highlight({ text, query }) {
   const lower = query.toLowerCase(), out = []
@@ -382,7 +393,6 @@ export default function HomeTab({ onImmersive }) {
   const [opening, setOpening] = useState(false)
   const [readId, setReadId] = useState(null)
   const [fresh, setFresh] = useState({})
-  useTopColor('#415075', '#262e45', 1) // 顶上那条雾蓝渐变的颜色
   useEffect(() => { onImmersive(screen !== 'home') }, [screen, onImmersive])
   useEffect(() => () => onImmersive(false), [onImmersive])
 

@@ -45,28 +45,6 @@ export const flowerStyle = (i, opacity, size) => ({
   WebkitMaskPosition: 'center', maskPosition: 'center', transition: 'opacity .8s ease',
 })
 
-// 状态栏（theme-color）跟着当前最上面那页的顶部颜色走：各页报一个 { day, night } 和层级，层级高的赢，同级后来的赢
-// 0 = 底色，1 = Home / Chats 这种主页，2 = More 里的二级页，3 = 盖在二级页上的阅读器
-const tops = []
-let topLook = 'day'
-// iOS 主屏幕 App 的状态栏那条露的是 html / body 的底色，不看 theme-color，所以两样一起换
-function applyTop() {
-  const meta = document.querySelector('meta[name="theme-color"]')
-  const els = [document.documentElement, document.body]
-  if (!tops.length) { els.forEach(el => { el.style.background = '' }); return }
-  const top = tops.reduce((a, b) => (b.level >= a.level ? b : a))
-  if (meta) meta.content = top[topLook]
-  els.forEach(el => { el.style.background = top[topLook] })
-}
-export function setTopLook(look) { topLook = look; applyTop() }
-export function useTopColor(day, night, level) {
-  useEffect(() => {
-    const e = { day, night, level }
-    tops.push(e); applyTop()
-    return () => { tops.splice(tops.indexOf(e), 1); applyTop() }
-  }, [day, night, level])
-}
-export const BG = { day: '#f1f3f7', night: '#0a0c11' }
 
 // 从左边缘往右划回上一页：找最上面那页的返回键按一下（各页的返回键都带 aria-label="Back"）
 export function useEdgeSwipe(fallback) {
@@ -86,7 +64,6 @@ export function useEdgeSwipe(fallback) {
 }
 
 export function SubHead({ title, onBack, children }) {
-  useTopColor(BG.day, BG.night, 2)
   return (
     <div className="v-sub-head">
       <button className="v-chip" onClick={onBack} aria-label="Back">{V.back}</button>

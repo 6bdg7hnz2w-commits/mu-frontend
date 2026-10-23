@@ -1,4 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
+import { createPortal } from 'react-dom'
+import StatusScrim from './StatusScrim.jsx'
 import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 import { setSkin } from './skin.js'
@@ -3065,11 +3067,13 @@ function ImageLightbox({ src, path, onClose }) {
     e.stopPropagation()
     navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
   }
-  return (
+  // 挂到 body 上：Vesper 的聊天在自己的层里，不挂出去会被底下的 tab 栏压住
+  return createPortal(
     <div className="image-lightbox-overlay" onClick={onClose}>
       {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
       <img src={shown} alt="" />
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -4014,7 +4018,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               </div>
             ) : (
               <div key={p.key} className="composer-image-preview">
-                <img src={p.previewUrl} alt="" />
+                <img src={p.previewUrl} alt="" onClick={() => setLightboxImage({ src: p.previewUrl })} />
                 <button onClick={() => removePending(p.key)} aria-label="Remove image">{I.close}</button>
               </div>
             ))}
@@ -4168,6 +4172,7 @@ function App() {
 
   return (
     <div className="app">
+      <StatusScrim lightOnly />
       <div className="page-container">
         {tab === 'today' && <TodayPage />}
         {tab === 'chat' && <ChatPage onEnterRoom={setInRoom} />}
