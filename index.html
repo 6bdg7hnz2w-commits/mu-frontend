@@ -16,8 +16,11 @@
         // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
         // 字体也一样：不等 React，这里就开始下（VesperApp 看到 #vesper-fonts 就不再加）
         if (localStorage.getItem('mu_skin') === 'vesper') {
-          // 状态栏那条露的是 html 底色：开屏期间和开屏一个颜色（之后 ui.jsx 的 applyTop 接手）
-          document.documentElement.style.background = night ? '#000000' : '#66799e'
+          // 状态栏那条露的是 html 底色，iOS 多半只在打开时取一次：一打开就是 Home，所以先定成 Home 顶上的雾蓝
+          //（和 Home.jsx 的 useTopColor 一样），开屏顶上也从这个颜色渐过去，React 起来后不用再换
+          var top = document.createElement('style'); top.id = 'vesper-top'
+          top.textContent = 'html:root,html:root body{background:' + (night ? '#262e45' : '#415075') + '}'
+          document.head.appendChild(top)
           ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
             var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
           })
