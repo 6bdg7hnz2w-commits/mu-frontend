@@ -60,7 +60,7 @@ function EventSheet({ event, defaultDate, onClose, onSaved }) {
   }
   return (
     <Modal title={readOnly ? 'Event' : event ? 'Edit Event' : 'New Event'} onClose={onClose}>
-      <input className="v-field" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} />
+      <input className="v-field" placeholder="What's happening" value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} />
       <div className="v-seg small">
         <div className="v-seg-thumb" style={{ transform: `translateX(${allDay ? '0' : '100%'})` }} />
         <button className={allDay ? 'on' : ''} onClick={() => setAllDay(true)} disabled={readOnly}>All day</button>
@@ -75,7 +75,7 @@ function EventSheet({ event, defaultDate, onClose, onSaved }) {
         </div>
       )}
       <input className="v-field" placeholder="Location (optional)" value={location} onChange={e => setLocation(e.target.value)} disabled={readOnly} />
-      <textarea className="v-field" rows={3} placeholder="Note (optional)" value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} />
+      <textarea className="v-field" rows={3} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} />
       {error && <div className="v-error">{error}</div>}
       {readOnly
         ? <div className="v-modal-note">From the phone calendar — edit it on the phone.</div>

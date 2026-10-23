@@ -227,7 +227,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-diary-title{font-size:42px;font-weight:500;line-height:1}
 .v-diary-tools{display:flex;align-items:center;gap:14px;color:var(--v-mute);font-size:18px;padding-bottom:2px}
 .v-diary .v-seg{margin-top:18px}
-.v-week{margin-top:14px;display:flex;align-items:center;height:76px;padding:0 4px}
+.v-week{margin-top:14px;display:flex;align-items:center;height:78px;padding:0 4px}
 .v-week-arrow{width:24px;height:60px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--v-faint)!important}
 .v-week-days{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .v-wd{height:58px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-family:var(--v-sans)!important;color:var(--v-ink)!important;transition:background .25s,color .25s}
@@ -560,33 +560,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-cart-ridges{position:absolute;left:14px;right:26px;top:9px;display:flex;gap:4px}
 .v-cart-ridges span{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.12)}
 .v-cart-label{position:absolute;left:12px;right:12px;top:24px;bottom:44px;border-radius:6px;background:#e4e8f0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
-.v-cart-label.gomoku{background:#e9dfc7}
 .v-cart-label span{font-family:var(--v-sans);font-size:8.5px;letter-spacing:.24em;color:rgba(29,34,50,.6)}
 .v-cart-title{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-family:var(--v-sc);font-size:15px;color:#eef1f6;letter-spacing:.12em}
 .v-cart-pin{position:absolute;left:50%;bottom:0;width:54px;height:6px;margin-left:-27px;border-radius:3px 3px 0 0;background:rgba(255,255,255,.08)}
 .v-cart-empty{height:196px;border-radius:10px 10px 16px 16px;border:1.5px dashed var(--v-faint);display:flex;align-items:center;justify-content:center;font-family:var(--v-sc);font-size:13px;color:var(--v-faint)}
-.v-gm-top{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
-.v-gm-who{display:flex;align-items:center;gap:8px;font-family:var(--v-sans);font-size:13px}
-.v-gm-who i{width:12px;height:12px;border-radius:50%}
-.v-gm-who i.b{background:var(--v-ink)}
-.v-gm-who i.w{background:#f4f5f8;box-shadow:inset 0 0 0 1px rgba(30,40,70,.25)}
-.v-gm-who em{font-style:normal;color:var(--v-faint);margin:0 4px}
-.v-gm-status{font-size:19px;font-style:italic;color:var(--v-acc)}
-.v-gm-status.win{color:var(--v-gold)}
-.v-gm-board{width:100%;max-width:330px;align-self:center;border-radius:18px;background:#e6dcc6;box-shadow:0 12px 30px rgba(80,60,30,.16),inset 0 0 0 1px rgba(80,60,30,.12)}
-.v-gm-board svg{display:block;width:100%;height:auto}
-.v-gm-lines line{stroke:rgba(70,55,30,.45);stroke-width:.8}
-.v-gm-star{fill:var(--v-ink);opacity:.45}
-.v-gm-white{stroke:rgba(30,40,70,.25);stroke-width:.8}
-.vesper[data-look="night"] .v-gm-board{background:#1b2130;box-shadow:0 12px 30px rgba(0,0,0,.4)}
-.vesper[data-look="night"] .v-gm-lines line{stroke:rgba(220,226,238,.28)}
-.vesper[data-look="night"] .v-gm-white{stroke:rgba(255,255,255,.3)}
-.v-gm-say{display:flex;gap:10px;align-items:flex-start;padding:2px 4px}
-.v-gm-say span{font-style:italic;font-size:17px;color:var(--v-acc)}
-.v-gm-say p{flex:1;margin:0;font-family:var(--v-sc);font-size:14px;line-height:1.6;color:var(--v-ink2)}
-.v-gm-btns{display:flex;gap:10px}
-.v-gm-btns button{flex:1;height:42px;border-radius:13px;background:var(--v-card)!important;border:1px solid var(--v-line)!important;font-family:var(--v-sc)!important;font-size:14.5px}
-.v-gm-btns button.on{background:var(--v-acc)!important;color:var(--v-acc-ink)!important;border:0!important}
 .v-overlay-clawd{position:absolute;inset:0;z-index:20;background:var(--bg);padding-top:var(--v-top);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 
 /* ─── More：Reading 书架 ─── */
@@ -642,7 +619,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .vesper[data-look="night"] .v-reader{--rp:#12161f;--ri:#dfe3ea;--ri2:#b8c0cd;--rm:#7f8899;--rr:#d58c5e;--rn:#a9c2dd;--rl:rgba(200,210,230,.12);--rb:rgba(18,22,31,.94);--rs:#181d28;--rhl:rgba(213,140,94,.12)}
 .v-reader-bar{position:absolute;left:0;right:0;z-index:3;display:flex;gap:10px;padding:0 20px;background:var(--rb);transition:opacity .3s,transform .3s}
 .v-reader-bar.top{top:0;height:calc(var(--v-top) + 60px);padding-top:var(--v-top);align-items:center;border-bottom:1px solid var(--rl)}
-.v-reader-bar.bottom{bottom:0;height:calc(var(--v-bottom) + 64px);padding-top:10px;align-items:flex-start;border-top:1px solid var(--rl)}
+.v-reader-bar.bottom{bottom:0;height:calc(var(--v-bottom) + 52px);padding-top:10px;align-items:flex-start;border-top:1px solid var(--rl)}
 .v-reader-bar.top.hide{opacity:0;transform:translateY(-12px);pointer-events:none}
 .v-reader-bar.bottom.hide{opacity:0;transform:translateY(12px);pointer-events:none}
 .v-rd-btn{width:40px;height:40px;flex:none;border-radius:13px;display:flex;align-items:center;justify-content:center;color:var(--ri)!important;border:1px solid var(--rl)!important}
@@ -701,9 +678,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-rd-reply button.on{color:var(--rr)!important}
 
 /* ─── More：Memory 地图（羊皮纸）─── */
-.v-map{--mp:#efebe2;--mi:#1f2a44;--mm:#8b8372;--mr:#b5622f;--ml:rgba(31,42,68,.18);--mc:#f7f4ee;--mg:rgba(110,98,76,.06);--mv:rgba(150,180,214,.85);--mct:rgba(110,98,76,.22);--mtx:#4d4a42;--mbody:#3a3730;
+.v-map{--mps:0 14px 30px rgba(60,50,30,.16);--mp:#efebe2;--mi:#1f2a44;--mm:#8b8372;--mr:#b5622f;--ml:rgba(31,42,68,.18);--mc:#f7f4ee;--mg:rgba(110,98,76,.06);--mv:rgba(150,180,214,.85);--mct:rgba(110,98,76,.22);--mtx:#4d4a42;--mbody:#3a3730;
   position:absolute;inset:0;z-index:5;background:var(--mp);color:var(--mi);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
-.vesper[data-look="night"] .v-map{--mp:#12161f;--mi:#dfe3ea;--mm:#7f8899;--mr:#d58c5e;--ml:rgba(200,210,230,.14);--mc:#181d28;--mg:rgba(200,210,230,.04);--mv:rgba(120,150,200,.55);--mct:rgba(200,210,230,.10);--mtx:#aab2c0;--mbody:#c9cfda}
+.vesper[data-look="night"] .v-map{--mps:0 14px 30px rgba(0,0,0,.45);--mp:#12161f;--mi:#dfe3ea;--mm:#7f8899;--mr:#d58c5e;--ml:rgba(200,210,230,.14);--mc:#181d28;--mg:rgba(200,210,230,.04);--mv:rgba(120,150,200,.55);--mct:rgba(200,210,230,.10);--mtx:#aab2c0;--mbody:#c9cfda}
 .v-map-head{position:absolute;top:var(--v-top);left:20px;height:60px;z-index:6;display:flex;align-items:center}
 .v-map-head .v-rd-btn{background:var(--mc)!important;border-color:var(--ml)!important;color:var(--mi)!important}
 .v-map-topfade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 66px);z-index:3;pointer-events:none;background:linear-gradient(180deg,var(--mp) 55%,transparent)}
@@ -737,7 +714,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-map-compass .mute{fill:var(--mm);opacity:.5}.v-map-compass .faint{opacity:.35}
 .v-map-compass .ink{fill:var(--mi)}
 .v-map-compass text{font-family:var(--v-serif);font-size:9px;fill:var(--mi)}
-.v-map-pop{position:absolute;z-index:2;width:210px;padding:14px 16px 12px;background:var(--mc);border:1px solid var(--ml);outline:1px solid var(--ml);outline-offset:3px;box-shadow:0 14px 30px rgba(60,50,30,.16);cursor:pointer;animation:vPop .35s cubic-bezier(.2,.7,.2,1)}
+.v-map-pop{position:absolute;z-index:2;width:210px;padding:14px 16px 12px;background:var(--mc);border:1px solid var(--ml);outline:1px solid var(--ml);outline-offset:3px;box-shadow:var(--mps);cursor:pointer;animation:vPop .35s cubic-bezier(.2,.7,.2,1)}
 .v-map-pop-meta{font-family:var(--v-sans);font-size:9.5px;letter-spacing:.22em;color:var(--mr)}
 .v-map-pop-title{margin-top:6px;font-family:var(--v-sc);font-size:19px;font-weight:500}
 .v-map-pop-text{margin-top:6px;font-family:var(--v-sc);font-size:12.5px;line-height:1.7;color:var(--mtx)}
@@ -788,3 +765,19 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-row:has(.cc-brain-row-model){min-height:0;padding:12px 16px 12px 18px}
 .v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-name{font-family:var(--v-sans);font-size:15px;line-height:normal}
 .v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-sub{font-family:var(--v-sc);font-size:12.5px}
+
+/* ─── 开场星光（画布的 splash） ─── */
+.v-splash{position:absolute;inset:0;z-index:200;background:#66799e;transition:opacity .65s ease;--sc:255,255,255}
+.vesper[data-look="night"] .v-splash{background:#000;--sc:143,179,255}
+.v-splash.out{opacity:0;pointer-events:none}
+.v-splash>div{position:absolute;left:50%;top:46%;width:0;height:0}
+.v-splash i{position:absolute;animation:1.3s cubic-bezier(.5,0,.3,1) both}
+.v-splash i.glow{left:-95px;top:-95px;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,rgba(var(--sc),.42) 0%,rgba(var(--sc),.12) 26%,rgba(var(--sc),0) 62%);animation-name:vsGlow}
+.v-splash i.h{left:-72px;top:-.5px;width:144px;height:1px;background:linear-gradient(90deg,rgba(var(--sc),0),rgba(var(--sc),.95),rgba(var(--sc),0));animation-name:vsFlare}
+.v-splash i.v{left:-.5px;top:-40px;width:1px;height:80px;background:linear-gradient(180deg,rgba(var(--sc),0),rgba(var(--sc),.95),rgba(var(--sc),0));animation-name:vsFlareV}
+.v-splash i.core{left:-3.5px;top:-3.5px;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 8px 2px rgba(var(--sc),.9),0 0 26px 7px rgba(var(--sc),.45);animation-name:vsCore;animation-duration:1.25s}
+.vesper[data-look="night"] .v-splash i.core{background:#dfe9ff}
+@keyframes vsGlow{0%{opacity:0;transform:scale(.35)}100%{opacity:1;transform:scale(1)}}
+@keyframes vsFlare{0%,35%{opacity:0;transform:scaleX(.1)}100%{opacity:1;transform:scaleX(1)}}
+@keyframes vsFlareV{0%,35%{opacity:0;transform:scaleY(.1)}100%{opacity:1;transform:scaleY(1)}}
+@keyframes vsCore{0%{opacity:0;transform:scale(.3)}100%{opacity:1;transform:scale(1)}}

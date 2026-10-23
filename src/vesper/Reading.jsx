@@ -286,7 +286,8 @@ export default function ReadingPage({ onBack, onImmersive }) {
   useEffect(() => {
     getJson('/api/nook/books').then(d => { const list = Array.isArray(d) ? d : []; setBooks(list); list.forEach(loadInfo) }).catch(() => setBooks([]))
   }, [loadInfo])
-  useEffect(() => { onImmersive?.(!!open); return () => onImmersive?.(false) }, [open, onImmersive])
+  // 和画布一样：书架和阅读器都铺满整屏，不露底部标签栏
+  useEffect(() => { onImmersive?.(true); return () => onImmersive?.(false) }, [onImmersive])
 
   const openBook = (b, sheet) => {
     const i = info[b.id]

@@ -93,7 +93,7 @@ const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 const MORE_TILES = [
   { key: 'memory', name: 'Memory', icon: V.memory, sub: "Soren's memory files" },
   { key: 'album', name: 'Album', icon: V.album, sub: 'Photos kept by Soren' },
-  { key: 'game', name: 'Game', icon: V.game, sub: 'Gomoku · Draw & Guess' },
+  { key: 'game', name: 'Game', icon: V.game, sub: 'Draw & Guess' },
   { key: 'reading', name: 'Reading', icon: V.reading, sub: 'Shelf' },
   { key: 'mcp', name: 'MCP', icon: V.mcp, sub: 'Server & tools' },
   { key: 'usage', name: 'Usage', icon: V.usage, sub: 'Limits & tokens' },
@@ -198,6 +198,18 @@ function SettingPage({ mode, setMode, onBack }) {
   )
 }
 
+// 打开时和画布一样先亮一下星光：1.25 秒后整页淡入，2 秒后撤掉（也正好盖住壁纸加载）
+function Splash() {
+  const [out, setOut] = useState(false)
+  const [gone, setGone] = useState(false)
+  useEffect(() => {
+    const a = setTimeout(() => setOut(true), 1250), b = setTimeout(() => setGone(true), 2000)
+    return () => { clearTimeout(a); clearTimeout(b) }
+  }, [])
+  if (gone) return null
+  return <div className={`v-splash ${out ? 'out' : ''}`}><div><i className="glow" /><i className="h" /><i className="v" /><i className="core" /></div></div>
+}
+
 export default function VesperApp() {
   const [mode, setMode, look] = useMode()
   const [tab, setTab] = useState('home')
@@ -241,6 +253,7 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
+      <Splash />
       <nav className="v-tabbar">
         {TABS.map(t => (
           <button key={t.key} className={`v-tab ${tab === t.key ? 'on' : ''}`} onClick={() => goTab(t.key)}>

@@ -97,7 +97,7 @@ export default function MemoryPage({ onBack }) {
 
   const sx = W / VB
   const list = files || []
-  const pts = list.map((_, i) => [XS[i % XS.length] * sx, FIRST_Y + i * STEP])
+  const pts = list.map((_, i) => [XS[i % XS.length] * sx, i ? FIRST_Y - 10 + i * STEP : FIRST_Y]) // 和画布一样：头两站隔 140，之后每站 150
   const tearY = (pts.length ? pts[pts.length - 1][1] : FIRST_Y) + 130
   const mapH = tearY + 260
   const path = [[-20, 236]].concat(pts).concat([[W / 2, tearY + 10]])
