@@ -3562,6 +3562,13 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     else messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }
 
+  // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
+  const stickBottom = () => {
+    if (say(true, false) || detachedRef.current) return
+    const go = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
+    go(); setTimeout(go, 120); setTimeout(go, 360)
+  }
+
   // 缓存里垫上的他的话：语音段的时长也要估（mergeHistory 只估新来的）
   useEffect(() => {
     history.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
@@ -3989,9 +3996,9 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         </div>
       )}
 
+      {/* 英文版（Vesper）顶栏只留名字；连不上的时候才在输入框上面露一行小字，不带底色 */}
+      {say(null, (!passcode || status !== 'live') && <div className="cc-conn"><span className={`cc-status-dot ${passcode ? status : 'offline'}`} />{passcode ? statusLabel : 'Locked'}</div>)}
       <div className="composer">
-        {/* 英文版（Vesper）顶栏只留名字；连不上的时候才在输入框上面露一行小字 */}
-        {say(null, (!passcode || status !== 'live') && <div className="cc-conn"><span className={`cc-status-dot ${passcode ? status : 'offline'}`} />{passcode ? statusLabel : 'Locked'}</div>)}
         {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
         {pending.length > 0 && (
           <div className="cc-pending">
@@ -4034,7 +4041,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
               onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Say to Soren" rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={stickBottom} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
           <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => { setAttachOpen(false); setEmojiOpen(o => !o); textareaRef.current?.blur() }} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => { setEmojiOpen(false); setAttachOpen(o => !o) }} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>

@@ -14,7 +14,24 @@ export function setSkin(skin) {
   if (!SKINS.includes(skin) || skin === current) return
   current = skin
   try { localStorage.setItem(SKIN_KEY, skin) } catch {}
+  if (reloadIfStatusStyleChanged()) return
   window.dispatchEvent(new Event('mu-skin'))
+}
+
+// 状态栏样式：Vesper 夜间用透明（black-translucent，字是白的，页面铺到最上面），其余用 default。
+// iOS 只在打开时读，index.html 里那段脚本在第一帧前定好；换皮肤、换浅色/夜间后要不一样了就重新载入一次
+export function wantedStatusStyle() {
+  try {
+    const mode = localStorage.getItem('mu_vesper_mode')
+    const night = mode === 'night' || (mode !== 'day' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
+    return localStorage.getItem(SKIN_KEY) === 'vesper' && night ? 'black-translucent' : 'default'
+  } catch { return 'default' }
+}
+export function reloadIfStatusStyleChanged() {
+  const meta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+  if (!window.navigator.standalone || !meta || meta.content === wantedStatusStyle()) return false // 只有主屏幕上的 App 才看这一项
+  window.location.reload()
+  return true
 }
 export function useSkin() {
   const [skin, set] = useState(current)

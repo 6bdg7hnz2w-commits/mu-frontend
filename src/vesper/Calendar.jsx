@@ -246,7 +246,7 @@ export default function CalendarTab() {
       <div className="v-cal-top">
         <div className="v-diary-titles">
           <div className="v-diary-title">Calendar</div>
-          <div className="v-caps">{year}</div>
+          {year !== now.getFullYear() && <div className="v-caps">{year}</div>}
         </div>
         <div className="v-cal-actions">
           <button className="v-today" onClick={() => { goMonth(now.getFullYear(), now.getMonth()); setSel(todayKey) }}>Today</button>
@@ -257,7 +257,7 @@ export default function CalendarTab() {
       <div className="v-card v-month" {...monthSwipe}>
         <div className="v-month-nav">
           <button onClick={() => goMonth(year, month - 1)} aria-label="Previous month">{V.left}</button>
-          <div className="v-month-label" onClick={() => setModal({ type: 'month' })}>{MONS[month].charAt(0)}{MONS[month].slice(1).toLowerCase()} {year}</div>
+          <div className="v-month-label" onClick={() => setModal({ type: 'month' })}>{MONS[month].charAt(0)}{MONS[month].slice(1).toLowerCase()}{year !== now.getFullYear() ? ` ${year}` : ''}</div>
           <button onClick={() => goMonth(year, month + 1)} aria-label="Next month">{V.right}</button>
         </div>
         <div className="v-month-head">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => <div key={d}>{d}</div>)}</div>

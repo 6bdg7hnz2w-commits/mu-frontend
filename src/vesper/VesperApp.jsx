@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
 import { fmtWhenEn } from '../Usage.jsx'
-import { getSkin, setSkin } from '../skin.js'
+import { getSkin, setSkin, reloadIfStatusStyleChanged } from '../skin.js'
 import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
 import CalendarTab from './Calendar.jsx'
@@ -37,6 +37,7 @@ function useMode() {
   const setMode = (m) => {
     setModeState(m)
     try { localStorage.setItem(MODE_KEY, m) } catch {}
+    reloadIfStatusStyleChanged()
   }
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
