@@ -1007,7 +1007,7 @@ function ChatListPage({ onOpenCC }) {
           <div className="session-avatar">{say('沐', 'S')}</div>
           <div className="session-info">
             <div className="session-top"><span className="session-name">{say('沐', 'Soren')}</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
-            <div className="session-sub-row"><span className="session-sublabel">CC · API</span></div>
+            {say(<div className="session-sub-row"><span className="session-sublabel">CC · API</span></div>, null)}
             <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{preview}</span></div>
           </div>
         </div>
@@ -3897,7 +3897,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
           <div className="chatroom-name">{say('沐 (CC)', 'Soren')}</div>
-          <div className="chatroom-model">{say(null, <span className={`cc-status-dot ${passcode ? status : 'offline'}`} />)}{passcode ? statusLabel : 'Locked'}</div>
+          {say(<div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>, null)}
         </div>
         <div className="chatroom-header-right">
           <button className="icon-btn" onClick={onMenu} aria-label={say('更多', 'More')}>
@@ -3990,6 +3990,8 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
       )}
 
       <div className="composer">
+        {/* 英文版（Vesper）顶栏只留名字；连不上的时候才在输入框上面露一行小字 */}
+        {say(null, (!passcode || status !== 'live') && <div className="cc-conn"><span className={`cc-status-dot ${passcode ? status : 'offline'}`} />{passcode ? statusLabel : 'Locked'}</div>)}
         {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
         {pending.length > 0 && (
           <div className="cc-pending">
