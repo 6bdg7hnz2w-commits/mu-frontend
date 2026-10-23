@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { START_DATE, apiFetch, beijingDateStr, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache } from '../App.jsx'
-import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet } from './ui.jsx'
+import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, useTopColor } from './ui.jsx'
 
 // ─── Home / Diary / Read ────────────────────────────
 // 首页（壁纸 + 每日一句 + Day N + 重要日期 + 日记本），点日记本翻开进 Diary，点一页进 Read。
@@ -356,6 +356,7 @@ export default function HomeTab({ onImmersive }) {
   const [opening, setOpening] = useState(false)
   const [readId, setReadId] = useState(null)
   const [fresh, setFresh] = useState({})
+  useTopColor('#415075', '#262e45', 1) // 顶上那条雾蓝渐变的颜色
   useEffect(() => { onImmersive(screen !== 'home') }, [screen, onImmersive])
   useEffect(() => () => onImmersive(false), [onImmersive])
 

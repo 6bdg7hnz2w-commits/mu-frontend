@@ -14,7 +14,7 @@
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
   --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'Noto Serif SC',serif;--v-serif:'Cormorant Garamond','Noto Serif SC',serif;
   --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
-  position:relative;height:100%;height:100dvh;max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
+  position:relative;height:100%;height:var(--v-vh,100dvh);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
@@ -282,7 +282,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-month-nav button{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--v-mute)!important}
 .v-month-label{font-size:22px;font-weight:500;cursor:pointer;padding:4px 10px;border-radius:10px}
 .v-month-head{display:grid;grid-template-columns:repeat(7,1fr);font-family:var(--v-sans);font-size:11px;letter-spacing:.08em;color:var(--v-mute);text-align:center;padding-bottom:6px}
-.v-month-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px}
+.v-month-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px;animation:vFade .25s ease}
 .v-mc{height:48px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
 .v-mc-num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--v-sans);font-size:15px;border:1px solid transparent;transition:background .2s}
 .v-mc-num.period{background:rgba(212,174,189,.42)}
@@ -364,11 +364,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 }
 
 /* 照画布：聊天壁纸 + 一层薄雾；顶栏和输入栏是雾面玻璃；她的话是主题色气泡，他的话是没有气泡的衬线正文 */
-.v-chat{--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
+.v-chat{--vc-top:rgba(241,243,247,.97);--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
   --vc-meta-shadow:0 0 6px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9);--vc-text-shadow:0 0 12px rgba(255,255,255,.75);
   --vc-veil:linear-gradient(180deg,rgba(241,243,247,.62) 0%,rgba(241,243,247,.46) 35%,rgba(241,243,247,.46) 70%,rgba(241,243,247,.64) 100%);
   --vc-f:none;--vc-base:#c9c3d6}
-.vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
+.vesper[data-look="night"] .v-chat{--vc-top:rgba(10,12,17,.97);--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:linear-gradient(180deg,rgba(5,7,12,.62) 0%,rgba(5,7,12,.42) 40%,rgba(5,7,12,.42) 70%,rgba(5,7,12,.64) 100%);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
@@ -377,8 +377,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
 .v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg)}
-.v-chat .chatroom-header{padding:10px 12px;background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-bottom:1px solid var(--v-line);z-index:3}
-.v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:25px;font-weight:500;line-height:1}
+.v-chat .chatroom-header{padding:4px 10px;min-height:0;background:var(--vc-top);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-bottom:1px solid var(--v-line);z-index:3}
+.v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
+.v-chat .cc-conn{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 0 6px;font-size:11px;color:var(--v-mute)}
 .v-chat .cc-room .chatroom-model{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:4px;font-size:11px;color:var(--v-mute)}
 .cc-status-dot{width:5px;height:5px;border-radius:50%;background:#9aa3b5}
 .cc-status-dot.live{background:#7fb89a}
@@ -396,7 +397,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-thumb{border-radius:14px;box-shadow:0 4px 14px rgba(40,55,90,.16)}
 .v-chat .cc-typing-dot{background:var(--vc-meta)}
 .v-chat .composer{padding:8px 10px 9px;background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-top:1px solid var(--v-line)}
-.vesper.tab-hidden .v-chat .composer{padding-bottom:calc(9px + var(--v-bottom))}
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px;color:var(--v-mute)}
 .v-chat .cc-composer-row .attach-btn.active{color:var(--v-acc)}

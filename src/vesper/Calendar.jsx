@@ -205,6 +205,18 @@ export default function CalendarTab() {
   const selD = new Date(`${sel}T00:00:00`)
 
   const goMonth = (y, m) => setCur(new Date(y, m, 1))
+  // 月历左右划换月：往左划下个月，往右划上个月（横向要明显多过竖向，免得和上下滚动打架）
+  const swipeAt = useRef(null)
+  const monthSwipe = {
+    onTouchStart: (e) => { const p = e.touches[0]; swipeAt.current = { x: p.clientX, y: p.clientY } },
+    onTouchEnd: (e) => {
+      const s = swipeAt.current; swipeAt.current = null
+      if (!s) return
+      const p = e.changedTouches[0], dx = p.clientX - s.x, dy = Math.abs(p.clientY - s.y)
+      if (Math.abs(dx) < 50 || dy > Math.abs(dx) * 0.6) return
+      goMonth(cur.getFullYear(), cur.getMonth() + (dx < 0 ? 1 : -1))
+    },
+  }
   const addTodo = async () => {
     if (!newTodo.trim()) return
     try { const t = await apiJson('POST', '/api/todos', { side: 'her', text: newTodo.trim(), due_time: sel }); setTodos(p => [...p, t]); setNewTodo('') } catch (e) { showToast(errText(e)) }
@@ -242,14 +254,14 @@ export default function CalendarTab() {
         </div>
       </div>
 
-      <div className="v-card v-month">
+      <div className="v-card v-month" {...monthSwipe}>
         <div className="v-month-nav">
           <button onClick={() => goMonth(year, month - 1)} aria-label="Previous month">{V.left}</button>
           <div className="v-month-label" onClick={() => setModal({ type: 'month' })}>{MONS[month].charAt(0)}{MONS[month].slice(1).toLowerCase()} {year}</div>
           <button onClick={() => goMonth(year, month + 1)} aria-label="Next month">{V.right}</button>
         </div>
         <div className="v-month-head">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => <div key={d}>{d}</div>)}</div>
-        <div className="v-month-grid">
+        <div key={`${year}-${month}`} className="v-month-grid">
           {cells.map((d, i) => {
             if (!d) return <div key={`x${i}`} className="v-mc" />
             const k = mk(d), isT = k === todayKey, isS = k === sel, isP = periodSet.has(k), isPr = predicted.has(k) && !isP

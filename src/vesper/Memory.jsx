@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../App.jsx'
+import { useTopColor } from './ui.jsx'
 
 // ─── Memory ─────────────────────────────────────────
-// 沐的记忆文件画成一张等高线地图：一个文件一站，按修改时间从上往下走，红线走到选中的那一站。
-// 数据：/api/cc/memory（bridge 每 5 分钟从 /home/mu 拷一份只读副本），App 里只能看不能改
+// 沐的记忆文件画成一张等高线地图：一个文件一站，从最新的往下走到最早的，红线走到选中的那一站。
+// 数据：/api/cc/memory（bridge 直接只读 沐 的 memory 文件夹），App 里只能看不能改；最新的在最上面
 
 const VB = 390 // 画布按 390 宽设计，横坐标按实际宽度等比放
 const XS = [84, 272, 128, 300, 92, 256, 120, 292]
@@ -87,9 +88,10 @@ export default function MemoryPage({ onBack }) {
   const [sel, setSel] = useState(null)
   const [open, setOpen] = useState(false)
   const [ref, W] = useWidth()
+  useTopColor('#efebe2', '#12161f', 2) // 地图纸的颜色
   useEffect(() => {
     apiFetch('/api/cc/memory').then(async r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(d => { const list = Array.isArray(d?.files) ? d.files : []; setFiles(list); setSel(list.length - 1) })
+      .then(d => { const list = Array.isArray(d?.files) ? d.files : []; setFiles(list.slice().reverse()); setSel(0) })
       .catch(() => setError("Couldn't reach Soren's memory — try again later"))
   }, [])
 

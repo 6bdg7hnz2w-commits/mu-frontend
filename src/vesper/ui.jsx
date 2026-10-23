@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // ─── Vesper 共用的小零件：图标、日期常量、二级页顶栏、提示条、底部菜单 ──
 
@@ -45,7 +45,44 @@ export const flowerStyle = (i, opacity, size) => ({
   WebkitMaskPosition: 'center', maskPosition: 'center', transition: 'opacity .8s ease',
 })
 
+// 状态栏（theme-color）跟着当前最上面那页的顶部颜色走：各页报一个 { day, night } 和层级，层级高的赢，同级后来的赢
+// 0 = 底色，1 = Home / Chats 这种主页，2 = More 里的二级页，3 = 盖在二级页上的阅读器
+const tops = []
+let topLook = 'day'
+function applyTop() {
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (!meta || !tops.length) return
+  const top = tops.reduce((a, b) => (b.level >= a.level ? b : a))
+  meta.content = top[topLook]
+}
+export function setTopLook(look) { topLook = look; applyTop() }
+export function useTopColor(day, night, level) {
+  useEffect(() => {
+    const e = { day, night, level }
+    tops.push(e); applyTop()
+    return () => { tops.splice(tops.indexOf(e), 1); applyTop() }
+  }, [day, night, level])
+}
+export const BG = { day: '#f1f3f7', night: '#0a0c11' }
+
+// 从左边缘往右划回上一页：找最上面那页的返回键按一下（各页的返回键都带 aria-label="Back"）
+export function useEdgeSwipe(fallback) {
+  const t = useRef(null)
+  return {
+    onTouchStart: (e) => { const p = e.touches[0]; t.current = p.clientX < 28 ? { x: p.clientX, y: p.clientY } : null },
+    onTouchEnd: (e) => {
+      const s = t.current; t.current = null
+      if (!s) return
+      const p = e.changedTouches[0], dx = p.clientX - s.x, dy = Math.abs(p.clientY - s.y)
+      if (dx < 70 || dy > dx * 0.7) return
+      const backs = e.currentTarget.querySelectorAll('[aria-label="Back"]')
+      if (backs.length) backs[backs.length - 1].click(); else fallback?.()
+    },
+  }
+}
+
 export function SubHead({ title, onBack, children }) {
+  useTopColor(BG.day, BG.night, 2)
   return (
     <div className="v-sub-head">
       <button className="v-chip" onClick={onBack} aria-label="Back">{V.back}</button>

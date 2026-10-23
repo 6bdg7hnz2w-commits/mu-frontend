@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
 import { fmtWhenEn } from '../Usage.jsx'
 import { getSkin, setSkin } from '../skin.js'
-import { V, SubPage } from './ui.jsx'
+import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
 import CalendarTab from './Calendar.jsx'
 import ChatTab from './Chat.jsx'
@@ -41,8 +41,7 @@ function useMode() {
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
 
-// html/body 的底色和状态栏颜色跟着 Vesper 走，换回 Clawd 时还原
-const PAGE_BG = { day: '#f1f3f7', night: '#0a0c11' }
+// html/body 的底色跟着 Vesper 走，换回 Clawd 时还原；状态栏颜色由各页 useTopColor 报上来（见 ui.jsx）
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
 function usePageChrome(look) {
   useEffect(() => {
@@ -51,16 +50,34 @@ function usePageChrome(look) {
     document.head.appendChild(link)
   }, [])
   useEffect(() => {
-    const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
-    els.forEach(el => { el.style.background = PAGE_BG[look] })
-    if (meta) meta.content = PAGE_BG[look]
-    return () => {
-      els.forEach(el => { el.style.background = '' })
-      if (meta && prevMeta != null) meta.content = prevMeta
-    }
+    return () => { if (meta && prevMeta != null) meta.content = prevMeta }
+  }, [])
+  useTopColor(BG.day, BG.night, 0)
+  useEffect(() => {
+    const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
+    els.forEach(el => { el.style.background = BG[look] })
+    setTopLook(look)
+    return () => els.forEach(el => { el.style.background = '' })
   }, [look])
+}
+
+// 键盘弹出时 iOS 不缩页面、而是把整页往上推，顶栏被推出屏幕、输入框和键盘之间空一截。
+// 外框高度跟着可见区域走，再把页面滚回顶，输入框就贴着键盘
+function useVisibleHeight(ref) {
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const on = () => {
+      ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
+      if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0)
+    }
+    on()
+    vv.addEventListener('resize', on)
+    vv.addEventListener('scroll', on)
+    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on) }
+  }, [ref])
 }
 
 const TABS = [
@@ -177,9 +194,13 @@ export default function VesperApp() {
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
+  const frame = useRef(null)
   usePageChrome(look)
+  useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])
+  // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
+  const swipe = useEdgeSwipe(() => { if (tab === 'more' && moreView) setMoreView(null) })
 
   // 和 Clawd 一样：apiFetch 遇到 401 广播 mu-lock，整个回锁屏
   useEffect(() => {
@@ -196,7 +217,7 @@ export default function VesperApp() {
 
   return (
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
-    <div className={`vesper ${tabHidden ? 'tab-hidden' : ''}`} data-look={look} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
+    <div ref={frame} className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
       {tab === 'chat' && <ChatTab onUsage={() => { setTab('more'); setMoreView('usage') }} />}
       {tab === 'calendar' && <CalendarTab />}
