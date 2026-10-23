@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
+import { setSkin } from './skin.js'
 
 // 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
 const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
@@ -10,7 +11,7 @@ const START_DATE = new Date('2026-07-27')
 // 所有 /api 请求都走 apiFetch，统一带 APP 口令。口令存在 localStorage 的 cc_passcode 里
 // （沿用沐聊天页原来的 key，以前在那儿解锁过的设备不用重输）。
 // 没口令或后端回 401 就清掉口令、广播 mu-lock，App 收到后整个切回锁屏。
-function getPasscode() {
+export function getPasscode() {
   try { return localStorage.getItem('cc_passcode') || '' } catch { return '' }
 }
 function setPasscodeStorage(code) {
@@ -1603,8 +1604,8 @@ function SettingsPage({ onBack }) {
       <div className="page-header"><button className="icon-btn" onClick={() => setSubPage(null)}>{I.back}</button><h1>Theme</h1></div>
       <div className="card-title-outer">Color Theme</div>
       <div className="card settings-card">
-        <div className="setting-item"><span>Claude (current)</span><span className="setting-value">✓</span></div>
-        <div className="setting-item"><span>Pink & Blue</span><span className="setting-value dim">Coming soon</span></div>
+        <div className="setting-item"><span>Clawd</span><span className="setting-value">✓</span></div>
+        <div className="setting-item" onClick={() => setSkin('vesper')}><span>Vesper</span>{I.chevron}</div>
       </div>
       <div className="card-title-outer">Appearance</div>
       <div className="card settings-card">
@@ -1619,7 +1620,7 @@ function SettingsPage({ onBack }) {
       <div className="card settings-card">
         <div className="setting-item" onClick={() => window.open('https://openrouter.ai/settings/keys', '_blank')}><span>OpenRouter API</span>{I.chevron}</div>
         <div className="setting-item" onClick={() => window.open('https://platform.deepseek.com', '_blank')}><span>DeepSeek API</span>{I.chevron}</div>
-        <div className="setting-item" onClick={() => setSubPage('skin')}><span>Theme</span><span className="setting-value">Claude</span>{I.chevron}</div>
+        <div className="setting-item" onClick={() => setSubPage('skin')}><span>Theme</span><span className="setting-value">Clawd</span>{I.chevron}</div>
         <div className="setting-item" onClick={() => setSubPage('mcp')}><span>MCP</span>{I.chevron}</div>
       </div>
       <div className="card settings-card">
@@ -4062,7 +4063,7 @@ function MorePage({ onEnterRoom }) {
 
 // ─── 锁屏 ───────────────────────────────────────────
 // 输完口令先打 /api/auth/check 验一下，对了才存下来进 App。Render 免费实例冷启动可能要等几十秒
-function LockScreen({ expired, onUnlock }) {
+export function LockScreen({ expired, onUnlock }) {
   const [input, setInput] = useState('')
   const [error, setError] = useState(expired ? 'Passcode expired, enter it again' : '')
   const [checking, setChecking] = useState(false)

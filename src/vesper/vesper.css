@@ -1,0 +1,84 @@
+/* ─── Vesper ─────────────────────────────────────────
+   变量都带 --v- 前缀、只挂在 .vesper 上，和 Clawd 的 :root 变量互不影响 */
+.vesper{
+  --v-bg:#f1f3f7;--v-card:#fafbfc;--v-card2:#e7ebf1;--v-line:rgba(28,38,66,.08);--v-line2:#e3e7ee;
+  --v-ink:#1c2232;--v-ink2:#3d4556;--v-mute:#7f879a;--v-faint:#a9b0bf;
+  --v-acc:#4f638c;--v-acc-ink:#ffffff;--v-acc-soft:rgba(95,115,156,.12);
+  --v-shadow:0 1px 2px rgba(30,40,70,.04),0 10px 28px rgba(30,40,70,.06);
+  --v-tabbar:rgba(244,246,249,.9);
+  --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'Noto Serif SC',serif;--v-serif:'Cormorant Garamond','Noto Serif SC',serif;
+  --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
+  position:relative;height:100%;height:100dvh;max-width:600px;width:100%;margin:0 auto;overflow:hidden;
+  background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);-webkit-font-smoothing:antialiased;
+  color-scheme:light;
+}
+.vesper[data-look="night"]{
+  --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
+  --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;
+  --v-acc:#88a7dd;--v-acc-ink:#0a0c11;--v-acc-soft:rgba(136,167,221,.13);
+  --v-shadow:0 12px 32px rgba(0,0,0,.35);
+  --v-tabbar:rgba(10,12,17,.9);
+  color-scheme:dark;
+}
+.vesper button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* 整页（tab 下的四页） */
+.v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--v-top) + 26px) 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
+.v-big-title{font-size:42px;font-weight:500;line-height:1;padding-bottom:20px;margin-bottom:6px}
+.v-ruled{border-bottom:1px solid var(--v-line)}
+
+.v-soon{display:flex;flex-direction:column;align-items:flex-start;gap:16px;padding:8px 2px}
+.v-soon p{font-family:var(--v-sc);font-size:15px;line-height:1.8;color:var(--v-mute)}
+.v-btn{height:40px;padding:0 18px;border-radius:12px;background:var(--v-acc)!important;color:var(--v-acc-ink)!important;font-family:var(--v-sans)!important;font-size:14px;font-weight:600}
+
+/* More */
+.v-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.v-tile{height:124px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;background:var(--v-card);border:1px solid var(--v-line);border-radius:22px;box-shadow:var(--v-shadow);cursor:pointer}
+.v-tile.is-soon{cursor:default}
+.v-tile.is-soon .v-tile-icon{opacity:.55}
+.v-tile-icon{width:40px;height:40px;flex:none;border-radius:13px;background:var(--v-acc-soft);color:var(--v-acc);display:flex;align-items:center;justify-content:center}
+.v-tile-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.v-tile-name{font-size:21px;font-weight:600;line-height:1.1}
+.v-tile-sub{font-family:var(--v-sans);font-size:12px;color:var(--v-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-row{height:66px;padding:0 16px;display:flex;align-items:center;gap:14px;background:var(--v-card);border:1px solid var(--v-line);border-radius:22px;box-shadow:var(--v-shadow);cursor:pointer}
+.v-row-name{flex:1;font-size:21px;font-weight:600}
+.v-row-sub{font-family:var(--v-sans);font-size:12.5px;color:var(--v-mute)}
+.v-row-chev{display:flex;color:var(--v-faint)}
+
+/* 二级页：顶栏 + 内容 */
+.v-sub{position:absolute;inset:0;z-index:5;background:var(--v-bg);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
+.v-sub-head{position:absolute;top:var(--v-top);left:0;right:0;height:60px;z-index:4;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--v-line);background:var(--v-bg)}
+.v-chip{position:absolute;left:20px;top:10px;width:40px;height:40px;border-radius:13px;background:var(--v-card)!important;border:1px solid var(--v-line)!important;box-shadow:var(--v-shadow);display:flex;align-items:center;justify-content:center}
+.v-sub-title{font-size:24px;font-weight:600}
+.v-sub-body{position:absolute;top:calc(var(--v-top) + 60px);left:0;right:0;bottom:0;overflow-y:auto;scrollbar-width:none;padding:20px 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:14px}
+.v-sec{padding:4px 4px 0;font-family:var(--v-sc);font-size:13px;color:var(--v-mute)}
+.v-card{background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow)}
+.v-tip{padding:0 4px;font-family:var(--v-sc);font-size:12px;line-height:1.7;color:var(--v-faint)}
+
+/* Setting */
+.v-skins{display:flex;gap:12px}
+.v-skin{flex:1;min-width:0;padding:12px;border-radius:20px;cursor:pointer;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);display:flex;flex-direction:column;gap:10px}
+.v-skin.on{border:1.5px solid var(--v-acc)}
+.v-skin-preview{position:relative;height:112px;border-radius:13px;overflow:hidden;border:1px solid rgba(0,0,0,.06)}
+.v-skin-preview i{position:absolute;display:block}
+.v-skin-meta{display:flex;align-items:center;gap:6px}
+.v-skin-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.v-skin-no{font-family:var(--v-sans);font-size:10px;letter-spacing:.2em;color:var(--v-mute)}
+.v-skin-name{font-size:21px;font-weight:600;line-height:1.1}
+.v-skin-sub{font-family:var(--v-sc);font-size:11.5px;color:var(--v-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-skin-check{width:22px;height:22px;flex:none;border-radius:50%;background:var(--v-acc);color:var(--v-acc-ink);display:flex;align-items:center;justify-content:center}
+.v-modes{padding:6px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.v-mode{height:76px;border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:var(--v-mute);transition:background .2s}
+.v-mode span{font-family:var(--v-sc);font-size:13px}
+.v-mode.on{background:var(--v-acc-soft);color:var(--v-acc)}
+.v-mode.on span{color:var(--v-ink)}
+
+/* 底部 tab */
+.v-tabbar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);padding:9px 0 calc(var(--v-bottom) + 8px);background:var(--v-tabbar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--v-line)}
+.v-tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--v-faint)!important;transition:color .25s}
+.v-tab span{font-size:13.5px}
+.v-tab i{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:0;transition:opacity .25s}
+.v-tab.on{color:var(--v-acc)!important}
+.v-tab.on i{opacity:1}
+
+@keyframes vIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
