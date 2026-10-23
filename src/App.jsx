@@ -66,19 +66,13 @@ async function mcpRequest(url, method, params) {
 }
 
 // ─── Important dates (localStorage，旧数据) ─────────
-// 现在存在数据库 events 里（见下面的 ensureImportantMigrated）；这里只读，用来迁移和没解锁时兜底
+// 现在存在数据库 events 里（见下面的 ensureImportantMigrated）；这里只读，用来迁移和没解锁时兜底。
+// 浏览器里没存过就是空的：以前这里会退回三条写死的默认值，换设备/清数据后迁移又把它们传上去，删掉的生日会自己回来
 function getImportantDates() {
   try {
-    const d = localStorage.getItem('important_dates')
-    return d ? JSON.parse(d) : getDefaultDates()
-  } catch { return getDefaultDates() }
-}
-function getDefaultDates() {
-  return [
-    { id: 'd1', name: '桦桦\'s Birthday', date: '2026-11-19', emoji: '🎂', recurring: 'yearly' },
-    { id: 'd2', name: 'Anniversary', date: '2026-07-27', emoji: '💕', recurring: 'yearly' },
-    { id: 'd3', name: 'First Day of School', date: '2026-08-30', emoji: '🎓', recurring: false },
-  ]
+    const d = JSON.parse(localStorage.getItem('important_dates'))
+    return Array.isArray(d) ? d : []
+  } catch { return [] }
 }
 
 // ─── Calendar events（/api/events）──
@@ -122,7 +116,7 @@ function importantFromEvent(e) {
   return { id: e.series_id ?? e.id, name: e.title, emoji: e.emoji || '📌', date: e.series_start_date ?? eventFirstDay(e), shownOn: eventFirstDay(e), recurring: e.repeat === 'none' ? false : e.repeat }
 }
 
-// 重要日期搬家：浏览器里的 important_dates（没存过就是默认那三条，页面一直显示的就是它们），
+// 重要日期搬家：浏览器里真存过的 important_dates（没存过就什么都不传），
 // 数据库里还没有的（同名同日期，或 external_id=legacy:<原 id> 已存在）上传一次；全部成功才记"已迁移"，原数据不删
 const IMPORTANT_MIGRATED_KEY = 'important_dates_migrated'
 let importantMigration = null
