@@ -1,6 +1,6 @@
-// 沐 (CC) 的额度消耗：聊天页顶上一条（上下文多大、额度几点恢复），More 里的 Usage 页看完整的
-// 数据来自 /api/cc/usage（bridge 按 usage.jsonl 统计：每次 API 调用的缓存读、缓存写、输入、输出）
-// 都是按 token 估算的消耗，不是订阅页上"用了百分之几"的那个数
+// 沐 (CC) 的额度消耗：聊天页顶上只在额度用完时提示几点恢复，More 里的 Usage 页看完整的（含订阅额度还剩多少）
+// 数据来自 /api/cc/usage：rate_limits 是 CC 状态栏给的官方额度（和 Claude App 里看到的同一个数，沐每回一轮更新一次）；
+// 图表是 bridge 按 usage.jsonl 统计的每次 API 调用的缓存读、缓存写、输入、输出，按 token 估算，不是那个百分比
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 const SERIES = [
@@ -49,6 +49,36 @@ export function useCcUsageBrief(apiFetch, refreshKey) {
 export function CcLimitedNotice({ brief }) {
   if (!brief?.limited_until) return null
   return <div className="cc-usage-limited" role="status">额度用完 · {fmtWhen(brief.limited_until)} 恢复</div>
+}
+
+// 订阅额度（只在 Usage 页）：5 小时 / 7 天各还剩多少、几点恢复。过了恢复时间就只说"已恢复"（新的数要等沐下一轮才有）
+const QUOTA_WINDOWS = [{ key: 'five_hour', label: '5h' }, { key: 'seven_day', label: '7d' }]
+const STALE_MS = 3 * 60 * 60 * 1000
+
+function CcQuota({ brief }) {
+  const rl = brief?.rate_limits
+  if (!rl) return null
+  const now = Date.now()
+  const parts = QUOTA_WINDOWS.map(({ key, label }) => {
+    const w = rl[key]
+    if (!w) return null
+    const resets = Date.parse(w.resets_at)
+    if (resets <= now) return <span key={key}>{label} 已恢复</span>
+    const left = Math.max(0, Math.floor(100 - w.used_percentage))
+    return (
+      <span key={key} className={left <= 10 ? 'cc-quota-low' : ''}>
+        {label} 剩 {left}%{Number.isFinite(resets) ? ` · ${fmtWhen(w.resets_at)} 恢复` : ''}
+      </span>
+    )
+  }).filter(Boolean)
+  if (!parts.length) return null
+  const stale = rl.updated_at && now - Date.parse(rl.updated_at) > STALE_MS
+  return (
+    <div className="cc-quota" title={rl.updated_at ? `更新于 ${fmtWhen(rl.updated_at)}` : undefined}>
+      {parts}
+      {stale && <span className="cc-quota-at">{fmtWhen(rl.updated_at)} 的数</span>}
+    </div>
+  )
 }
 
 // 上下文条：收在聊天页右上角 ⋮ → Usage 里
@@ -202,6 +232,7 @@ export function UsagePage({ apiFetch, onBack, backIcon, swipe }) {
       {!data && !error && <div className="empty-state">Loading…</div>}
       {data && <>
         <div className="card">
+          <CcQuota brief={data} />
           <CcUsageStrip brief={data} />
           <div className="usage-meta">
             {data.compacting ? '正在压缩' : data.last_compact_at ? `上次压缩 ${fmtWhen(data.last_compact_at)}` : '还没自动压缩过'}
@@ -238,7 +269,7 @@ export function UsagePage({ apiFetch, onBack, backIcon, swipe }) {
 
         <div className="usage-note">
           按 token 估算，换算成"相当于多少普通输入"：读缓存 ×{data.weights.read}、写缓存 ×{data.weights.write}、输出 ×{data.weights.output}。
-          不是订阅页上的百分比。一次写缓存超过 {fmtK(data.rewrite_min)} 算整段重写（缓存过期或压缩后重建）。
+          不是上面那个订阅额度的百分比。一次写缓存超过 {fmtK(data.rewrite_min)} 算整段重写（缓存过期或压缩后重建）。
           {data.first ? ` 记录从 ${fmtWhen(data.first)} 开始。` : ''}
         </div>
       </>}

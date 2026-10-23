@@ -768,6 +768,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 .cc-usage-strip{display:flex;flex-direction:column;gap:6px}
 .cc-room>.cc-usage-limited{margin:0 16px 6px}
+.cc-quota{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:13px;line-height:18px;margin-bottom:10px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.cc-quota-low{color:var(--danger)}
+.cc-quota-at{color:var(--text-dim)}
 .cc-usage-pop{min-width:260px;padding:14px 16px}
 .cc-usage-empty{font-size:13px;color:var(--text-secondary)}
 .dropdown-chevron{color:var(--text-dim);font-size:18px;line-height:1}
