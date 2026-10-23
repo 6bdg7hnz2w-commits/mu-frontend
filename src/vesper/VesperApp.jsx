@@ -11,6 +11,7 @@ import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
 import MemoryPage from './Memory.jsx'
 import AlbumPage from './Album.jsx'
+import StatusScrim from '../StatusScrim.jsx'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -263,6 +264,8 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
+      {/* 白天除了 Home（壁纸顶上自己有黑到透明那层），其余页面都是浅色，垫一层暗色让状态栏白字看得清 */}
+      <StatusScrim on={look === 'day' && !(tab === 'home' && !immersive)} />
       <Splash />
       <nav className="v-tabbar">
         {TABS.map(t => (
