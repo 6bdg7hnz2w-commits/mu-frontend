@@ -2,13 +2,14 @@ import { ChatPage } from '../App.jsx'
 
 // ─── Chats ──────────────────────────────────────────
 // 聊天的逻辑（语音、图片、文件、查找、回复方式、轮询）直接用 Clawd 的 ChatPage，一行不重写；
-// 外面套 .v-clawd，把 Clawd 的颜色变量换成 Vesper 的（聊天壁纸要等聊天页自己重做时再加）
+// 文字用 lang="en"（画布上的英文），样子靠 .v-clawd 下的样式照画布改：壁纸、雾面顶栏和输入栏、她的蓝气泡、他的衬线正文
 const noop = () => {}
 
-export default function ChatTab() {
+export default function ChatTab({ onUsage }) {
   return (
     <div className="v-clawd v-chat">
-      <ChatPage onEnterRoom={noop} />
+      <div className="v-chat-wall"><img src="/vesper/chat-bg.jpg" alt="" /><i /></div>
+      <ChatPage onEnterRoom={noop} lang="en" onUsage={onUsage} />
     </div>
   )
 }

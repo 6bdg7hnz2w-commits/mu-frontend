@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
 import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 import { setSkin } from './skin.js'
@@ -995,6 +995,7 @@ function compressImage(file, maxWidth = 1200, quality = 0.8) {
 // 对话列表：现在只有沐 (CC) 这一条线（CC / API 在聊天页右上角 ⋮ → 回复方式里切）。
 // 列表留着，以后接 DeepSeek 之类别的对话就加在沐下面
 function ChatListPage({ onOpenCC }) {
+  const say = useCcSay()
   const [ccLast] = useState(getCcLast)
   const draft = getDraft('cc')
   const preview = draft ? `[Draft] ${draft.length > 25 ? draft.slice(0, 25) + '...' : draft}` : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''
@@ -1003,9 +1004,9 @@ function ChatListPage({ onOpenCC }) {
       <div className="page-header"><h1>Chats</h1></div>
       <div className="session-list">
         <div className="session-card pinned" onClick={onOpenCC}>
-          <div className="session-avatar">沐</div>
+          <div className="session-avatar">{say('沐', 'S')}</div>
           <div className="session-info">
-            <div className="session-top"><span className="session-name">沐</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
+            <div className="session-top"><span className="session-name">{say('沐', 'Soren')}</span><span className="session-time">{fmtListTime(ccLast?.time)}</span></div>
             <div className="session-sub-row"><span className="session-sublabel">CC · API</span></div>
             <div className="session-bottom"><span className={`session-preview ${draft ? 'draft' : ''}`}>{preview}</span></div>
           </div>
@@ -1017,21 +1018,22 @@ function ChatListPage({ onOpenCC }) {
 
 const CC_SESSION = { id: 'cc' }
 
-function ChatPage({ onEnterRoom }) {
+function ChatPage({ onEnterRoom, lang = 'zh', onUsage }) {
   // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。都保留 tab 栏
   // 沐右上角 ⋮ 离开聊天页进 menu，里面三个入口各是一整页：search 查找聊天记录 / brain 回复方式 / usage
   const [view, setView] = useState('cc') // cc / list / menu / search / brain / usage
   const [jumpTo, setJumpTo] = useState(null) // 搜索结果点回来：{ id }，聊天页挂载时停在那条
   const searchSaved = useRef({ q: '', res: null, scrollTop: 0 }) // 搜过的词和结果，再进来还在
-  const go = (v) => { setJumpTo(null); setView(v) }
+  const go = (v) => { if (v === 'usage' && onUsage) { onUsage(); return } setJumpTo(null); setView(v) }
   const swipeUsage = useSwipeBack(() => go('menu'))
   useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  if (view === 'cc') return <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} />
-  if (view === 'menu') return <CcMenuPage onBack={() => go('cc')} onOpen={go} />
-  if (view === 'search') return <CcSearchPage saved={searchSaved} onBack={() => go('menu')} onPick={r => { setJumpTo({ id: r.id, n: Date.now() }); setView('cc') }} />
-  if (view === 'brain') return <CcBrainScreen onBack={() => go('menu')} />
-  if (view === 'usage') return <UsagePage apiFetch={apiFetch} onBack={() => go('menu')} backIcon={I.back} swipe={swipeUsage} />
-  return <ChatListPage onOpenCC={() => go('cc')} />
+  const page = view === 'cc' ? <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} />
+    : view === 'menu' ? <CcMenuPage onBack={() => go('cc')} onOpen={go} />
+    : view === 'search' ? <CcSearchPage saved={searchSaved} onBack={() => go('menu')} onPick={r => { setJumpTo({ id: r.id, n: Date.now() }); setView('cc') }} />
+    : view === 'brain' ? <CcBrainScreen onBack={() => go('menu')} />
+    : view === 'usage' ? <UsagePage apiFetch={apiFetch} onBack={() => go('menu')} backIcon={I.back} swipe={swipeUsage} />
+    : <ChatListPage onOpenCC={() => go('cc')} />
+  return <CcLang.Provider value={lang}>{page}</CcLang.Provider>
 }
 
 // ─── SplashScreen ────────────────────────────────────
@@ -2436,6 +2438,10 @@ function NookPage({ onBack, onEnterRoom }) {
 // ─── 沐 (CC) ─────────────────────────────────────────
 // 经后端 /api/cc/* 转发到 VPS 上的 Claude Code。浏览器只持有 APP 口令（apiFetch 带上），bridge token 只在后端。
 // 聊天记录现在存在 VPS（bridge 的 inbox/outbox），前端只在内存里留"发送中/发送失败"的临时消息。
+// 聊天这一套界面文字默认中文（Clawd）；Vesper 借用时外面包一层 CcLang.Provider value="en"，整套换英文
+const CcLang = createContext('zh')
+function useCcSay() { const en = useContext(CcLang) === 'en'; return (zh, enText) => en ? enText : zh }
+
 // 服务器上的一条记录 → 页面上的消息。系统事件（沐那轮没回上来）不画成气泡，只用来在她那条下面挂提示
 function ccFromServer(m) {
   const seq = Number.isSafeInteger(m.seq) ? { seq: m.seq } : {}
@@ -2516,6 +2522,7 @@ const CC_REVEAL_MS = 400
 const ccRevealed = new Set() // 已经浮现过的：块重新挂载（前面插进来补上的话）时不再播一遍
 const ccReduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 function CcPiece({ m, player, showTranscript }) {
+  const say = useCcSay()
   const [anim, setAnim] = useState(() => !!m.live && !ccRevealed.has(m.key) && !ccReduceMotion())
   const ms = CC_REVEAL_MS
   useEffect(() => {
@@ -2528,7 +2535,7 @@ function CcPiece({ m, player, showTranscript }) {
     <div className={`cc-piece${anim ? ' cc-reveal' : ''}`} style={anim ? { '--cc-reveal-ms': `${ms}ms` } : undefined} onAnimationEnd={e => { if (e.target === e.currentTarget) setAnim(false) }}>
       {m.thinking && <CcThinking text={m.thinking} />}
       <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat />
-      {m.late && <div className="cc-late">补上的</div>}
+      {m.late && <div className="cc-late">{say('补上的', 'Late')}</div>}
     </div>
   )
 }
@@ -2537,20 +2544,25 @@ const CC_TOOL_VERB = {
   Read: '读了', Edit: '改了', MultiEdit: '改了', Write: '写了', NotebookEdit: '改了', Bash: '跑了',
   WebSearch: '搜了', WebFetch: '看了网页', Grep: '搜了', Glob: '找了', ToolSearch: '找了工具', TodoWrite: '记了待办', Task: '派了个帮手', Agent: '派了个帮手',
 }
-function ccToolLabel(t) {
-  const verb = CC_TOOL_VERB[t.tool] || `用了 ${t.tool}`
-  return <><span>{verb}</span>{t.sum && <code className="cc-tool-sum">{t.sum}</code>}{!t.ok && <span className="cc-tool-fail">没成功</span>}</>
+const CC_TOOL_VERB_EN = {
+  Read: 'Read', Edit: 'Edited', MultiEdit: 'Edited', Write: 'Wrote', NotebookEdit: 'Edited', Bash: 'Ran',
+  WebSearch: 'Searched', WebFetch: 'Opened', Grep: 'Searched', Glob: 'Found', ToolSearch: 'Looked up tools', TodoWrite: 'Noted todos', Task: 'Sent a helper', Agent: 'Sent a helper',
+}
+function ccToolLabel(t, say) {
+  const verb = say(CC_TOOL_VERB[t.tool], CC_TOOL_VERB_EN[t.tool]) || say(`用了 ${t.tool}`, `Used ${t.tool}`)
+  return <><span>{verb}</span>{t.sum && <code className="cc-tool-sum">{t.sum}</code>}{!t.ok && <span className="cc-tool-fail">{say('没成功', 'failed')}</span>}</>
 }
 function CcTools({ tools }) {
+  const say = useCcSay()
   const [open, setOpen] = useState(false)
-  if (tools.length === 1) return <div className="cc-tools"><div className="cc-tool-line">{ccToolLabel(tools[0])}</div></div>
+  if (tools.length === 1) return <div className="cc-tools"><div className="cc-tool-line">{ccToolLabel(tools[0], say)}</div></div>
   const failed = tools.filter(t => !t.ok).length
   return (
     <div className={`cc-tools${open ? ' open' : ''}`}>
       <button className="cc-thinking-head" onClick={() => setOpen(v => !v)} aria-expanded={open}>
-        <span>用了 {tools.length} 个工具{failed ? `（${failed} 个没成功）` : ''}</span>{I.chevron}
+        <span>{say(`用了 ${tools.length} 个工具`, `Used ${tools.length} tools`)}{failed ? say(`（${failed} 个没成功）`, ` (${failed} failed)`) : ''}</span>{I.chevron}
       </button>
-      {open && <div className="cc-tools-body">{tools.map(t => <div key={t.key} className="cc-tool-line">{ccToolLabel(t)}</div>)}</div>}
+      {open && <div className="cc-tools-body">{tools.map(t => <div key={t.key} className="cc-tool-line">{ccToolLabel(t, say)}</div>)}</div>}
     </div>
   )
 }
@@ -2569,10 +2581,11 @@ function ccTurnParts(items) {
 
 // API 回的那段的思考过程：照 Claude App，默认收起，点"思考过程"展开/收起；展开后小字、保留换行，太长在框里滚
 function CcThinking({ text }) {
+  const say = useCcSay()
   const [open, setOpen] = useState(false)
   return (
     <div className={`cc-thinking${open ? ' open' : ''}`}>
-      <button className="cc-thinking-head" onClick={() => setOpen(v => !v)} aria-expanded={open}><span>思考过程</span>{I.chevron}</button>
+      <button className="cc-thinking-head" onClick={() => setOpen(v => !v)} aria-expanded={open}><span>{say('思考过程', 'Thinking')}</span>{I.chevron}</button>
       {open && <div className="cc-thinking-body">{text}</div>}
     </div>
   )
@@ -2619,6 +2632,7 @@ function CcBrainScreen({ onBack }) {
 
 // ⋮ 那页：离开聊天页，三个入口各自又是一整页
 function CcMenuPage({ onBack, onOpen }) {
+  const say = useCcSay()
   const swipe = useSwipeBack(onBack)
   const [brain, setBrain] = useState(null)
   useEffect(() => {
@@ -2628,10 +2642,10 @@ function CcMenuPage({ onBack, onOpen }) {
   }, [])
   return (
     <div className="more-sub-page" {...swipe}>
-      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label="返回聊天">{I.back}</button><h1>聊天信息</h1></div>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回聊天', 'Back to chat')}>{I.back}</button><h1>{say('聊天信息', 'Chat')}</h1></div>
       <div className="card settings-card">
-        <div className="setting-item" onClick={() => onOpen('search')}><span>查找聊天记录</span>{I.chevron}</div>
-        <div className="setting-item" onClick={() => onOpen('brain')}><span>回复方式</span>{brain && <span className="setting-value">{brain.target === 'api' ? 'API' : 'CC'}</span>}{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('search')}><span>{say('查找聊天记录', 'Search history')}</span>{I.chevron}</div>
+        <div className="setting-item" onClick={() => onOpen('brain')}><span>{say('回复方式', 'Reply mode')}</span>{brain && <span className="setting-value">{brain.target === 'api' ? 'API' : 'CC'}</span>}{I.chevron}</div>
         <div className="setting-item" onClick={() => onOpen('usage')}><span>Usage</span>{I.chevron}</div>
       </div>
     </div>
@@ -2639,9 +2653,14 @@ function CcMenuPage({ onBack, onOpen }) {
 }
 
 // 搜索结果的时间：今年的不写年份
-function fmtSearchTime(t) {
+function fmtSearchTime(t, en) {
   const d = new Date(t)
   if (Number.isNaN(d.getTime())) return ''
+  if (en) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: SH_TZ, year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]))
+    const y = new Intl.DateTimeFormat('en-CA', { timeZone: SH_TZ, year: 'numeric' }).format(new Date())
+    return `${p.month} ${p.day}${p.year === y ? '' : `, ${p.year}`} ${p.hour}:${p.minute}`
+  }
   const p = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', { timeZone: SH_TZ, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]))
   const thisYear = new Intl.DateTimeFormat('en-CA', { timeZone: SH_TZ, year: 'numeric' }).format(new Date())
   return `${p.year === thisYear ? '' : `${p.year}年`}${p.month}月${p.day}日 ${p.hour}:${p.minute}`
@@ -2654,10 +2673,12 @@ function ccHighlight(text, terms) {
   return text.split(re).map((part, i) => i % 2 ? <mark key={i}>{part}</mark> : part)
 }
 const CC_HIT_FROM = { image: '图片里的字', voice: '语音', file: '文件' }
+const CC_HIT_FROM_EN = { image: 'Text in image', voice: 'Voice', file: 'File' }
 
 // 查找聊天记录：搜双方的话、语音转写、文件名、图片里的字（bridge 每次全读一遍比对），从新到旧。
 // 点一条跳回聊天页、停在那条。搜过的词和结果留在 saved 里，从聊天页再进来还在
 function CcSearchPage({ saved, onBack, onPick }) {
+  const say = useCcSay()
   const swipe = useSwipeBack(onBack)
   const [q, setQ] = useState(saved.current.q)
   const [res, setRes] = useState(saved.current.res) // { q, terms, results, hasMore }；null = 还没搜
@@ -2685,7 +2706,7 @@ function CcSearchPage({ saved, onBack, onPick }) {
         return { q: query, terms: data.terms || [], results: [...old, ...(data.results || []).filter(x => !seen.has(x.id))], hasMore: !!data.has_more }
       })
     } catch (err) {
-      if (id === reqRef.current) setError(err.message === 'unauthorized' ? '' : '搜不了，过一会儿再试')
+      if (id === reqRef.current) setError(err.message === 'unauthorized' ? '' : say('搜不了，过一会儿再试', "Can't search right now — try again later"))
     }
     if (id === reqRef.current) setLoading(false)
   }, [])
@@ -2707,11 +2728,11 @@ function CcSearchPage({ saved, onBack, onPick }) {
 
   return (
     <div className="more-sub-page cc-search-page" {...swipe}>
-      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label="返回">{I.back}</button><h1>查找聊天记录</h1></div>
+      <div className="page-header"><button className="icon-btn" onClick={onBack} aria-label={say('返回', 'Back')}>{I.back}</button><h1>{say('查找聊天记录', 'Search history')}</h1></div>
       <div className="cc-search-box">
         {I.search}
-        <input type="search" enterKeyHint="search" autoFocus={!q} value={q} onChange={e => setQ(e.target.value)} placeholder="搜说过的话、图片里的字" maxLength={100} />
-        {q && <button className="icon-btn" onClick={() => setQ('')} aria-label="清空">{I.close}</button>}
+        <input type="search" enterKeyHint="search" autoFocus={!q} value={q} onChange={e => setQ(e.target.value)} placeholder={say('搜说过的话、图片里的字', 'Words, or text in images')} maxLength={100} />
+        {q && <button className="icon-btn" onClick={() => setQ('')} aria-label={say('清空', 'Clear')}>{I.close}</button>}
       </div>
       <div className="cc-search-results" ref={listRef} onScroll={onScroll}>
         {res?.results.map(r => (
@@ -2719,25 +2740,26 @@ function CcSearchPage({ saved, onBack, onPick }) {
             {r.hit.image && <CcImage img={{ path: r.hit.image }} onOpen={() => onPick(r)} />}
             <span className="cc-search-hit-main">
               <span className="cc-search-hit-top">
-                <span className="cc-search-who">{r.role === 'user' ? '我' : '沐'}</span>
-                {CC_HIT_FROM[r.hit.in] && <span className="cc-search-from">{CC_HIT_FROM[r.hit.in]}</span>}
-                <span className="cc-search-time">{fmtSearchTime(r.time)}</span>
+                <span className="cc-search-who">{r.role === 'user' ? say('我', 'Me') : say('沐', 'Soren')}</span>
+                {CC_HIT_FROM[r.hit.in] && <span className="cc-search-from">{say(CC_HIT_FROM[r.hit.in], CC_HIT_FROM_EN[r.hit.in])}</span>}
+                <span className="cc-search-time">{fmtSearchTime(r.time, say(false, true))}</span>
               </span>
               <span className="cc-search-snippet">{ccHighlight(r.hit.snippet, res.terms)}</span>
             </span>
           </div>
         ))}
         {error && <div className="empty-state">{error}</div>}
-        {loading && <div className="empty-state">搜索中…</div>}
-        {!loading && !error && res && !res.results.length && <div className="empty-state">没有找到「{res.q}」</div>}
-        {!loading && !error && res?.results.length > 0 && !res.hasMore && <div className="cc-search-end">没有更早的了</div>}
-        {!res && !loading && <div className="cc-search-end">空格隔开几个词，要都出现才算</div>}
+        {loading && <div className="empty-state">{say('搜索中…', 'Searching…')}</div>}
+        {!loading && !error && res && !res.results.length && <div className="empty-state">{say(`没有找到「${res.q}」`, `Nothing found for "${res.q}"`)}</div>}
+        {!loading && !error && res?.results.length > 0 && !res.hasMore && <div className="cc-search-end">{say('没有更早的了', 'Nothing earlier')}</div>}
+        {!res && !loading && <div className="cc-search-end">{say('空格隔开几个词，要都出现才算', 'Separate words with spaces — all must appear')}</div>}
       </div>
     </div>
   )
 }
 
 function CcBrainPage({ brain, brainError, onChange, onClose }) {
+  const say = useCcSay()
   const [catalog, setCatalog] = useState(null) // /api/cc/api-models：{ default, families }
   const [catalogError, setCatalogError] = useState(false)
   const [famKey, setFamKey] = useState(null) // 点进去的那个系列（第二层），null = 系列列表
@@ -2806,8 +2828,8 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
   return (
     <div className="cc-brain-page" {...swipe}>
       <div className="chatroom-header">
-        <button className="icon-btn" onClick={back} aria-label="返回">{I.back}</button>
-        <div className="chatroom-title"><div className="chatroom-name">{fam ? fam.name : '回复方式'}</div></div>
+        <button className="icon-btn" onClick={back} aria-label={say('返回', 'Back')}>{I.back}</button>
+        <div className="chatroom-title"><div className="chatroom-name">{fam ? fam.name : say('回复方式', 'Reply mode')}</div></div>
       </div>
       <div className="cc-brain-scroll">
         {fam ? (
@@ -2821,28 +2843,28 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
                     {o.desc && <span className="cc-brain-row-sub">{o.desc}</span>}
                     <span className="cc-brain-row-model">{o.model}</span>
                   </span>
-                  {!o.ready ? <span className="cc-brain-row-note">没配 key</span> : on && <span className="cc-brain-check">{I.check}</span>}
+                  {!o.ready ? <span className="cc-brain-row-note">{say('没配 key', 'No key')}</span> : on && <span className="cc-brain-check">{I.check}</span>}
                 </button>
               )
             })}
           </div>
         ) : (
           <>
-            <div className={`cc-brain-switch${shown === 'api' ? ' api' : ''}${!brain || !supported ? ' off' : ''}`} role="radiogroup" aria-label="回复方式">
+            <div className={`cc-brain-switch${shown === 'api' ? ' api' : ''}${!brain || !supported ? ' off' : ''}`} role="radiogroup" aria-label={say('回复方式', 'Reply mode')}>
               <span className="cc-brain-thumb" aria-hidden="true" />
               <button role="radio" aria-checked={shown === 'cc'} onClick={() => setTarget('cc')} disabled={locked}>CC</button>
               <button role="radio" aria-checked={shown === 'api'} onClick={() => setTarget('api')} disabled={locked}>API</button>
             </div>
-            <div className="cc-brain-hint">{!brain ? (brainError ? `拿不到现在的状态（${brainError}），过一会儿再进来试试` : '还没拿到现在的状态…') : isApi ? '沐用下面选的模型回你，没有工具，只能说话' : '沐在 VPS 上的 Claude Code 里回你'}</div>
-            {brain && !supported && <div className="cc-brain-hint">bridge 还没更新到能切换的版本，现在只能用 CC</div>}
+            <div className="cc-brain-hint">{!brain ? (brainError ? say(`拿不到现在的状态（${brainError}），过一会儿再进来试试`, `Can't read the current mode (${brainError}) — try again later`) : say('还没拿到现在的状态…', 'Reading the current mode…')) : isApi ? say('沐用下面选的模型回你，没有工具，只能说话', 'Soren replies with the model below — no tools, just talk') : say('沐在 VPS 上的 Claude Code 里回你', 'Soren replies from Claude Code on the VPS')}</div>
+            {brain && !supported && <div className="cc-brain-hint">{say('bridge 还没更新到能切换的版本，现在只能用 CC', "The bridge can't switch yet — CC only for now")}</div>}
           </>
         )}
         {error && <div className="cc-brain-error" role="alert" onClick={() => setError('')}>{error}</div>}
 
         {!fam && isApi && (
           <>
-            <div className="card-title-outer">模型</div>
-            {!catalog && <div className="empty-state-sm">{catalogError ? '拉不到模型列表，过一会儿再试' : 'Loading…'}</div>}
+            <div className="card-title-outer">{say('模型', 'Model')}</div>
+            {!catalog && <div className="empty-state-sm">{catalogError ? say('拉不到模型列表，过一会儿再试', "Can't load models — try again later") : 'Loading…'}</div>}
             {catalog?.families?.length > 0 && (
               <div className="card settings-card">
                 {catalog.families.map(f => (
@@ -2858,10 +2880,10 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
               </div>
             )}
             <div className="cc-brain-test">
-              <button className="cc-brain-test-btn" onClick={runTest} disabled={!brain?.model || !!test?.running}>{test?.running ? '测试中…' : '测试一下'}</button>
+              <button className="cc-brain-test-btn" onClick={runTest} disabled={!brain?.model || !!test?.running}>{test?.running ? say('测试中…', 'Testing…') : say('测试一下', 'Test')}</button>
               {test && !test.running && test.key === testKey && (
                 <div className={`cc-brain-test-result${test.ok ? ' ok' : ''}`}>
-                  {test.ok ? `✓ ${((test.ms || 0) / 1000).toFixed(1)} 秒 · ${ccClip(test.text, 40)}` : `✗ ${test.error || '没通'}`}
+                  {test.ok ? `✓ ${((test.ms || 0) / 1000).toFixed(1)}${say(' 秒', 's')} · ${ccClip(test.text, 40)}` : `✗ ${test.error || say('没通', 'failed')}`}
                 </div>
               )}
             </div>
@@ -2877,6 +2899,7 @@ const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()
 
 // 自己发的文字原地改：和原话一样（只差首尾空格也算）就当取消，不发请求；不能改成空的
 function CcEditBox({ text, onSave, onCancel }) {
+  const say = useCcSay()
   const [value, setValue] = useState(text)
   const [saving, setSaving] = useState(false)
   const ref = useRef(null)
@@ -2893,8 +2916,8 @@ function CcEditBox({ text, onSave, onCancel }) {
     <div className="cc-edit">
       <textarea ref={ref} value={value} onChange={e => setValue(e.target.value)} rows={1} disabled={saving} />
       <div className="cc-edit-actions">
-        <button className="cc-edit-cancel" onClick={onCancel} disabled={saving}>取消</button>
-        <button className="cc-edit-save" onClick={save} disabled={!next || saving}>{saving ? '保存中…' : '确认'}</button>
+        <button className="cc-edit-cancel" onClick={onCancel} disabled={saving}>{say('取消', 'Cancel')}</button>
+        <button className="cc-edit-save" onClick={save} disabled={!next || saving}>{saving ? say('保存中…', 'Saving…') : say('确认', 'Save')}</button>
       </div>
     </div>
   )
@@ -2978,6 +3001,7 @@ function CcFileIcon({ name }) {
 
 // 聊天里自己发的文件：类型图标 + 原文件名 + 大小，点一下打开，右边按钮下载。bridge 只留 7 天，过期了灰掉
 function CcFile({ file }) {
+  const say = useCcSay()
   const [state, setState] = useState('idle') // idle | loading | gone
   const getUrl = async () => file.localUrl || await fetchCcImage(file.path)
   const open = async (download) => {
@@ -3004,7 +3028,7 @@ function CcFile({ file }) {
       <CcFileIcon name={file.name} />
       <span className="cc-file-info">
         <span className="cc-file-name">{file.name}</span>
-        <span className="cc-file-size">{state === 'gone' ? '文件已过期' : state === 'loading' ? '打开中…' : fmtFileSize(file.size || 0)}</span>
+        <span className="cc-file-size">{state === 'gone' ? say('文件已过期', 'Expired') : state === 'loading' ? say('打开中…', 'Opening…') : fmtFileSize(file.size || 0)}</span>
       </span>
       {state !== 'gone' && <button className="cc-file-dl" onClick={e => { e.stopPropagation(); open(true) }} aria-label="Download">{CC_DOWNLOAD_ICON}</button>}
     </div>
@@ -3017,6 +3041,7 @@ function CcFile({ file }) {
 const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif' }
 // path：bridge 上的图。先用传进来的缩略图垫着，原图取到了再换上（分享的也是原图）
 function ImageLightbox({ src, path, onClose }) {
+  const say = useCcSay()
   const [shown, setShown] = useState(src)
   const [full, setFull] = useState(!path)
   const [file, setFile] = useState(null)
@@ -3041,7 +3066,7 @@ function ImageLightbox({ src, path, onClose }) {
   }
   return (
     <div className="image-lightbox-overlay" onClick={onClose}>
-      {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label="分享或存储图像">{I.more}</button>}
+      {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
       <img src={shown} alt="" />
     </div>
   )
@@ -3049,6 +3074,7 @@ function ImageLightbox({ src, path, onClose }) {
 
 // 聊天里显示缩略图；点开交给 ImageLightbox 去取原图（刚发的图本地就有原图，直接用）
 function CcImage({ img, onOpen }) {
+  const say = useCcSay()
   const [url, setUrl] = useState(img.localUrl || (img.path && (ccImageCache.get(`${img.path}#thumb`) || ccImageCache.get(img.path))) || null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -3057,7 +3083,7 @@ function CcImage({ img, onOpen }) {
     fetchCcImage(img.path, { thumb: true }).then(u => { if (alive) setUrl(u) }).catch(() => { if (alive) setFailed(true) })
     return () => { alive = false }
   }, [img.path, url])
-  if (failed) return <div className="cc-thumb cc-thumb-gone">图片已过期</div>
+  if (failed) return <div className="cc-thumb cc-thumb-gone">{say('图片已过期', 'Image expired')}</div>
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
   return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen({ src: url, path: img.localUrl ? null : img.path })} />
 }
@@ -3096,6 +3122,7 @@ const CC_PAUSE_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="curr
 // 录音先取好放着，点的那一下同步 play()，iPhone 才不会因为"不是用户点的"拦掉
 let ccVoiceNow = null // 同一时间只放一条
 function CcVoice({ v }) {
+  const say = useCcSay()
   const [url, setUrl] = useState(v.localUrl || (v.path && ccImageCache.get(v.path)) || null)
   const [state, setState] = useState('idle') // idle | playing | gone
   const [progress, setProgress] = useState(0)
@@ -3132,15 +3159,15 @@ function CcVoice({ v }) {
   const rel = Object.entries(v.relative || {}).map(([k, d]) => `${k}${d}`).join('、')
   return (
     <div className="cc-voice">
-      <div className={`cc-voice-bar${state === 'gone' ? ' gone' : ''}${!url ? ' loading' : ''}`} onClick={toggle} role="button" aria-label={state === 'playing' ? '暂停' : '播放语音'}>
+      <div className={`cc-voice-bar${state === 'gone' ? ' gone' : ''}${!url ? ' loading' : ''}`} onClick={toggle} role="button" aria-label={state === 'playing' ? say('暂停', 'Pause') : say('播放语音', 'Play voice')}>
         <span className="cc-voice-play">{state === 'playing' ? CC_PAUSE_ICON : CC_PLAY_ICON}</span>
         <span className="cc-voice-wave">{dots.map((h, i) => <i key={i} className={i < lit ? 'on' : ''} style={{ height: h }} />)}</span>
-        <span className="cc-voice-dur">{state === 'gone' ? '已过期' : v.duration ? `${Math.max(1, Math.round(v.duration))}"` : ''}</span>
+        <span className="cc-voice-dur">{state === 'gone' ? say('已过期', 'Expired') : v.duration ? `${Math.max(1, Math.round(v.duration))}"` : ''}</span>
       </div>
       {v.listening
-        ? <div className="cc-voice-text cc-voice-dim">正在听…</div>
+        ? <div className="cc-voice-text cc-voice-dim">{say('正在听…', 'Listening…')}</div>
         : v.text && <div className="cc-voice-text">{v.text}</div>}
-      {!v.listening && v.emotion && <div className="cc-voice-tone" title={v.hint || ''}>{v.emotion}{rel ? ` · ${rel}` : v.learning ? ' · 还在认识你的声音' : ''}</div>}
+      {!v.listening && v.emotion && <div className="cc-voice-tone" title={v.hint || ''}>{v.emotion}{rel ? ` · ${rel}` : v.learning ? say(' · 还在认识你的声音', ' · still learning your voice') : ''}</div>}
     </div>
   )
 }
@@ -3177,6 +3204,7 @@ function setCcCacheStorage(history) {
 }
 
 function CCChatPage({ onBack, onMenu, jumpTo }) {
+  const say = useCcSay()
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
   // 服务器上的记录（双方），按时间；先用本机缓存的最近十轮垫着（从搜索跳过来的不垫，等那一段拉回来）
@@ -3253,6 +3281,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   }
   const deleteBack = () => setInput(v => { const parts = [...new Intl.Segmenter('zh', { granularity: 'grapheme' }).segment(v)]; return parts.slice(0, -1).map(x => x.segment).join('') })
   const photoInputRef = useRef(null)
+  const cameraInputRef = useRef(null) // Vesper 的 Camera 按钮用
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const messagesEndRef = useRef(null)
@@ -3500,7 +3529,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
       else attach() // 这一段就到最新了
     } catch (err) {
       if (!alive()) return
-      if (err.status === 404) setNotice('那条消息找不到了')
+      if (err.status === 404) setNotice(say('那条消息找不到了', "That message can't be found"))
       showLatest(alive)
     }
     setJumping(false)
@@ -3620,7 +3649,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   // 一次合计最多 maxItems 个：多选超了只收前面的，并提示
   const takeRoom = (list) => {
     const room = Math.max(maxItems - pending.length, 0)
-    if (list.length > room) setNotice(`图片和文件一次最多 ${maxItems} 个，多出的 ${list.length - room} 个没加上`)
+    if (list.length > room) setNotice(say(`图片和文件一次最多 ${maxItems} 个，多出的 ${list.length - room} 个没加上`, `Up to ${maxItems} photos and files at a time — ${list.length - room} left out`))
     return list.slice(0, room)
   }
 
@@ -3642,9 +3671,9 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     e.target.value = ''
     const problems = []
     const ok = picked.filter(f => {
-      if (!allowedExts.has(ccExt(f.name))) { problems.push(`${f.name}：沐读不了这种文件`); return false }
-      if (f.size > maxBytes) { problems.push(`${f.name}：${fmtFileSize(f.size)}，超过 ${Math.round(maxBytes / 1024 / 1024)}MB`); return false }
-      if (!f.size) { problems.push(`${f.name}：是空文件`); return false }
+      if (!allowedExts.has(ccExt(f.name))) { problems.push(say(`${f.name}：沐读不了这种文件`, `${f.name}: Soren can't read this type`)); return false }
+      if (f.size > maxBytes) { problems.push(say(`${f.name}：${fmtFileSize(f.size)}，超过 ${Math.round(maxBytes / 1024 / 1024)}MB`, `${f.name}: ${fmtFileSize(f.size)}, over ${Math.round(maxBytes / 1024 / 1024)}MB`)); return false }
+      if (!f.size) { problems.push(say(`${f.name}：是空文件`, `${f.name}: empty file`)); return false }
       return true
     })
     const added = takeRoom(ok).map((file, i) => ({ key: `file-${Date.now()}-${i}`, kind: 'file', file }))
@@ -3743,7 +3772,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     rec.stream?.getTracks().forEach(t => t.stop())
     if (recRef.current === rec) recRef.current = null
     if (rec.cancel) return
-    if (rec.duration < CC_VOICE_MIN_S) { setNotice('太短了，按住多说一会儿'); return }
+    if (rec.duration < CC_VOICE_MIN_S) { setNotice(say('太短了，按住多说一会儿', 'Too short — hold a little longer')); return }
     const type = rec.recorder?.mimeType || rec.chunks[0]?.type || 'audio/webm'
     const blob = new Blob(rec.chunks, { type })
     if (blob.size) sendVoice(blob, rec.duration)
@@ -3772,14 +3801,14 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     } catch {
       recRef.current = null
       setRecording(null)
-      setNotice('没拿到麦克风权限（设置里允许这个网页用麦克风）')
+      setNotice(say('没拿到麦克风权限（设置里允许这个网页用麦克风）', 'No microphone access — allow it in Settings'))
       return
     }
     rec.stream = stream
     if (rec.released) { // 在弹权限的时候已经松手了
       stream.getTracks().forEach(t => t.stop())
       if (recRef.current === rec) recRef.current = null
-      if (!rec.cancel) setNotice('好了，再按住说一次')
+      if (!rec.cancel) setNotice(say('好了，再按住说一次', 'Ready — hold to talk again'))
       return
     }
     const mime = ccRecorderMime()
@@ -3833,7 +3862,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     } catch {
       setCalledAgain(prev => { const next = new Set(prev); next.delete(failure.key); return next })
       stopWaiting()
-      setNotice('没叫到他，等一下再试')
+      setNotice(say('没叫到他，等一下再试', "Couldn't reach him — try again soon"))
     }
   }
 
@@ -3848,9 +3877,9 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         setEditingKey(null)
         return true
       }
-      setNotice(res.status === 404 ? '找不到这条消息了' : '没改成，再试一次')
+      setNotice(res.status === 404 ? say('找不到这条消息了', "That message can't be found") : say('没改成，再试一次', "Couldn't edit — try again"))
     } catch {
-      setNotice('没改成，再试一次')
+      setNotice(say('没改成，再试一次', "Couldn't edit — try again"))
     }
     return false
   }
@@ -3867,18 +3896,18 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
-          <div className="chatroom-name">沐 (CC)</div>
-          <div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>
+          <div className="chatroom-name">{say('沐 (CC)', 'Soren')}</div>
+          <div className="chatroom-model">{say(null, <span className={`cc-status-dot ${passcode ? status : 'offline'}`} />)}{passcode ? statusLabel : 'Locked'}</div>
         </div>
         <div className="chatroom-header-right">
-          <button className="icon-btn" onClick={onMenu} aria-label="更多">
+          <button className="icon-btn" onClick={onMenu} aria-label={say('更多', 'More')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </button>
         </div>
       </div>
 
       <CcLimitedNotice brief={usageBrief} />
-      {compacting && <div className="cc-compacting" role="status" aria-label="正在压缩">compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
+      {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
       <div className="messages" ref={listRef} onScroll={onListScroll}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
@@ -3899,7 +3928,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
                   {ccTurnParts(items).map(part => part.tools
                     ? <CcTools key={part.key} tools={part.tools} />
                     : <CcPiece key={part.key} m={part.m} player={voice} showTranscript={open} />)}
-                  {live && <div className="cc-typing cc-typing-inline" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
+                  {live && <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
                 </div>
                 {!live && (
                   <div className="msg-meta">
@@ -3927,33 +3956,33 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             <div className="msg-meta">
               {m.failed
                 ? <>
-                    <button className="cc-note-btn" onClick={() => deliver(m)}>发送失败 · 点一下重发</button>
+                    <button className="cc-note-btn" onClick={() => deliver(m)}>{say('发送失败 · 点一下重发', 'Not sent · tap to retry')}</button>
                     <button className="copy-btn" onClick={() => discardFailed(m)} aria-label="Delete">{I.close}</button>
                   </>
                 : <span className="msg-time">{fmtMsgTime(m.time)}</span>}
-              {m.editedAt && <span className="msg-time">已编辑</span>}
-              {m.viaApp && <span className="msg-time">来自 Claude App</span>}
+              {m.editedAt && <span className="msg-time">{say('已编辑', 'Edited')}</span>}
+              {m.viaApp && <span className="msg-time">{say('来自 Claude App', 'From Claude App')}</span>}
               {m.text && !editing && <CopyButton getText={() => m.text} />}
               {m.text && !m.local && !m.viaApp && !editing && (
                 <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
               )}
             </div>
             {showFailure && (
-              <div className="cc-msg-note">{failure.partial ? '话没说完就断了' : '他这次没回上来'} · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>再叫他一下</button></div>
+              <div className="cc-msg-note">{failure.partial ? say('话没说完就断了', 'Cut off mid-reply') : say('他这次没回上来', "He didn't reply this time")} · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>{say('再叫他一下', 'Call him again')}</button></div>
             )}
-            {!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">他好像卡住了</div>}
+            {!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">{say('他好像卡住了', 'He seems stuck')}</div>}
           </div>
           )
         })}
         {loadingNewer && <div className="empty-state">Loading…</div>}
-        {typingNow && !liveTurnKey && !detached && <div className="msg assistant cc-typing" aria-label="正在输入"><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
+        {typingNow && !liveTurnKey && !detached && <div className="msg assistant cc-typing" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
         <div ref={messagesEndRef} />
       </div>
 
       {/* 向下箭头：离底部超过一屏、或者正在看搜出来的那一段时出现；那段时间新来的条数标在上面 */}
       {(farFromBottom || detached) && (
         <div className="cc-jump-wrap">
-          <button className="cc-jump-btn" onClick={goLatest} aria-label="回到最新">
+          <button className="cc-jump-btn" onClick={goLatest} aria-label={say('回到最新', 'Jump to latest')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
             {newCount > 0 && <span className="cc-jump-badge">{newCount > 99 ? '99+' : newCount}</span>}
           </button>
@@ -3990,13 +4019,14 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         )}
         {attachOpen && (
           <div className="cc-attach-menu">
-            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>照片</span></button>
-            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>文件</span></button>
+            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
+            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
+            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
           </div>
         )}
         {/* 左边切语音 / 键盘；语音模式下输入框换成整条"按住 说话"；右边 ⊕ 是照片和文件，有东西要发时多一个发送 */}
         <div className="composer-input-row cc-composer-row">
-          <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? '切换到键盘' : '切换到语音'}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
+          <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? say('切换到键盘', 'Keyboard') : say('切换到语音', 'Voice')}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
           {voiceMode ? (
             <button className={`cc-hold-btn${recording ? ' recording' : ''}${recording?.cancel ? ' cancel' : ''}`} disabled={!passcode}
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
@@ -4008,6 +4038,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => { setEmojiOpen(false); setAttachOpen(o => !o) }} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
           {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
         </div>
         {emojiOpen && (
