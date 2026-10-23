@@ -109,7 +109,7 @@ function HomeScreen({ diaries, opening, onOpenNotebook }) {
               </div>
               {V.heart}
             </div>
-            <div className="v-us-sub">Vesper & Soren, from 2026.7.27 to every day after</div>
+            <div className="v-us-sub">桦桦和沐，从 2026.7.27 到每一天</div>
           </div>
 
           <div className="v-glass v-cd">
