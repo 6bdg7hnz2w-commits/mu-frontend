@@ -16,7 +16,7 @@
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
   --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'V Dots','Noto Serif SC',serif;--v-scIn:var(--v-sc);--v-serif:'Cormorant Garamond','V Dots','Noto Serif SC',serif;
   --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
-  position:relative;height:100%;height:var(--v-vh,100dvh);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
+  position:relative;height:100%;height:var(--v-vh,100%);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);font-variant-numeric:lining-nums;line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
