@@ -267,10 +267,12 @@ export default function VesperApp() {
       {/* 白天除了 Home（壁纸顶上自己有黑到透明那层），其余页面都是浅色，垫一层暗色让状态栏白字看得清 */}
       <StatusScrim on={look === 'day' && !(tab === 'home' && !immersive)} />
       <Splash />
+      {/* 浮在底下的圆玻璃；选中那格垫一块会滑动的小玻璃 */}
       <nav className="v-tabbar">
+        <i className="v-tab-pill" style={{ transform: `translateX(${TABS.findIndex(t => t.key === tab) * 100}%)` }} />
         {TABS.map(t => (
           <button key={t.key} className={`v-tab ${tab === t.key ? 'on' : ''}`} onClick={() => goTab(t.key)}>
-            {t.icon}<span>{t.label}</span><i />
+            {t.icon}<span>{t.label}</span>
           </button>
         ))}
       </nav>

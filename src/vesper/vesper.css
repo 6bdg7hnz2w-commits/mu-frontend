@@ -7,7 +7,7 @@
   --v-ink:#1c2232;--v-ink2:#3d4556;--v-mute:#7f879a;--v-faint:#a9b0bf;
   --v-acc:#4f638c;--v-acc-ink:#ffffff;--v-acc-soft:rgba(95,115,156,.12);
   --v-shadow:0 1px 2px rgba(30,40,70,.04),0 10px 28px rgba(30,40,70,.06);
-  --v-tabbar:rgba(244,246,249,.9);
+  --v-tabbar:rgba(250,251,253,.58);--v-tbLine:rgba(255,255,255,.7);--v-tbHi:rgba(255,255,255,.9);--v-tbPill:rgba(95,115,156,.14);
   --v-wpF:brightness(1.02);--v-wpBase:#cdd2e2;--v-glass:rgba(248,249,252,.86);--v-glassLine:rgba(255,255,255,.6);
   --v-glassShadow:0 8px 30px rgba(20,30,60,.10);--v-glassDiv:rgba(28,38,66,.10);--v-hmute:#4a5265;
   --v-whisper:rgba(88,107,148,.76);--v-whisperLine:rgba(255,255,255,.22);
@@ -25,7 +25,7 @@
   --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;
   --v-acc:#88a7dd;--v-acc-ink:#0a0c11;--v-acc-soft:rgba(136,167,221,.13);
   --v-shadow:0 12px 32px rgba(0,0,0,.35);
-  --v-tabbar:rgba(10,12,17,.9);
+  --v-tabbar:rgba(22,27,38,.55);--v-tbLine:rgba(255,255,255,.1);--v-tbHi:rgba(255,255,255,.14);--v-tbPill:rgba(136,167,221,.16);
   --v-wpF:brightness(.55) saturate(.85);--v-wpBase:#0b0e15;--v-glass:rgba(14,18,27,.52);--v-glassLine:rgba(255,255,255,.09);
   --v-glassShadow:0 10px 30px rgba(0,0,0,.35);--v-glassDiv:rgba(255,255,255,.08);--v-hmute:#9aa3b5;
   --v-whisper:rgba(22,30,48,.62);--v-whisperLine:rgba(136,167,221,.2);
@@ -93,13 +93,15 @@
 .v-mode.on span{color:var(--v-ink)}
 
 /* 底部 tab */
-.v-tabbar{position:absolute;left:0;right:0;bottom:0;z-index:30;height:calc(52px + var(--v-bottom));display:grid;grid-template-columns:repeat(4,1fr);align-content:start;padding:9px 0 0;transition:transform .4s cubic-bezier(.3,.7,.2,1);background:var(--v-tabbar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--v-line)}
-.v-tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--v-faint)!important;transition:color .25s}
-.v-tab span{font-size:13.5px}
-.v-tab i{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:0;transition:opacity .25s}
+.v-tabbar{--tb-h:62px;--tb-b:max(calc(var(--v-bottom) - 8px),14px);position:absolute;left:16px;right:16px;bottom:var(--tb-b);z-index:30;height:var(--tb-h);padding:5px;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 12px 32px rgba(10,16,32,.22);transition:transform .4s cubic-bezier(.3,.7,.2,1)}
+.v-tab-pill{position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 10px) / 4);border-radius:999px;background:var(--v-tbPill);box-shadow:inset 0 1px 0 var(--v-tbHi),inset 0 0 0 1px var(--v-tbLine);transition:transform .45s cubic-bezier(.3,.8,.25,1.05)}
+.v-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--v-mute)!important;transition:color .25s}
+.v-tab svg{width:21px;height:21px}
+.v-tab span{font-size:12.5px;line-height:1}
 .v-tab.on{color:var(--v-acc)!important}
-.v-tab.on i{opacity:1}
-.vesper.tab-hidden .v-tabbar{transform:translateY(110%)}
+.v-tab.on svg{stroke-width:1.7}
+.v-tab.on span{font-weight:600}
+.vesper.tab-hidden .v-tabbar{transform:translateY(calc(100% + var(--tb-b) + 10px))}
 
 /* ─── 共用零件 ───
    提示条、底部菜单、弹窗用 fixed：放在会滚动的页里也钉在屏幕上 */
@@ -357,8 +359,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-switch.on i{transform:translateX(20px)}
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
-.v-chat{position:absolute;top:0;left:0;right:0;bottom:calc(52px + var(--v-bottom));overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
-.vesper.tab-hidden .v-chat{bottom:0}
+.v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.vesper.tab-hidden .v-chat{--v-tbSpace:0px} /* 键盘弹出、tab 栏收起：输入栏贴回底边 */
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
   --accent:#4f638c;--accent-soft:rgba(95,115,156,.16);--accent-light:rgba(95,115,156,.08);
@@ -386,9 +388,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--vc-f)}
 .v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
-.v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--v-top)}
+.v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--v-top);padding-bottom:var(--v-tbSpace)}
 /* 对话列表照画布：大标题 + 一条线，沐那张卡片（雾蓝方块里一颗星） */
-.v-chat .chatlist-page{padding:calc(var(--v-top) + 33px) 20px 0;font-family:var(--v-serif)}
+.v-chat .chatlist-page{padding:calc(var(--v-top) + 33px) 20px var(--v-tbSpace);font-family:var(--v-serif)}
 .v-chat .chatlist-page .page-header{padding:0 0 20px;border-bottom:1px solid var(--v-line)}
 .v-chat .chatlist-page .page-header h1{font-size:42px;font-weight:500;line-height:1;letter-spacing:0}
 .v-chat .chatlist-page .session-list{padding:0}
@@ -487,7 +489,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .msg .bubble.cc-file{background:var(--v-card);border:1px solid var(--v-line);border-radius:16px;box-shadow:var(--v-shadow)}
 .v-chat .cc-thumb{border-radius:14px;box-shadow:0 4px 14px rgba(40,55,90,.16)}
 .v-chat .cc-typing-dot{background:var(--vc-meta)}
-.v-chat .composer{padding:8px 10px 9px;background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-top:1px solid var(--v-line)}
+.v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-top:1px solid var(--v-line)}
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px;color:var(--v-mute)}
 .v-chat .cc-composer-row .attach-btn.active{color:var(--v-acc)}
