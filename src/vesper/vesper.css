@@ -174,7 +174,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-wall-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,22,42,.28) 0%,rgba(15,22,42,0) 24%)}
 .v-home-scroll{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
 .v-home-body{display:flex;flex-direction:column;gap:14px;padding:calc(var(--v-top) + 45px) 20px calc(var(--v-bottom) + 110px)}
+/* 首页顶上：往上滑的内容到状态栏这里先糊、再压暗，不跟时间叠在一起。两层模糊，越往上越糊 */
 .v-home-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 44px);z-index:2;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.62) 0%,rgba(0,0,0,.32) 45%,rgba(0,0,0,0) 100%)}
+.v-home-fade::before,.v-home-fade::after{content:'';position:absolute;inset:0}
+.v-home-fade::before{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--v-top) + 4px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--v-top) + 4px),transparent)}
+.v-home-fade::after{height:calc(var(--v-top) + 16px);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent)}
 .v-hello{display:flex;flex-direction:column;gap:10px;padding:0 8px 22px;color:#fff}
 .v-hello-date{font-style:italic;font-size:17px;letter-spacing:.02em;opacity:.9}
 .v-hello-greet{font-size:31px;font-weight:500;line-height:1.1;letter-spacing:-.005em}
@@ -482,6 +486,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-turn-body{font-family:var(--v-sc);font-size:15.5px;line-height:1.85;letter-spacing:.01em;color:var(--vc-ink);text-shadow:var(--vc-text-shadow)}
 .v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{text-shadow:none;background:var(--vc-glass)}
 .v-chat .msg-time,.v-chat .msg-meta .copy-btn,.v-chat .msg-meta button,.v-chat .cc-thinking-head,.v-chat .cc-tools,.v-chat .cc-msg-note,.v-chat .cc-late{color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
+.v-chat .cc-tool-sum,.v-chat .cc-tool-fail{color:inherit;opacity:.82} /* 读的文件名：跟 Read 同色、略淡，壁纸上也看得清 */
 .v-chat .cc-thinking-body,.v-chat .cc-tools-body{background:var(--vc-glass);border:0;border-radius:12px;padding:10px 12px;color:var(--v-ink2);text-shadow:none}
 .v-chat .cc-voice-bar,.v-chat .voice-bar{background:var(--v-acc);color:var(--v-acc-ink);border-radius:18px 18px 6px 18px;box-shadow:0 4px 14px rgba(40,55,90,.18)}
 .v-chat .msg.assistant .voice-bar{border-radius:18px 18px 18px 6px}
