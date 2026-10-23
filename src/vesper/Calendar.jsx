@@ -14,6 +14,17 @@ const nextWholeHour = () => `${pad2((Number(new Intl.DateTimeFormat('en-GB', { t
 const errText = (e) => e?.message === 'locked' || e?.status === 401 ? 'Passcode expired — unlock and try again'
   : e?.status === 400 || e?.status === 403 ? `Not saved: ${e.message}` : 'Not saved — try again later'
 
+// 待办输入框点开键盘后：整张待办卡片的底边落在键盘上方 24px（键盘弹出要一会儿，等两次再对齐）
+function keepAboveKeyboard(card) {
+  const align = () => {
+    const page = card?.closest('.v-page'), vv = window.visualViewport
+    if (!page || !vv) return
+    const gap = card.getBoundingClientRect().bottom - (vv.height - 24)
+    if (Math.abs(gap) > 2) page.scrollTo({ top: page.scrollTop + gap, behavior: 'smooth' })
+  }
+  setTimeout(align, 300); setTimeout(align, 650)
+}
+
 // 画布上的样子：居中的卡片，标题居中，底下一行 Delete … Cancel [Save]
 function Modal({ title, onClose, children }) {
   return (
@@ -340,7 +351,7 @@ export default function CalendarTab() {
         {!editTodos && (
           <div className="v-todo-input">
             <input value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTodo()} placeholder="Add a todo..."
-              onFocus={e => { const box = e.currentTarget.parentElement; setTimeout(() => box.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350) }} />
+              onFocus={e => keepAboveKeyboard(e.currentTarget.closest('.v-card'))} />
             <button className={newTodo.trim() ? 'on' : ''} onClick={addTodo} aria-label="Add">{V.send}</button>
           </div>
         )}

@@ -59,7 +59,7 @@ function usePageChrome(look) {
     const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
     els.forEach(el => { el.style.background = BG[look] })
     setTopLook(look)
-    return () => els.forEach(el => { el.style.background = '' })
+    return () => { els.forEach(el => { el.style.background = '' }); document.getElementById('vesper-top')?.remove() }
   }, [look])
 }
 
@@ -215,10 +215,6 @@ function Splash() {
     return () => { alive = false; clearTimeout(b) }
   }, [])
   if (gone) return null
-  return <SplashCover out={out} />
-}
-function SplashCover({ out }) {
-  useTopColor('#66799e', '#000000', 9) // 状态栏那条也跟开屏一个颜色，不漏出底下的页面色
   return <div className={`v-splash ${out ? 'out' : ''}`}><div><i className="glow" /><i className="h" /><i className="v" /><i className="core" /></div></div>
 }
 

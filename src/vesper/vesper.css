@@ -258,6 +258,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-entry-meta div{font-size:19px;letter-spacing:.05em;line-height:1}
 .v-entry-meta span{font-size:14px;color:var(--v-mute);line-height:1}
 .v-entry-text{margin-top:14px;font-family:var(--v-sc);font-size:15px;line-height:1.9;letter-spacing:.02em;color:var(--v-ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.v-entry-text mark{background:var(--v-acc-soft);color:var(--v-acc);border-radius:3px;padding:0 1px}
 .v-entry-foot{margin-top:16px;height:48px;border-top:1px solid var(--v-line);display:flex;align-items:center;justify-content:space-between;font-family:var(--v-sans);font-size:13.5px;color:var(--v-mute)}
 .v-entry.sealed .v-entry-foot{height:46px}
 .v-entry-lock,.v-entry-author{display:flex;align-items:center;gap:7px}
@@ -780,8 +781,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-row:has(.cc-brain-row-model) .cc-brain-row-sub{font-family:var(--v-sc);font-size:12.5px}
 
 /* ─── 开场星光（画布的 splash） ─── */
-.v-splash{position:absolute;inset:0;z-index:200;background:#66799e;transition:opacity .65s ease;--sc:255,255,255}
-.vesper[data-look="night"] .v-splash{background:#000;--sc:143,179,255}
+/* 状态栏那条是打开那一刻 html 的底色（= Home 顶上的雾蓝），之后 iOS 不一定跟着换；开屏顶上从同一个颜色渐到开屏色，接得上 */
+.v-splash{position:absolute;inset:0;z-index:200;background:linear-gradient(180deg,#415075 0,#66799e 160px);transition:opacity .65s ease;--sc:255,255,255}
+.vesper[data-look="night"] .v-splash{background:linear-gradient(180deg,#262e45 0,#000 160px);--sc:143,179,255}
 .v-splash.out{opacity:0;pointer-events:none}
 .v-splash>div{position:absolute;left:50%;top:46%;width:0;height:0}
 .v-splash i{position:absolute;animation:1.3s cubic-bezier(.5,0,.3,1) both}

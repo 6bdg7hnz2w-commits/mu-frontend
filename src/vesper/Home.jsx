@@ -160,7 +160,26 @@ function HomeScreen({ diaries, opening, onOpenNotebook }) {
   )
 }
 
-function DiaryEntry({ d, tab, fresh, onOpen, onSealed, onMenu }) {
+// 搜索时卡片上的小字：第一句带关键词的句子。开头那句只在后面加 …，结尾那句只在前面加，中间的两头都加
+function snippetOf(text, query) {
+  const parts = text.replace(/\n+/g, '\n').split(/(?<=[。！？!?；;…\n])/).map(s => s.trim()).filter(Boolean)
+  const lower = query.toLowerCase()
+  const i = parts.findIndex(s => s.toLowerCase().includes(lower))
+  if (i < 0) return null
+  return `${i > 0 ? '…' : ''}${parts[i]}${i < parts.length - 1 ? '…' : ''}`
+}
+function Highlight({ text, query }) {
+  const lower = query.toLowerCase(), out = []
+  let at = 0
+  for (let k = text.toLowerCase().indexOf(lower); k >= 0; k = text.toLowerCase().indexOf(lower, at)) {
+    out.push(text.slice(at, k), <mark key={k}>{text.slice(k, k + query.length)}</mark>)
+    at = k + query.length
+  }
+  out.push(text.slice(at))
+  return out
+}
+
+function DiaryEntry({ d, tab, fresh, query, onOpen, onSealed, onMenu }) {
   const lp = useRef({ t: null, fired: false })
   const day = parseDay(dayOf(d))
   const head = (
@@ -186,7 +205,9 @@ function DiaryEntry({ d, tab, fresh, onOpen, onSealed, onMenu }) {
       onPointerDown={press} onPointerUp={release} onPointerLeave={release} onPointerCancel={release}
       onContextMenu={e => { e.preventDefault(); release(); lp.current.fired = true; onMenu(d) }}>
       {head}
-      <div className="v-entry-text">{(d.content || '').replace(/\n/g, '')}</div>
+      <div className="v-entry-text">{query
+        ? <Highlight text={snippetOf(d.content || '', query) || ''} query={query} />
+        : (d.content || '').replace(/\n/g, '')}</div>
       <div className="v-entry-foot">
         {tab === 'soren'
           ? <span className="v-entry-open">{V.unlock}<span>{d.revealed_at ? `unsealed ${md(d.revealed_at)}` : 'open'}</span>{fresh && <em>new</em>}</span>
@@ -213,7 +234,10 @@ function DiaryScreen({ diaries, setDiaries, fresh, onBack, onRead }) {
   const sorenList = diaries.filter(d => d.author === 'mu')
   const tabList = tab === 'us' ? usList : sorenList
   const query = q.trim()
-  const shown = (day ? tabList.filter(d => dayOf(d) === day) : tabList).filter(d => !query || (d.content || '').includes(query))
+  // 有关键词就不管哪一栏、哪一天：所有打开着的日记里找，新的在前
+  const shown = query
+    ? usList.filter(d => (d.content || '').toLowerCase().includes(query.toLowerCase()))
+    : day ? tabList.filter(d => dayOf(d) === day) : tabList
 
   const now = new Date()
   const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + week * 7)
@@ -305,7 +329,7 @@ function DiaryScreen({ diaries, setDiaries, fresh, onBack, onRead }) {
 
         <div className="v-entries">
           {shown.map(d => (
-            <DiaryEntry key={d.id} d={d} tab={tab} fresh={!!fresh[d.id]} onOpen={onRead} onMenu={setMenu}
+            <DiaryEntry key={d.id} d={d} tab={query ? 'us' : tab} query={query} fresh={!!fresh[d.id]} onOpen={onRead} onMenu={setMenu}
               onSealed={() => showToast('Still sealed — when Soren is ready')} />
           ))}
           {shown.length === 0 && <div className="v-empty">{query ? `Nothing matches "${query}"` : tab === 'us' ? 'No open pages this day' : "Soren didn't write this day"}</div>}
