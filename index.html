@@ -6,6 +6,19 @@
     <meta name="theme-color" content="#e8f0f8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <script>
+      // Vesper 夜间：状态栏透明，页面（Home 的壁纸）一直铺到最上面，和画布一样。iOS 只在打开时读这一项，
+      // 所以要在第一帧之前定好；规则和 src/skin.js 的 wantedStatusStyle 一致
+      try {
+        var mode = localStorage.getItem('mu_vesper_mode')
+        var night = mode === 'night' || (mode !== 'day' && matchMedia('(prefers-color-scheme: dark)').matches)
+        if (localStorage.getItem('mu_skin') === 'vesper' && night) document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'black-translucent'
+        // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
+        if (localStorage.getItem('mu_skin') === 'vesper') ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
+          var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
+        })
+      } catch (e) {}
+    </script>
     <meta name="apple-mobile-web-app-title" content="沐" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />

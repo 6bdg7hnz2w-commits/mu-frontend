@@ -37,7 +37,7 @@ function Lightbox({ p, onClose }) {
   const full = useImage(p.file, false)
   const thumb = useImage(p.file, true)
   return (
-    <div className="v-alb-light" onClick={onClose}>
+    <div className="v-alb-light" data-back onClick={onClose}>
       {(full || thumb) && <img src={full || thumb} alt="" />}
       <div className="v-alb-light-date">{md(p.at)}</div>
       <div className="v-alb-light-desc">{p.desc}</div>

@@ -216,7 +216,7 @@ function Reader({ book, chapters, startChapter, startSheet, progress, onBack }) 
       </div>
       {sel && <button className="v-rd-select" style={{ top: sel.top, left: sel.left }} onClick={underline}>Underline</button>}
       {sheet && (
-        <div className="v-rd-sheet-wrap" onClick={() => setSheet(null)}>
+        <div className="v-rd-sheet-wrap" data-back onClick={() => setSheet(null)}>
           <div className="v-rd-sheet" onClick={e => e.stopPropagation()}>
             <div className="v-rd-grip" />
             <div className="v-rd-sheet-head">
@@ -250,7 +250,7 @@ function Reader({ book, chapters, startChapter, startSheet, progress, onBack }) 
                   </div>
                 ))}
                 <div className="v-rd-reply">
-                  <input value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendReply()} placeholder="Reply…" />
+                  <input value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendReply()} placeholder="Reply..." />
                   <button onClick={sendReply} aria-label="Send" className={reply.trim() ? 'on' : ''}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg></button>
                 </div>
               </div>
@@ -286,7 +286,8 @@ export default function ReadingPage({ onBack, onImmersive }) {
   useEffect(() => {
     getJson('/api/nook/books').then(d => { const list = Array.isArray(d) ? d : []; setBooks(list); list.forEach(loadInfo) }).catch(() => setBooks([]))
   }, [loadInfo])
-  useEffect(() => { onImmersive?.(!!open); return () => onImmersive?.(false) }, [open, onImmersive])
+  // 和画布一样：书架和阅读器都铺满整屏，不露底部标签栏
+  useEffect(() => { onImmersive?.(true); return () => onImmersive?.(false) }, [onImmersive])
 
   const openBook = (b, sheet) => {
     const i = info[b.id]
@@ -308,7 +309,7 @@ export default function ReadingPage({ onBack, onImmersive }) {
 
   return (
     <div className="v-shelf">
-      <img src="/vesper/shelf-bg.jpg" alt="" className="v-shelf-bg" />
+      <img src="/vesper/shelf-bg.webp" alt="" className="v-shelf-bg" />
       <div className="v-shelf-shade" />
       <div className="v-shelf-head">
         <button className="v-gchip" onClick={onBack} aria-label="Back">{ICON(['M14.5 5.5 8 12l6.5 6.5'])}</button>

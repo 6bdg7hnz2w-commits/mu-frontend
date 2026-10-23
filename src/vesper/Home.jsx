@@ -78,9 +78,11 @@ function HomeScreen({ diaries, opening, onOpenNotebook }) {
   return (
     <div className="v-home">
       <div className="v-wall">
-        {[0, 3, 8, 16, 30].map((b, i) => (
-          <img key={b} src="/vesper/home-bg.jpg" alt="" className={`v-wall-img v-wall-${i}`} style={b ? { filter: `var(--v-wpF) blur(${b}px)` } : undefined} />
+        {/* 越往下越糊：3/8/16/30px 的模糊事先烤进小图里（public/vesper/home-bg-b*.webp），手机上不用每帧现算 */}
+        {['', '-b3', '-b8', '-b16', '-b30'].map((b, i) => (
+          <img key={b} src={`/vesper/home-bg${b}.webp`} alt="" decoding={i ? 'async' : 'sync'} className={`v-wall-img v-wall-${i}`} />
         ))}
+        <div className="v-wall-glow" />
         <div className="v-wall-shade" />
       </div>
       <div className="v-home-scroll">

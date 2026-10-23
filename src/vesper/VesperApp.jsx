@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
+import { LockScreen, getPasscode, useKeyboardOpen, apiFetch, getMcpUrl, mcpRequest } from '../App.jsx'
 import { fmtWhenEn } from '../Usage.jsx'
-import { getSkin, setSkin } from '../skin.js'
+import { getSkin, setSkin, reloadIfStatusStyleChanged } from '../skin.js'
 import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
 import CalendarTab from './Calendar.jsx'
@@ -37,6 +37,7 @@ function useMode() {
   const setMode = (m) => {
     setModeState(m)
     try { localStorage.setItem(MODE_KEY, m) } catch {}
+    reloadIfStatusStyleChanged()
   }
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
@@ -92,7 +93,7 @@ const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 const MORE_TILES = [
   { key: 'memory', name: 'Memory', icon: V.memory, sub: "Soren's memory files" },
   { key: 'album', name: 'Album', icon: V.album, sub: 'Photos kept by Soren' },
-  { key: 'game', name: 'Game', icon: V.game, sub: 'Gomoku · Draw & Guess' },
+  { key: 'game', name: 'Game', icon: V.game, sub: 'Draw & Guess' },
   { key: 'reading', name: 'Reading', icon: V.reading, sub: 'Shelf' },
   { key: 'mcp', name: 'MCP', icon: V.mcp, sub: 'Server & tools' },
   { key: 'usage', name: 'Usage', icon: V.usage, sub: 'Limits & tokens' },
@@ -111,6 +112,14 @@ function useTileSubs() {
     }).catch(() => {})
     get('/api/cc/memory').then(d => { if (Array.isArray(d?.files)) put('memory', `${d.files.length} memory files`) }).catch(() => {})
     get('/api/cc/album').then(d => { if (Array.isArray(d?.photos)) put('album', `${d.photos.length} photos kept by Soren`) }).catch(() => {})
+    get('/api/nook/books').then(d => { if (Array.isArray(d)) put('reading', `Shelf · ${d.length} book${d.length === 1 ? '' : 's'}`) }).catch(() => {})
+    // MCP：存过地址就试着连一下数工具，连不上就写 Not connected（和画布一样）
+    const mcpUrl = getMcpUrl()
+    if (!mcpUrl) put('mcp', 'Not connected')
+    else mcpRequest(mcpUrl, 'initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'mu', version: '1.0' } })
+      .then(() => mcpRequest(mcpUrl, 'tools/list', {}))
+      .then(r => { const n = Array.isArray(r?.tools) ? r.tools.length : 0; put('mcp', `Connected · ${n} tool${n === 1 ? '' : 's'}`) })
+      .catch(() => put('mcp', 'Not connected'))
     return () => { alive = false }
   }, [])
   return subs
@@ -119,6 +128,7 @@ function useTileSubs() {
 function MorePage({ mode, onOpen, onOpenSetting }) {
   const subs = useTileSubs()
   return (
+    <>
     <div className="v-page">
       <div className="v-big-title v-ruled">More</div>
       <div className="v-tiles">
@@ -139,6 +149,8 @@ function MorePage({ mode, onOpen, onOpenSetting }) {
         <span className="v-row-chev">{V.chevron}</span>
       </div>
     </div>
+    <div className="v-page-fade" />
+    </>
   )
 }
 
@@ -164,7 +176,7 @@ function SettingPage({ mode, setMode, onBack }) {
             </div>
             <div className="v-skin-meta">
               <div className="v-skin-text">
-                <span className="v-skin-no">NO. {sk.no}</span>
+                <span className="v-skin-no">{`NO. ${sk.no}`}</span>
                 <span className="v-skin-name">{sk.n}</span>
                 <span className="v-skin-sub">{sk.sub}</span>
               </div>
@@ -181,9 +193,21 @@ function SettingPage({ mode, setMode, onBack }) {
           </div>
         ))}
       </div>
-      <div className="v-tip">System follows your phone — dark mode on the phone turns this dark too. Light and Dark apply to Vesper only; Clawd always follows the phone.</div>
+      <div className="v-tip">System follows your phone — dark mode on the phone turns this dark too.</div>
     </SubPage>
   )
+}
+
+// 打开时和画布一样先亮一下星光：1.25 秒后整页淡入，2 秒后撤掉（也正好盖住壁纸加载）
+function Splash() {
+  const [out, setOut] = useState(false)
+  const [gone, setGone] = useState(false)
+  useEffect(() => {
+    const a = setTimeout(() => setOut(true), 1250), b = setTimeout(() => setGone(true), 2000)
+    return () => { clearTimeout(a); clearTimeout(b) }
+  }, [])
+  if (gone) return null
+  return <div className={`v-splash ${out ? 'out' : ''}`}><div><i className="glow" /><i className="h" /><i className="v" /><i className="core" /></div></div>
 }
 
 export default function VesperApp() {
@@ -229,6 +253,7 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
+      <Splash />
       <nav className="v-tabbar">
         {TABS.map(t => (
           <button key={t.key} className={`v-tab ${tab === t.key ? 'on' : ''}`} onClick={() => goTab(t.key)}>
