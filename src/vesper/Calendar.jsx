@@ -339,7 +339,8 @@ export default function CalendarTab() {
         </div>
         {!editTodos && (
           <div className="v-todo-input">
-            <input value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTodo()} placeholder="Add a todo..." />
+            <input value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTodo()} placeholder="Add a todo..."
+              onFocus={e => { const box = e.currentTarget.parentElement; setTimeout(() => box.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350) }} />
             <button className={newTodo.trim() ? 'on' : ''} onClick={addTodo} aria-label="Add">{V.send}</button>
           </div>
         )}

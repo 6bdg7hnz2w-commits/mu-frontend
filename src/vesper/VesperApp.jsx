@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LockScreen, getPasscode, useKeyboardOpen, apiFetch, getMcpUrl, mcpRequest } from '../App.jsx'
-import { fmtWhenEn } from '../Usage.jsx'
 import { getSkin, setSkin, reloadIfStatusStyleChanged } from '../skin.js'
 import { V, SubPage, BG, setTopLook, useTopColor, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
@@ -88,31 +87,25 @@ const TABS = [
   { key: 'more', label: 'More', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg> },
 ]
 
-const MODE_LABEL = { day: 'Light', night: 'Dark', auto: 'System' }
 
 const MORE_TILES = [
   { key: 'memory', name: 'Memory', icon: V.memory, sub: "Soren's memory files" },
   { key: 'album', name: 'Album', icon: V.album, sub: 'Photos kept by Soren' },
-  { key: 'game', name: 'Game', icon: V.game, sub: 'Draw & Guess' },
-  { key: 'reading', name: 'Reading', icon: V.reading, sub: 'Shelf' },
+  { key: 'game', name: 'Game', icon: V.game },
+  { key: 'reading', name: 'Reading', icon: V.reading },
   { key: 'mcp', name: 'MCP', icon: V.mcp, sub: 'Server & tools' },
-  { key: 'usage', name: 'Usage', icon: V.usage, sub: 'Limits & tokens' },
+  { key: 'usage', name: 'Usage', icon: V.usage },
 ]
 
-// 格子上的小字用真数据：几个记忆文件、几张照片、5 小时额度几点恢复（拉不到就用默认那句）
+// 格子上的小字用真数据：几个记忆文件、几张照片、MCP 连没连上（拉不到就用默认那句）；Game / Reading / Usage 不写小字
 function useTileSubs() {
   const [subs, setSubs] = useState({})
   useEffect(() => {
     let alive = true
     const put = (k, v) => { if (alive) setSubs(s => ({ ...s, [k]: v })) }
     const get = (path) => apiFetch(path).then(r => r.ok ? r.json() : null)
-    get('/api/cc/usage?brief=1').then(b => {
-      const w = b?.rate_limits?.five_hour
-      if (w?.resets_at && Date.parse(w.resets_at) > Date.now()) put('usage', `5-hour limit resets ${fmtWhenEn(w.resets_at).replace('Today ', '')}`)
-    }).catch(() => {})
     get('/api/cc/memory').then(d => { if (Array.isArray(d?.files)) put('memory', `${d.files.length} memory files`) }).catch(() => {})
     get('/api/cc/album').then(d => { if (Array.isArray(d?.photos)) put('album', `${d.photos.length} photos kept by Soren`) }).catch(() => {})
-    get('/api/nook/books').then(d => { if (Array.isArray(d)) put('reading', `Shelf · ${d.length} book${d.length === 1 ? '' : 's'}`) }).catch(() => {})
     // MCP：存过地址就试着连一下数工具，连不上就写 Not connected（和画布一样）
     const mcpUrl = getMcpUrl()
     if (!mcpUrl) put('mcp', 'Not connected')
@@ -125,7 +118,7 @@ function useTileSubs() {
   return subs
 }
 
-function MorePage({ mode, onOpen, onOpenSetting }) {
+function MorePage({ onOpen, onOpenSetting }) {
   const subs = useTileSubs()
   return (
     <>
@@ -137,7 +130,7 @@ function MorePage({ mode, onOpen, onOpenSetting }) {
             <div className="v-tile-icon">{t.icon}</div>
             <div className="v-tile-text">
               <span className="v-tile-name">{t.name}</span>
-              <span className="v-tile-sub">{subs[t.key] || t.sub}</span>
+              {(subs[t.key] || t.sub) && <span className="v-tile-sub">{subs[t.key] || t.sub}</span>}
             </div>
           </div>
         ))}
@@ -145,7 +138,6 @@ function MorePage({ mode, onOpen, onOpenSetting }) {
       <div className="v-row" onClick={onOpenSetting}>
         <div className="v-tile-icon">{V.setting}</div>
         <span className="v-row-name">Setting</span>
-        <span className="v-row-sub">Vesper · {MODE_LABEL[mode]}</span>
         <span className="v-row-chev">{V.chevron}</span>
       </div>
     </div>
@@ -223,6 +215,10 @@ function Splash() {
     return () => { alive = false; clearTimeout(b) }
   }, [])
   if (gone) return null
+  return <SplashCover out={out} />
+}
+function SplashCover({ out }) {
+  useTopColor('#66799e', '#000000', 9) // 状态栏那条也跟开屏一个颜色，不漏出底下的页面色
   return <div className={`v-splash ${out ? 'out' : ''}`}><div><i className="glow" /><i className="h" /><i className="v" /><i className="core" /></div></div>
 }
 
@@ -230,6 +226,7 @@ export default function VesperApp() {
   const [mode, setMode, look] = useMode()
   const [tab, setTab] = useState('home')
   const [moreView, setMoreView] = useState(null)
+  const [chatUsage, setChatUsage] = useState(false) // 聊天里点开的 Usage：叠在聊天上面，返回回到聊天
   const [immersive, setImmersive] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
@@ -240,7 +237,7 @@ export default function VesperApp() {
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
-  const swipe = useEdgeSwipe(() => { if (tab === 'more' && moreView) setMoreView(null) })
+  const swipe = useEdgeSwipe(() => { if (tab === 'more' && moreView) setMoreView(null); else if (chatUsage) setChatUsage(false) })
 
   // 和 Clawd 一样：apiFetch 遇到 401 广播 mu-lock，整个回锁屏
   useEffect(() => {
@@ -252,16 +249,18 @@ export default function VesperApp() {
   // 锁屏先沿用 Clawd 那个，放在 .vesper 外面，样式不会串
   if (!unlocked) return <LockScreen expired={lockExpired} onUnlock={() => setUnlocked(true)} />
 
-  const goTab = (k) => { setTab(k); if (k !== 'more') setMoreView(null) }
-  const tabHidden = immersive || (tab === 'chat' && keyboardOpen)
+  const goTab = (k) => { setTab(k); setChatUsage(false); if (k !== 'more') setMoreView(null) }
+  // 键盘弹出来时底下的 tab 栏都收起来（聊天、日历的待办输入……）
+  const tabHidden = immersive || keyboardOpen
 
   return (
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
-    <div ref={frame} className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
+    <div ref={frame} className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' && !chatUsage ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
-      {tab === 'chat' && <ChatTab onUsage={() => { setTab('more'); setMoreView('usage') }} />}
+      {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} />}
+      {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}
       {tab === 'calendar' && <CalendarTab />}
-      {tab === 'more' && <MorePage mode={mode} onOpen={setMoreView} onOpenSetting={() => setMoreView('setting')} />}
+      {tab === 'more' && <MorePage onOpen={setMoreView} onOpenSetting={() => setMoreView('setting')} />}
       {tab === 'more' && moreView === 'setting' && <SettingPage mode={mode} setMode={setMode} onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'usage' && <UsagePage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'mcp' && <McpPage onBack={() => setMoreView(null)} />}
