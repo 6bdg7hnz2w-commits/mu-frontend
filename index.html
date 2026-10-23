@@ -14,9 +14,18 @@
         var night = mode === 'night' || (mode !== 'day' && matchMedia('(prefers-color-scheme: dark)').matches)
         if (localStorage.getItem('mu_skin') === 'vesper' && night) document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'black-translucent'
         // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
-        if (localStorage.getItem('mu_skin') === 'vesper') ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
-          var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
-        })
+        // 字体也一样：不等 React，这里就开始下（VesperApp 看到 #vesper-fonts 就不再加）
+        if (localStorage.getItem('mu_skin') === 'vesper') {
+          ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
+            var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
+          })
+          ;['https://fonts.googleapis.com', 'https://fonts.gstatic.com'].forEach(function (h) {
+            var l = document.createElement('link'); l.rel = 'preconnect'; l.href = h; l.crossOrigin = ''; document.head.appendChild(l)
+          })
+          var f = document.createElement('link'); f.id = 'vesper-fonts'; f.rel = 'stylesheet'
+          f.href = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
+          document.head.appendChild(f)
+        }
       } catch (e) {}
     </script>
     <meta name="apple-mobile-web-app-title" content="沐" />

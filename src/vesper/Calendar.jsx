@@ -14,11 +14,12 @@ const nextWholeHour = () => `${pad2((Number(new Intl.DateTimeFormat('en-GB', { t
 const errText = (e) => e?.message === 'locked' || e?.status === 401 ? 'Passcode expired — unlock and try again'
   : e?.status === 400 || e?.status === 403 ? `Not saved: ${e.message}` : 'Not saved — try again later'
 
+// 画布上的样子：居中的卡片，标题居中，底下一行 Delete … Cancel [Save]
 function Modal({ title, onClose, children }) {
   return (
     <div className="v-modal" onClick={onClose}>
       <div className="v-modal-card" onClick={e => e.stopPropagation()}>
-        <div className="v-modal-head"><span>{title}</span><button className="v-text-btn acc" data-back onClick={onClose}>Close</button></div>
+        <div className="v-modal-title">{title}</div>
         {children}
       </div>
     </div>
@@ -78,8 +79,11 @@ function EventSheet({ event, defaultDate, onClose, onSaved }) {
       <textarea className="v-field" rows={3} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} />
       {error && <div className="v-error">{error}</div>}
       {readOnly
-        ? <div className="v-modal-note">From the phone calendar — edit it on the phone.</div>
-        : <button className="v-btn wide" onClick={save} disabled={!title.trim() || busy}>{busy ? 'Saving…' : 'Save'}</button>}
+        ? <div className="v-modal-actions"><span className="v-modal-note">From your phone calendar — edit it on your phone</span><button className="v-text-btn acc" data-back onClick={onClose}>Close</button></div>
+        : <div className="v-modal-actions">
+            <button className="v-text-btn" data-back onClick={onClose}>Cancel</button>
+            <button className="v-btn" onClick={save} disabled={!title.trim() || busy}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>}
     </Modal>
   )
 }
@@ -98,6 +102,8 @@ function DateSheet({ item, onClose, onSave, onDelete }) {
       {error && <div className="v-error">{error}</div>}
       <div className="v-modal-actions">
         {item && <button className="v-text-btn danger" onClick={() => run(() => onDelete(item.id))} disabled={busy}>Delete</button>}
+        <span className="v-modal-gap" />
+        <button className="v-text-btn" data-back onClick={onClose}>Cancel</button>
         <button className="v-btn" onClick={() => name.trim() && date && run(() => onSave({ ...item, name: name.trim(), date }))} disabled={!name.trim() || !date || busy}>Save</button>
       </div>
     </Modal>
@@ -117,7 +123,7 @@ function MonthSheet({ year, month, onPick, onClose }) {
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      <button className="v-btn wide" onClick={onClose}>Done</button>
+      <button className="v-btn wide" data-back onClick={onClose}>Done</button>
     </Modal>
   )
 }

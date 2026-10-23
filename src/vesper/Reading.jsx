@@ -8,7 +8,7 @@ import { useTopColor } from './ui.jsx'
 
 const ME = 'hua'
 const LAST_KEY = 'mu_vesper_last_book'
-const WK = "'LXGW WenKai TC','Noto Serif SC',serif"
+const WK = "'V Dots','LXGW WenKai TC','Noto Serif SC',serif"
 // 封面配色：按书名挑一组，同一本书每次都一样
 const PALETTES = [
   { bg: '#2f5577', ink: '#f6ece9', acc: '#eac5c0' }, { bg: '#e39d9b', ink: '#2f3a5c', acc: '#f6e3c8' },

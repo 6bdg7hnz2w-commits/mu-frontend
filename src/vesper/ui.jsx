@@ -49,11 +49,14 @@ export const flowerStyle = (i, opacity, size) => ({
 // 0 = 底色，1 = Home / Chats 这种主页，2 = More 里的二级页，3 = 盖在二级页上的阅读器
 const tops = []
 let topLook = 'day'
+// iOS 主屏幕 App 的状态栏那条露的是 html / body 的底色，不看 theme-color，所以两样一起换
 function applyTop() {
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (!meta || !tops.length) return
+  const els = [document.documentElement, document.body]
+  if (!tops.length) { els.forEach(el => { el.style.background = '' }); return }
   const top = tops.reduce((a, b) => (b.level >= a.level ? b : a))
-  meta.content = top[topLook]
+  if (meta) meta.content = top[topLook]
+  els.forEach(el => { el.style.background = top[topLook] })
 }
 export function setTopLook(look) { topLook = look; applyTop() }
 export function useTopColor(day, night, level) {
