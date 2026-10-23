@@ -71,7 +71,8 @@ function useVisibleHeight(ref) {
     if (!vv) return
     const on = () => {
       // 没弹键盘时跟着 html 走（主屏幕模式下 html 比 visualViewport 高出状态栏那截，见 index.css）
-      if (vv.height < window.innerHeight - 150) ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
+      // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
+      if (vv.height < document.documentElement.getBoundingClientRect().height - 150) ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
       else ref.current?.style.removeProperty('--v-vh')
       if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0)
     }
