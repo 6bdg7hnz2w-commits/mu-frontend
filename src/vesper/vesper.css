@@ -25,6 +25,12 @@
    （data-kb-anim 由 useVisibleHeight 在高度一下变 150px 以上时加，600ms 后去掉）。时长、曲线和 tab 栏滑出滑回同一套。
    面板开着时不过渡（JS 那边也不加 data-kb-anim）：面板和键盘互换要在同一帧。--s-kbDur / --s-kbEase 在 shell/viewport.css */
 .vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)){transition:height var(--s-kbDur) var(--s-kbEase)}
+/* 键盘起落时消息列表不变高，整块跟着输入栏上下平移：上边缘往屏幕上面伸出键盘那么高（--s-full − --s-vh），和外框高度同一条过渡。
+   以前列表跟着外框变高，收键盘时最后一条要靠浏览器把 scrollTop 夹回底部才跟得下来，iOS 这一下跟不上，最后一条停在原地、和输入栏之间空出一大块
+   （skin-checklist 第 8 条）。面板开着时外框是整屏，不伸 */
+.v-chat .cc-room>.messages{margin-top:calc(var(--s-vh) - var(--s-full))}
+.vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)) .v-chat .cc-room>.messages{transition:margin-top var(--s-kbDur) var(--s-kbEase)}
+.vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel) .v-chat .cc-room>.messages{margin-top:0}
 /* 文档钉死（html.v-lock）在 shell/viewport.css */
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
@@ -529,6 +535,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-room .msg.user .bubble{box-sizing:content-box}
 .v-chat .cc-room .msg.user .msg-meta{margin-top:5px;gap:10px;padding:0 4px}
 .v-chat .cc-turn{padding:4px 0}
+/* 语音条不放在他的气泡里，单独一块（Turn.jsx 的 ccTurnBlocks）；块和块之间和她连发几条一样空 6px */
+.v-chat .cc-turn>:is(.cc-turn-body,.cc-turn-voice)+:is(.cc-turn-body,.cc-turn-voice){margin-top:6px}
 .v-chat .cc-piece+.cc-piece{margin-top:7px}
 .v-chat .cc-turn .msg-meta{margin-top:7px;gap:10px;padding:0 4px}
 .v-chat .msg-meta .copy-btn{padding:0}

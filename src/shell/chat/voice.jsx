@@ -70,10 +70,13 @@ export function TranscriptToggle({ open, onClick }) {
   return <button className="voice-transcript-btn" onClick={onClick}>{open ? '收起' : '转文字'}</button>
 }
 
-export function VoiceAwareContent({ raw, msgKey, player, showTranscript, flat = false }) {
+// range：只画第 from 到 to 段（Vesper 把语音条拿到气泡外面，一段话拆成几截画）；播放状态的 key 用原来的段号
+export function VoiceAwareContent({ raw, msgKey, player, showTranscript, flat = false, range }) {
   const segs = useMemo(() => parseVoiceSegments(raw), [raw])
   const { ttsState, ttsDurations, toggleTts, seekTts } = player
-  return segs.map((seg, si) => {
+  const [from, to] = range || [0, segs.length]
+  return segs.slice(from, to).map((seg, i) => {
+    const si = from + i
     if (seg.type === 'text') return flat ? <MdFlat key={si} className="msg-seg" text={seg.text} /> : <MdBubble key={si} className="msg-seg" text={seg.text} />
     const key = `${msgKey}:${si}`
     return (

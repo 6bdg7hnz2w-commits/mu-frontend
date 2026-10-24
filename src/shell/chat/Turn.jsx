@@ -1,7 +1,7 @@
 import { I } from '../../App.jsx'
 import { fmtMsgTime } from '../data.js'
 import { CopyButton, messageCopyText } from './markdown.jsx'
-import { TranscriptToggle, hasVoiceSegment } from './voice.jsx'
+import { TranscriptToggle, VoiceAwareContent, hasVoiceSegment, parseVoiceSegments } from './voice.jsx'
 import { CcEditBox, CcFile, CcImage, CcPiece, CcTools, CcTurnBody, CcUpMark, CcVoice, ccIsTool, ccTurnParts, useCcSay } from './CcChat.jsx'
 
 // ─── 消息列表里的一行 ─────────────────────────────
@@ -17,14 +17,28 @@ export function CcTurn({ row, live, flash, open, player, onToggleTranscript }) {
   const last = items[items.length - 1]
   const voiced = said.some(it => hasVoiceSegment(it.text))
   const viaApi = items.findLast(it => it.viaApi) // 这块是 API 替班回的：时间后面标上模型
+  const blocks = say(false, true) ? ccTurnBlocks(items) : null
+  if (live && blocks?.at(-1)?.voice) blocks.push({ key: 'typing', parts: [] })
+  const typing = <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>
   return (
     <div className={`msg assistant cc-turn${flash ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')}>
-      <CcTurnBody rowKey={row.key} live={items[0].live}>
-        {ccTurnParts(items).map((part, i) => part.tools
-          ? <CcTools key={part.key} tools={part.tools} />
-          : <CcPiece key={part.key} m={part.m} player={player} showTranscript={open} first={i === 0} />)}
-        {live && <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
-      </CcTurnBody>
+      {blocks ? blocks.map((b, bi, all) => b.voice
+        ? <div key={b.key} className="cc-turn-voice"><VoiceAwareContent raw={b.m.text} msgKey={b.m.key} player={player} showTranscript={open} flat range={b.range} /></div>
+        : (
+          <CcTurnBody key={b.key} rowKey={row.key} part={bi} live={items[0].live}>
+            {b.parts.map(p => p.tools
+              ? <CcTools key={p.key} tools={p.tools} />
+              : <CcPiece key={p.key} m={p.m} player={player} showTranscript={open} first={p.first} range={p.range} head={p.head} tail={p.tail} />)}
+            {live && bi === all.length - 1 && typing}
+          </CcTurnBody>
+        )) : (
+        <CcTurnBody rowKey={row.key} live={items[0].live}>
+          {ccTurnParts(items).map((part, i) => part.tools
+            ? <CcTools key={part.key} tools={part.tools} />
+            : <CcPiece key={part.key} m={part.m} player={player} showTranscript={open} first={i === 0} />)}
+          {live && typing}
+        </CcTurnBody>
+      )}
       {!live && (
         <div className="msg-meta">
           <span className="msg-time">{fmtMsgTime(last.time, say(false, true))}</span>
@@ -35,6 +49,29 @@ export function CcTurn({ row, live, flash, open, player, onToggleTranscript }) {
       )}
     </div>
   )
+}
+
+// 英文版（Vesper）他的气泡里不放语音条：一轮拆成几块，挨着的文字、工具合在一个气泡里，每条语音单独一块、在气泡外面（照微信）。
+// 一段话里夹着语音的，按段拆成几截（range 是段号区间，播放状态还按原来的段号记）。最后一块是语音、他还在说时，三个点另起一个气泡
+function ccTurnBlocks(items) {
+  const blocks = []
+  let cur = null
+  const body = () => { if (!cur) { cur = { key: `b${blocks.length}`, parts: [] }; blocks.push(cur) } return cur }
+  ccTurnParts(items).forEach((part, i) => {
+    if (part.tools) { body().parts.push(part); return }
+    const m = part.m, segs = parseVoiceSegments(m.text)
+    let from = 0
+    const text = (to) => body().parts.push({ key: `${m.key}:${from}`, m, range: [from, to], first: i === 0 && from === 0, head: from === 0, tail: to === segs.length })
+    segs.forEach((seg, si) => {
+      if (seg.type !== 'voice') return
+      if (si > from || (from === 0 && m.thinking)) text(si)
+      cur = null
+      blocks.push({ key: `v:${m.key}:${si}`, voice: true, m, range: [si, si + 1] })
+      from = si + 1
+    })
+    if (from < segs.length || !segs.length || (m.late && from === segs.length)) text(segs.length)
+  })
+  return blocks
 }
 
 // failure：他这次没回上来（点过"再叫他一下"的不传）；stuckNote：她最后一条下面提示"他好像卡住了"

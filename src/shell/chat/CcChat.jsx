@@ -149,18 +149,19 @@ function useCcReveal(key, live) {
   return [anim ? ' cc-reveal' : '', e => { if (e.target === e.currentTarget) setAnim(false) }]
 }
 // 他的一轮的气泡：新的一轮整个气泡（底色带字）一起淡入；第一段跟着气泡出现，自己不再播
-export function CcTurnBody({ rowKey, live, children }) {
-  const [cls, onEnd] = useCcReveal(`turn:${rowKey}`, live)
+export function CcTurnBody({ rowKey, live, children, part = 0 }) {
+  const [cls, onEnd] = useCcReveal(part ? `turn:${rowKey}:${part}` : `turn:${rowKey}`, live)
   return <div className={`cc-turn-body${cls}`} onAnimationEnd={onEnd}>{children}</div>
 }
-export function CcPiece({ m, player, showTranscript, first }) {
+// range / head / tail：语音条拿到气泡外面时，一段话被拆成几截，每截只画自己那几段；思考过程跟第一截，"补上的"跟最后一截
+export function CcPiece({ m, player, showTranscript, first, range, head = true, tail = true }) {
   const say = useCcSay()
-  const [cls, onEnd] = useCcReveal(m.key, m.live && !first)
+  const [cls, onEnd] = useCcReveal(range?.[0] ? `${m.key}:${range[0]}` : m.key, m.live && !first)
   return (
     <div className={`cc-piece${cls}`} onAnimationEnd={onEnd}>
-      {m.thinking && <CcThinking text={m.thinking} />}
-      <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat />
-      {m.late && <div className="cc-late">{say('补上的', 'Late')}</div>}
+      {head && m.thinking && <CcThinking text={m.thinking} />}
+      <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat range={range} />
+      {tail && m.late && <div className="cc-late">{say('补上的', 'Late')}</div>}
     </div>
   )
 }
