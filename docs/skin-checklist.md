@@ -10,7 +10,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 键盘、可见高度、文档钉死、状态栏底色这些和皮肤无关的逻辑，放在 `src/shell/`，新皮肤直接用，不要再抄一份：
 
 - `viewport.js`
-  - `useVisibleHeight(ref)`：外框高度跟着 visualViewport，写 `--v-vh` / `--v-vtop` / `--v-full` / `--v-kb`，并给 html 挂 `v-lock`。
+  - `useVisibleHeight(ref)`：外框高度跟着 visualViewport，写 `--s-vh` / `--s-vtop` / `--s-full` / `--s-kb`，并给 html 挂 `v-lock`。
   - `useKeyboardOpen(set)`：输入框得到或失去焦点时，告诉你键盘开没开。
   - `keepAboveKeyboard(card)`：把输入卡片滚到键盘上方。
   - `usePageChrome(color, scheme)`：状态栏、html 底色和 theme-color。
@@ -45,11 +45,13 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - 接口、缓存、日期工具从 `shell/data.js` 拿，别自己再写一份 fetch 或时区换算；
 - 外框用 `TabShell`（不用的话：外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`）；
 - 按自己的路由算 `subPage` 传给 `TabShell`；
-- 自己的 CSS 里写外框 `height: var(--v-vh, 100%)`、`top: var(--v-vtop)`；
+- 自己的 CSS 里写外框 `height: var(--s-vh, 100%)`、`top: var(--s-vtop)`；
 - 自己的 CSS 里给 `ActionSheet` / `BottomSheet` 的类名写样式（照 `vesper.css` 的 `.v-sheet*` / `.v-bsheet*`）；
 - `[data-kb-anim]` 时的 height 过渡、面板开着时外框不跟键盘缩，也写在自己的 CSS 里（Vesper 的写法见 `vesper.css` 开头）。
 
-变量名还带着 `--v-` 前缀，等第 6 步统一改。
+变量分两种：
+- `--s-*`：shell 给的，皮肤只读不写。安全区 `--s-top` / `--s-bottom`、键盘节奏 `--s-kbDur` / `--s-kbEase`（`viewport.css` 里挂在 `[data-shell-frame]` 上），高度 `--s-vh` / `--s-vtop` / `--s-full` / `--s-kb` / `--s-doc`（`useVisibleHeight` 写）。
+- `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。聊天这些共用组件改成只读 `--s-*` 主题变量，是第 6 步后面几个 PR 的事。
 
 ## 一、高度和安全区
 
@@ -62,7 +64,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   ```css
   @media (display-mode: standalone) { html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top))) } }
   ```
-  外框用 `height: var(--v-vh, 100%)`，跟着 html 走。
+  外框用 `height: var(--s-vh, 100%)`，跟着 html 走。
 - **以后别做**：用 `100dvh`、`innerHeight`、或者把外框拉得比 html 高来铺满整屏。
 
 ### 2. 弹键盘时输入栏被挡、或者和键盘之间空一截
@@ -70,17 +72,17 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **第一次**（d4dba4c）：外框高度跟 `visualViewport.height` 走，再把页面滚回顶。方向对。
 - **第二次的坑**（73b55a9）：判断“键盘开没开”时拿 `innerHeight` 比。主屏幕模式下 `innerHeight` 会跟着键盘一起变小，比不出来。
 - **正确做法**：拿 `visualViewport.height` 和 **html 自己的高度**比（html 高度不随键盘变）。小了 150px 以上就算键盘开着：
-  - 这时才设 `--v-vh`，同时记下 `--v-kb`（键盘高度）和 `localStorage.v_kb_h`；
-  - 键盘收起后去掉 `--v-vh`，`--v-kb` 留着。
+  - 这时才设 `--s-vh`，同时记下 `--s-kb`（键盘高度）和 `localStorage.v_kb_h`；
+  - 键盘收起后去掉 `--s-vh`，`--s-kb` 留着。
 - 代码在 `src/shell/viewport.js` 的 `useVisibleHeight`。
 
 ### 2b. 键盘起落时整页跳（顶栏被挤到中间、列表先掉下去再弹回）
 - **现象**：弹键盘时先白一帧，顶栏被整个往下挤到屏幕中间再回到位；收键盘时消息列表先掉到输入框下面再弹回来。
 - **原因**：iOS 点输入框后，会自己去滚整个文档（或把 visualViewport 在 layout viewport 里挪开，`offsetTop > 0`）来露出输入框。我们同时又按 `visualViewport.height` 改外框高度，两边叠在一起。光靠 `html, body { overflow: hidden }` 拦不住，iOS 照样会滚。
 - **正确做法**：
-  - 文档钉死：挂上 Vesper 时给 html 加 `v-lock`，`body { position: fixed; top: 0; height: var(--v-doc) }`。
-    - `--v-doc` 是量出来的 html 高度。不能写 `height: 100%`：fixed 的 100% 是视口高度，而 iOS 26 主屏幕模式下那个视口少算了状态栏，底下会又空一条黑（见第 1 条）。
-  - `useVisibleHeight` 在同一个回调里做三件事：`scrollTo(0,0)`；外框 `top` 设为 `visualViewport.offsetTop`（`--v-vtop`）；高度设为 `visualViewport.height`。外框正好盖住看得见的那块，不留空白帧。这个回调同时挂在 `visualViewport` 的 `resize`、`scroll` 和 `window` 的 `scroll` 上。
+  - 文档钉死：挂上 Vesper 时给 html 加 `v-lock`，`body { position: fixed; top: 0; height: var(--s-doc) }`。
+    - `--s-doc` 是量出来的 html 高度。不能写 `height: 100%`：fixed 的 100% 是视口高度，而 iOS 26 主屏幕模式下那个视口少算了状态栏，底下会又空一条黑（见第 1 条）。
+  - `useVisibleHeight` 在同一个回调里做三件事：`scrollTo(0,0)`；外框 `top` 设为 `visualViewport.offsetTop`（`--s-vtop`）；高度设为 `visualViewport.height`。外框正好盖住看得见的那块，不留空白帧。这个回调同时挂在 `visualViewport` 的 `resize`、`scroll` 和 `window` 的 `scroll` 上。
   - 点输入框：`touchend` 里先 `preventDefault`，再 `focus({ preventScroll: true })`，iOS 就不会自己滚页面。只在还没聚焦时这么做，已经在打字时照常挪光标、长按选字。手指拖过（超过 10px）再松开的不算点，不聚焦。
   - **拦在前面，不要事后拉回**：光有上面这些，手指在顶栏、输入栏这些不能滚的地方一拖，iOS 照样会拖动整页，`scrollTo(0,0)` 再拉回来，这一来一回就是跳。照 react-aria 的 `usePreventScroll` 做（`src/shell/preventScroll.js` 的 `usePreventPageScroll`）：
     - 插一条 `@layer{*{overscroll-behavior:contain}}`：列表滚到头不把滚动传给页面。iOS 26 起这条要在 touchstart 之前就生效，所以写成 `<style>`，不要等手指按下再加。
@@ -109,11 +111,11 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - **不要逐帧读 visualViewport 去跟键盘**（这处改过 2 次）。
     - 以前的做法：输入框得到或失去焦点后，用 `requestAnimationFrame` 每帧读 `visualViewport`，按键盘露出的比例算外框高度。
     - 为什么不对：2026-10-24 真机（iOS 26.5.2，主屏幕模式）录了 6 次起落，动画途中一个中间值都没有。聚焦后约 70–80ms，`visualViewport.height` 在一帧里从 852 跳到 448；失焦后约 30–50ms 跳回 852，每次只发一次 `resize`（和 [WebKit 265578](https://bugs.webkit.org/show_bug.cgi?id=265578) 说的一样）。逐帧读只读得到两头，输入栏比键盘先到：弹出时先跳上去、底下露背景，收起时先掉下去、被键盘盖住。
-    - 现在的做法：`useVisibleHeight` 发现外框高度一下变了 150px 以上，就给 `.vesper` 加 `data-kb-anim`，让 `height` 用过渡走过去，600ms 后去掉。时长、曲线是 `--v-kbDur` / `--v-kbEase`（.4s、`cubic-bezier(.3,.7,.2,1)`），tab 栏滑出滑回、`--v-tbSpace` 用的也是这一套，要调只改这两个变量。
+    - 现在的做法：`useVisibleHeight` 发现外框高度一下变了 150px 以上，就给 `.vesper` 加 `data-kb-anim`，让 `height` 用过渡走过去，600ms 后去掉。时长、曲线是 `--s-kbDur` / `--s-kbEase`（.4s、`cubic-bezier(.3,.7,.2,1)`），tab 栏滑出滑回、`--v-tbSpace` 用的也是这一套，要调只改这两个变量。
     - 标记用 data 属性，不用 class：React 每次改 `kb-open`、`tab-hidden` 都会把整串 className 重写，同一时刻加上的 class 会被冲掉。
-    - 没键盘时 `--v-vh` 写成整屏的 px，不要删掉回到 `100%`：过渡是 px 到 px，不跨单位。
+    - 没键盘时 `--s-vh` 写成整屏的 px，不要删掉回到 `100%`：过渡是 px 到 px，不跨单位。
     - 表情、加号面板开着时不过渡（JS 不加标记，CSS 用 `:not(:has(面板))` 再保险一层）：面板和键盘互换要在同一帧，输入框不动。
-    - 键盘高度 `--v-kb` 照旧只在键盘停稳（高度比整屏少 150px 以上）时才记。
+    - 键盘高度 `--s-kb` 照旧只在键盘停稳（高度比整屏少 150px 以上）时才记。
   - 顺带：这台机器上主屏幕模式的 `innerHeight` 一直是 852，不随键盘变；以前有的版本会跟着变小。所以判断有没有键盘一律拿 html 的高度比，不要用 `innerHeight`。
   - `--v-tbSpace` 用 `@property` 注册成长度，才能 `transition`，和 tab 栏滑上来用同一条曲线（.4s）。面板开着时不过渡，同一帧贴底。
   - 下拖收键盘之后 600ms 内冒出来的 focus 直接再 `blur`（`swipeBlurAt`）：在 focus 事件里同步 `blur` 有的浏览器不认，下一帧再补一次。她自己点输入框（`touchend`）会清掉这个标记。
@@ -122,7 +124,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 
 ### 3. 背景图跟着键盘、面板缩放
 - **现象**：聊天背景是按外框高度铺的，键盘起落、面板开合时背景跟着变。
-- **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--v-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。
+- **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--s-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。
 
 ---
 
@@ -167,10 +169,10 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 ### 7. 键盘、表情面板、加号面板三选一
 - **现象**：面板和键盘同时出现、叠在一起；切换时输入框跳上跳下，消息列表跟着跳。
 - **走过的弯路**：
-  1. ee8a060：面板高度 = `--v-kb`。点面板先收键盘；点输入框时等键盘真的升上来（visualViewport 缩小超过 100px，或者最多 600ms）再收面板。思路对，但键盘还在的时候加上面板，外框高度还是“键盘开着”的高度，面板把输入栏往上顶，等键盘退了又落回来。
+  1. ee8a060：面板高度 = `--s-kb`。点面板先收键盘；点输入框时等键盘真的升上来（visualViewport 缩小超过 100px，或者最多 600ms）再收面板。思路对，但键盘还在的时候加上面板，外框高度还是“键盘开着”的高度，面板把输入栏往上顶，等键盘退了又落回来。
   2. 7f20e50：嫌面板空，改成“高度跟内容走”（约 140px）。这样键盘和面板互换时输入框高度就不一样了，**作废**。
 - **正确做法**（5e0281f）：
-  - 面板高度 = 上次键盘的实际高度（`--v-kb`，含工具栏）。没记过时用 300px。
+  - 面板高度 = 上次键盘的实际高度（`--s-kb`，含工具栏）。没记过时用 300px。
   - 面板开着时外框不跟键盘缩：`.vesper:has(.cc-attach-menu,.cc-emoji-panel){height:100%}`。
     - 从键盘切到面板：面板一开始就在键盘后面那块，键盘退下去正好露出来；工具栏跟着键盘一起退。
     - 切回键盘：键盘盖住面板升上来，升好了才收面板。
@@ -194,7 +196,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **日历待办、日记 New page**：键盘升起后，把整张卡片滚到键盘上方 24px（`keepAboveKeyboard`，跟着 visualViewport 的 resize 对齐，最多 1 秒，再补两次兜底）。
 - **New Event 改了三次**：
   1. 居中卡片（e233587）：键盘一弹，卡片被压扁，输入框变细，Notes 被切掉。
-  2. 底部面板（9380f20）：高度跟 `--v-vh`。但 iOS 聚焦输入框时会滚动布局视口（`visualViewport.offsetTop` 不为 0），fixed 的面板还是被盖住。
+  2. 底部面板（9380f20）：高度跟 `--s-vh`。但 iOS 聚焦输入框时会滚动布局视口（`visualViewport.offsetTop` 不为 0），fixed 的面板还是被盖住。
   3. **正确做法**（7f20e50）：
      - 面板的 top / height 直接用 `visualViewport.offsetTop` / `height`，监听 resize 和 scroll。
      - 标题和 Cancel / Save 钉在顶上，下面在面板里滚。

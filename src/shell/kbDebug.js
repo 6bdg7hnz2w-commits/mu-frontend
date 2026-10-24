@@ -12,7 +12,7 @@ const traces = []
 
 const r = Math.round
 const bar = () => document.querySelector('.cc-room .composer')?.getBoundingClientRect().bottom
-const frameVh = () => { const f = document.querySelector('[data-shell-frame]'); return f ? f.style.getPropertyValue('--v-vh') || '-' : '-' }
+const frameVh = () => { const f = document.querySelector('[data-shell-frame]'); return f ? f.style.getPropertyValue('--s-vh') || '-' : '-' }
 
 // 输入框所在的那个能滚的父元素（底部面板的内容区、日记页）
 function scroller(el) {
@@ -65,7 +65,7 @@ function record(e) {
 function loop() {
   if (!live) return
   const vv = window.visualViewport
-  live.textContent = `vv ${r(vv.height)} top ${r(vv.offsetTop)} · inner ${window.innerHeight} · html ${r(document.documentElement.getBoundingClientRect().height)} · --v-vh ${frameVh()} · bar ${r(bar() ?? -1)} · scrollY ${r(window.scrollY)}`
+  live.textContent = `vv ${r(vv.height)} top ${r(vv.offsetTop)} · inner ${window.innerHeight} · html ${r(document.documentElement.getBoundingClientRect().height)} · --s-vh ${frameVh()} · bar ${r(bar() ?? -1)} · scrollY ${r(window.scrollY)}`
   raf = requestAnimationFrame(loop)
 }
 
