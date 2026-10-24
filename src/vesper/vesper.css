@@ -409,7 +409,12 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat{--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
   --vc-meta-shadow:0 0 6px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9);--vc-text-shadow:0 0 12px rgba(255,255,255,.75);
   --vc-veil:rgba(255,255,255,.42);--vc-his:rgba(255,255,255,.45);
-  --vc-f:none;--vc-base:#c9c3d6}
+  --vc-f:none;--vc-base:#c9c3d6;
+  /* 聊天室共用组件读的主题变量（App.css 里 .cc-room 那几条），夜间跟着上面的 --vc-* / --v-* 变 */
+  --s-meBg:var(--v-acc);--s-meInk:var(--v-acc-ink);--s-meR:17px 17px 6px 17px;
+  --s-himBg:var(--vc-his);--s-himInk:var(--vc-ink);--s-himR:17px 17px 17px 6px;--s-glass:blur(12px);
+  --s-body:var(--v-sc);--s-title:var(--v-serif);
+  --s-bar:var(--vc-head);--s-barGlass:blur(20px) saturate(1.3);--s-field:var(--v-card);--s-accent:var(--v-acc);--s-accentInk:var(--v-acc-ink)}
 .vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
@@ -495,7 +500,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-room>.chatroom-header::before{background:linear-gradient(180deg,var(--v-bg) 0%,var(--vc-head) calc(100% - 30px),rgba(0,0,0,0) 100%);backdrop-filter:blur(10px) saturate(1.5);-webkit-backdrop-filter:blur(10px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
 .v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
 .v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 60px)}
-.v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
+.v-chat .cc-room .chatroom-name{font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 /* 连接状态：名字右边的小圆点。连接中黄点轻轻呼吸，连上了绿点亮一会儿淡掉，断开是暗红点；不占位、不推动消息列表 */
 .v-chat .cc-name-wrap{position:relative;display:inline-block}
 .v-chat .cc-head-dot{position:absolute;left:calc(100% + 7px);top:50%;width:7px;height:7px;margin-top:-3px;border-radius:50%;background:#9aa3b5;box-shadow:0 0 0 1.5px rgba(255,255,255,.55);pointer-events:none}
@@ -517,8 +522,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-tools{margin:0 0 7px;font-family:var(--v-sans);font-size:12px;line-height:normal}
 .v-chat .cc-tools .cc-thinking-head{gap:4px;padding:0;font-size:12px;line-height:normal}
 .v-chat .cc-tools .cc-thinking-head svg{width:11px;height:11px}
-.v-chat .cc-room .msg.user .bubble{background:var(--v-acc);color:var(--v-acc-ink);border-radius:17px 17px 6px 17px;max-width:76%;padding:8px 13px;font-family:var(--v-sc);font-size:14.5px;line-height:1.55;letter-spacing:0;box-shadow:0 4px 14px rgba(40,55,90,.18)}
-.v-chat .cc-turn-body{width:fit-content;max-width:80%;box-sizing:border-box;padding:8px 13px;border-radius:17px 17px 17px 6px;background:var(--vc-his);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-family:var(--v-sc);font-size:14.5px;line-height:1.55;letter-spacing:0;color:var(--vc-ink)}
+.v-chat .cc-room .msg.user .bubble{max-width:76%;padding:8px 13px;font-size:14.5px;line-height:1.55;letter-spacing:0;box-shadow:0 4px 14px rgba(40,55,90,.18)}
+.v-chat .cc-turn-body{width:fit-content;max-width:80%;box-sizing:border-box;padding:8px 13px;font-size:14.5px;line-height:1.55;letter-spacing:0}
 /* 气泡里段落之间收紧一点（默认 .8em） */
 .v-chat .cc-turn-body .cc-md>*+*,.v-chat .cc-turn-body .msg-seg+.msg-seg{margin-top:.45em}
 .v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{background:var(--vc-glass)}
@@ -536,16 +541,15 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-thumb{border-radius:14px;box-shadow:0 4px 14px rgba(40,55,90,.16)}
 .v-chat .cc-up{border-radius:14px}.v-chat .cc-files .cc-up{border-radius:16px}
 .v-chat .cc-typing-dot{background:var(--vc-meta)}
-.v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-top:1px solid var(--v-line)}
+.v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);border-top:1px solid var(--v-line)}
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px;color:var(--v-mute)}
 .v-chat .cc-composer-row .attach-btn.active{color:var(--v-acc)}
-.v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);background:var(--v-card);font-family:var(--v-scIn);font-size:15px}
+.v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);font-family:var(--v-scIn);font-size:15px}
 /* Noto Serif SC 的上沿留得高，西文的提示字会偏下；没字的时候整体往上挪 2px，视觉居中 */
 .v-chat .composer-input-row textarea:placeholder-shown{padding-top:6px;padding-bottom:10px}
 .v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
-.v-chat .send-btn{width:36px;height:36px;background:var(--v-acc)}
-.v-chat .send-btn svg path{stroke:var(--v-acc-ink)}
+.v-chat .send-btn{width:36px;height:36px}
 .v-chat .cc-attach-menu button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--v-ink2);font-family:var(--v-sans);font-size:12.5px}
 .v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
 .v-chat .cc-attach-menu button:disabled{opacity:.4}
