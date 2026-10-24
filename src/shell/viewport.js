@@ -131,6 +131,10 @@ export function usePageChrome(color, scheme) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = color
-    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
+    // color-scheme 不写在 html 上：Safari 判断 prefers-color-scheme 时看根元素声明支持哪种，只写 light 它就一直答"浅色"，
+    // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。写在 body / #root 上，键盘、输入框照样跟页面
+    document.documentElement.style.background = color
+    document.documentElement.style.colorScheme = 'light dark'
+    ;[document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
   }, [color, scheme])
 }
