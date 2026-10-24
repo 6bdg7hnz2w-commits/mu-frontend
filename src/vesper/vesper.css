@@ -384,12 +384,14 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-switch.on i{transform:translateX(20px)}
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
-.v-chat{--v-tbSpace:calc(62px + max(calc(var(--s-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;overflow:clip;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.v-chat{--v-tbRest:calc(62px + max(calc(var(--s-bottom) - 8px),14px) + 8px);--v-tbSpace:var(--v-tbRest);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;overflow:clip;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 /* --v-tbSpace 注册成长度才能过渡：收键盘时 tab 栏从下面滑上来，输入栏底下让出的空间同一个节奏慢慢长出来，不是最后一下顶上去 */
 @property --v-tbSpace{syntax:'<length>';inherits:true;initial-value:0px}
 .v-chat{transition:--v-tbSpace var(--s-kbDur) var(--s-kbEase)}
 .vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px}
 .v-chat:has(.cc-emoji-panel,.cc-attach-menu){transition:none} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
+/* 面板在缩（data-close）：tab 栏已经开始滑回来，底下的空间先按 tab 栏在的时候算好（面板的负 margin 正好抵掉，输入栏不动），面板拿掉那一下就不会再长一次 */
+.v-chat:has([data-close]:is(.cc-emoji-panel,.cc-attach-menu)){--v-tbSpace:var(--v-tbRest)}
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
   --accent:#4f638c;--accent-soft:rgba(95,115,156,.16);--accent-light:rgba(95,115,156,.08);
@@ -558,7 +560,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 /* 表情包、加号面板照微信量的（393pt 宽的 iPhone）：加号面板 241 + 底部安全区（约 275），表情面板 353 + 安全区（约 387），
    都不超过键盘（网页的键盘带一条系统工具栏，约 404，比微信的 345 高）。
    打开时从原来那块的高度（--s-panelFrom：键盘 / 另一个面板 / 0）变到自己的高度，输入栏跟着走；
-   关掉时 CcChat 加 data-close 缩到 0，缩完才拿掉；切回键盘时加 data-to-kb，长回键盘的高度再收，输入栏不会被键盘盖住。
+   关掉时 CcChat 加 data-close，缩到 tab 栏那块的高度（--v-tbRest），输入栏正好落回 tab 栏上面的老位置，同时 tab 栏滑回来、面板内容淡掉，缩完才拿掉；
+   从没有面板打开时也从这个高度长起（输入栏从老位置升上去，不先掉到底边）；切回键盘时加 data-to-kb，长回键盘的高度再收，输入栏不会被键盘盖住。
    CcChat 等多久照这里的 transition-duration。加号面板排成一格一格的大按钮，一行 4 个 */
 .v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{box-sizing:border-box;overflow:hidden;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line);transition:height var(--s-kbDur) var(--s-kbEase),padding var(--s-kbDur) var(--s-kbEase)}
 .v-chat .cc-attach-menu{height:min(var(--s-kb,300px),calc(241px + var(--s-bottom)))}
@@ -566,9 +569,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat [data-from]:is(.cc-attach-menu,.cc-emoji-panel){animation:v-panel-in var(--s-kbDur) var(--s-kbEase)}
 .v-chat [data-from="0"]:is(.cc-attach-menu,.cc-emoji-panel){animation-name:v-panel-up}
 .v-chat [data-to-kb]:is(.cc-attach-menu,.cc-emoji-panel){height:var(--s-kb,300px)}
-.v-chat [data-close]:is(.cc-attach-menu,.cc-emoji-panel){height:0;padding-top:0;padding-bottom:0;border-top-width:0}
+.v-chat [data-close]:is(.cc-attach-menu,.cc-emoji-panel){height:var(--v-tbRest);padding-top:0;padding-bottom:0;border-top-width:0}
+.v-chat [data-close]:is(.cc-attach-menu,.cc-emoji-panel)>*{opacity:0;transition:opacity var(--s-kbDur) var(--s-kbEase)}
 @keyframes v-panel-in{from{height:var(--s-panelFrom)}}
-@keyframes v-panel-up{from{height:0;padding-top:0;padding-bottom:0}}
+@keyframes v-panel-up{from{height:var(--v-tbRest);padding-top:0;padding-bottom:0}}
 .v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--s-bottom)}
 .v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
 .v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--s-bottom)}

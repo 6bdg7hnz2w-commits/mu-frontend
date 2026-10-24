@@ -1176,6 +1176,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 点输入框弹键盘时，键盘真的升上来那一下给面板加 data-to-kb（长回键盘的高度），长完再收，输入框不会被键盘盖住。
   // 等多久照面板自己的 transition-duration：皮肤没写过渡（Clawd）就是 0，立刻收
   const panelOpen = emojiOpen || attachOpen
+  const [panelClosing, setPanelClosing] = useState(false) // 面板在缩：tab 栏马上回来，和收键盘一样同一个节奏
   const panelEl = () => roomRef.current?.querySelector('.cc-attach-menu,.cc-emoji-panel')
   const panelDur = (el) => el ? parseFloat(getComputedStyle(el).transitionDuration) * 1000 || 0 : 0
   const closePanels = (animate = true) => {
@@ -1183,11 +1184,14 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     const el = animate && panelEl(), ms = panelDur(el)
     if (!ms) { setEmojiOpen(false); setAttachOpen(false); return }
     el.setAttribute('data-close', '')
-    panelCloseT.current = setTimeout(() => { setEmojiOpen(false); setAttachOpen(false) }, ms)
+    setPanelClosing(true)
+    panelCloseT.current = setTimeout(() => { setEmojiOpen(false); setAttachOpen(false); setPanelClosing(false) }, ms)
   }
   const togglePanel = (which) => {
     if ((which === 'emoji' ? emojiOpen : attachOpen) && !panelEl()?.hasAttribute('data-close')) { closePanels(); return }
     clearTimeout(panelCloseT.current)
+    panelEl()?.removeAttribute('data-close')
+    setPanelClosing(false)
     const vv = window.visualViewport, full = document.documentElement.getBoundingClientRect().height
     const kb = vv && vv.height < full - 150 ? full - vv.height : 0
     setPanelFrom(Math.round(kb || panelEl()?.offsetHeight || 0))
@@ -1246,7 +1250,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     onUnder, slideIn,
   })
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
-  useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
+  useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen && !panelClosing })) }, [panelOpen, panelClosing])
   useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
   // 消息列表贴底（useStickToBottom.js）；stickBottom：英文版（Vesper）点输入框、收起键盘时回到最底下
   const stickBottom = useStickToBottom(listRef, detachedRef, say(false, true))
