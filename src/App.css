@@ -629,11 +629,15 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-edit-actions button{border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:12px;padding:3px 12px;font-size:13px;cursor:pointer}
 .cc-edit-actions .cc-edit-save{color:var(--text);font-weight:600}
 .cc-edit-actions button:disabled{opacity:.45;cursor:default}
-.image-lightbox-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300}
+.image-lightbox-overlay{position:fixed;inset:0;z-index:300;touch-action:pan-x;-webkit-user-select:none;user-select:none}
+.image-lightbox-overlay.zoomed,.image-lightbox-overlay.closing{touch-action:none}
+.image-lightbox-bg{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
 .image-lightbox-track{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior:contain;scrollbar-width:none}
+.image-lightbox-overlay.zoomed .image-lightbox-track{overflow-x:hidden}
 .image-lightbox-track::-webkit-scrollbar{display:none}
-.image-lightbox-slide{flex:0 0 100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
-.image-lightbox-slide img{max-width:100%;max-height:100%;border-radius:8px}
+.image-lightbox-slide{flex:0 0 100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.image-lightbox-slide img{flex-shrink:0;display:block;will-change:transform;-webkit-touch-callout:none}
+.image-lightbox-overlay.closing .image-lightbox-more,.image-lightbox-overlay.closing .image-lightbox-count{opacity:0;transition:opacity .2s}
 .image-lightbox-count{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);text-align:center;color:rgba(255,255,255,.75);font-size:13px;letter-spacing:.04em;pointer-events:none}
 .image-lightbox-more{position:absolute;z-index:1;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;color:#fff;background:rgba(255,255,255,.14)}
 

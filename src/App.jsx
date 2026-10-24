@@ -3146,7 +3146,7 @@ function CcPendingRow({ items, onReorder, onOpen, onRemove }) {
         </div>
       ) : (
         <div key={p.key} ref={keep(p.key)} data-pk={p.key} className={`composer-image-preview${dragKey === p.key ? ' dragging' : ''}`}>
-          <img src={p.previewUrl} alt="" draggable={false} onClick={() => onOpen(p)} />
+          <img src={p.previewUrl} alt="" draggable={false} data-lb={p.previewUrl} onClick={() => onOpen(p)} />
           <button onClick={() => onRemove(p.key)} aria-label="Remove image">{I.close}</button>
         </div>
       ))}
@@ -3159,35 +3159,193 @@ function CcPendingRow({ items, onReorder, onOpen, onRemove }) {
 // 分享必须在点击的那一下同步调用（iOS 会拦掉异步之后的调用），所以一打开就先把图读成 File
 const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif' }
 // 一组图左右滑着看（聊天里她发过的所有图、草稿里待发的图），从点开的那张开始；横向 scroll-snap，手指滑就是系统原生的手感
-// items：[{ path?, localUrl? }]。path 是 bridge 上的图：先用缩略图垫着，滑到附近了再取原图（分享的也是原图）
+// items：[{ path?, localUrl?, lb? }]。path 是 bridge 上的图：先用缩略图垫着，滑到附近了再取原图（分享的也是原图）。
+// lb 是聊天里那张缩略图的 data-lb：打开时图从缩略图的位置和大小放大到全屏（FLIP），关的时候缩回去；找不到就原地淡入淡出。
+// 手势照微信：单击关（等 250ms 确认不是双击）、按住往下拖跟手缩小、背景变淡，拖够远松手就关；双指捏合缩放，
+// 双击在点的位置放大到 2 倍、再双击还原；放大以后单指拖着看，这时不左右翻页、往下拖也不关
+const LB_MS = 300
+const LB_EASE = 'cubic-bezier(.2,.8,.2,1)'
+const lbThumb = (key) => { try { return key ? document.querySelector(`[data-lb="${CSS.escape(key)}"]`) : null } catch { return null } }
+// 图在屏幕上按 contain 放下时的大小（不放大小于屏幕的缩略图也照原图比例铺满）
+const lbFit = (w, h) => { const W = window.innerWidth, H = window.innerHeight, k = Math.min(W / w, H / h); return [w * k, h * k] }
+// 从缩略图（rect，裁成方块的）到全屏那张图（box，没有 transform 时的位置）的变换：等比放到能盖住缩略图，再裁掉多出来的
+function lbFrom(rect, box, radius = 12) {
+  const s = Math.max(rect.width / box.width, rect.height / box.height)
+  const dx = rect.left + rect.width / 2 - (box.left + box.width / 2), dy = rect.top + rect.height / 2 - (box.top + box.height / 2)
+  const ix = (box.width - rect.width / s) / 2, iy = (box.height - rect.height / s) / 2
+  return { transform: `translate(${dx}px,${dy}px) scale(${s})`, clipPath: `inset(${iy}px ${ix}px round ${radius / s}px)` }
+}
 function ImageLightbox({ items, index = 0, onClose }) {
   const say = useCcSay()
   const [at, setAt] = useState(index)
+  const atRef = useRef(index)
   const [files, setFiles] = useState({}) // 第几张 → 读好的 File（分享要在点的那一下同步调用）
-  const track = useRef(null)
+  const [zoomed, setZoomed] = useState(false)
+  const track = useRef(null), overlay = useRef(null), bg = useRef(null)
+  const imgs = useRef(new Map()) // 第几张 → 它的 <img>
+  const z = useRef({ s: 1, x: 0, y: 0 }) // 当前这张的缩放和位移
+  const g = useRef({ pts: new Map() }) // 手势
+  const closing = useRef(false)
   useLayoutEffect(() => { const el = track.current; if (el) el.scrollLeft = index * el.clientWidth }, [index])
-  const onScroll = (e) => { const el = e.currentTarget; setAt(Math.round(el.scrollLeft / Math.max(el.clientWidth, 1))) }
+  const onScroll = (e) => {
+    const el = e.currentTarget, i = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1))
+    if (i !== atRef.current) { reset(false); atRef.current = i; setAt(i) }
+  }
   const onFile = useCallback((i, f) => setFiles(prev => ({ ...prev, [i]: f })), [])
   const file = files[at]
   const share = (e) => {
     e.stopPropagation()
     navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
   }
+  const cur = () => imgs.current.get(atRef.current)
+  const setBg = (o, ms = 0) => { const el = bg.current; if (!el) return; el.style.transition = ms ? `opacity ${ms}ms ease-out` : 'none'; el.style.opacity = String(o) }
+  const apply = (ms = 0) => {
+    const el = cur(); if (!el) return
+    const { s, x, y } = z.current
+    el.style.transition = ms ? `transform ${ms}ms ${LB_EASE}` : 'none'
+    el.style.transform = s === 1 && !x && !y ? '' : `translate(${x}px,${y}px) scale(${s})`
+  }
+  const reset = (anim = true) => { z.current = { s: 1, x: 0, y: 0 }; apply(anim ? 220 : 0); setZoomed(false) }
+  // 放大以后别拖出图外太多：每边最多拖到图的边贴着屏幕边
+  const clampPan = () => {
+    const el = cur(); if (!el) return
+    const { s } = z.current, W = window.innerWidth, H = window.innerHeight
+    const mx = Math.max(0, (el.offsetWidth * s - W) / 2), my = Math.max(0, (el.offsetHeight * s - H) / 2)
+    z.current.x = Math.min(mx, Math.max(-mx, z.current.x)); z.current.y = Math.min(my, Math.max(-my, z.current.y))
+  }
+  // 屏幕上的点 p 换成图上的点（以图的中心为原点、未缩放），缩放到 s 以后让它还在 p 下面
+  const zoomAt = (p, s, base = z.current, c0 = p) => {
+    const el = cur(); if (!el) return
+    const r = el.parentElement.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2
+    const lx = (c0.x - cx - base.x) / base.s, ly = (c0.y - cy - base.y) / base.s
+    z.current = { s, x: p.x - cx - s * lx, y: p.y - cy - s * ly }
+  }
+
+  // 打开：第一张图有了尺寸就从缩略图放大过来，背景同时从透明变黑
+  const opened = useRef(false)
+  const open = useCallback((el) => {
+    if (opened.current || !el) return
+    opened.current = true
+    const th = lbThumb(items[index]?.lb), rect = th?.getBoundingClientRect()
+    setBg(1, LB_MS)
+    if (!rect?.width || ccReduceMotion()) { el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' }); return }
+    const from = lbFrom(rect, el.getBoundingClientRect(), parseFloat(getComputedStyle(th).borderTopLeftRadius) || 12)
+    el.animate([{ ...from, opacity: 1 }, { transform: 'none', clipPath: 'inset(0px 0px round 0px)', opacity: 1 }], { duration: LB_MS, easing: LB_EASE })
+  }, [items, index])
+  // 关：缩回聊天里那张缩略图的位置（不在屏幕上就原地缩小淡出），背景跟着变透明
+  const close = () => {
+    if (closing.current) return
+    closing.current = true
+    const el = cur()
+    if (!el) { onClose(); return }
+    const now = getComputedStyle(el).transform
+    el.style.transition = 'none'; el.style.transform = ''
+    const box = el.getBoundingClientRect()
+    const th = lbThumb(items[atRef.current]?.lb), rect = th?.getBoundingClientRect()
+    const seen = rect?.width && rect.bottom > 0 && rect.top < window.innerHeight
+    setBg(0, LB_MS)
+    overlay.current?.classList.add('closing')
+    const to = seen && !ccReduceMotion() ? lbFrom(rect, box, parseFloat(getComputedStyle(th).borderTopLeftRadius) || 12) : { transform: `${now === 'none' ? '' : now} scale(.9)`, opacity: 0 }
+    const a = el.animate([{ transform: now, clipPath: 'inset(0px 0px round 0px)', opacity: 1 }, { opacity: 1, ...to }], { duration: LB_MS, easing: LB_EASE, fill: 'forwards' })
+    let done = false
+    const end = () => { if (!done) { done = true; onClose() } }
+    a.onfinish = a.oncancel = end
+    setTimeout(end, LB_MS + 250) // 动画事件没来（切到后台之类）也一定关掉
+  }
+
+  const tapTimer = useRef(0), lastTap = useRef(null)
+  const down = (e) => {
+    if (e.target.closest('button') || closing.current) return
+    const st = g.current
+    st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (st.pts.size === 1) Object.assign(st, { mode: null, p0: { x: e.clientX, y: e.clientY }, t0: Date.now(), base: { ...z.current }, moved: false })
+    if (st.pts.size === 2) {
+      const [a, b] = [...st.pts.values()]
+      Object.assign(st, { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, c0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, base: { ...z.current }, moved: true })
+      clearTimeout(tapTimer.current)
+    }
+  }
+  const move = (e) => {
+    const st = g.current
+    if (!st.pts.has(e.pointerId) || closing.current) return
+    st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (st.mode === 'pinch' && st.pts.size >= 2) {
+      const [a, b] = [...st.pts.values()]
+      const s = Math.min(5, Math.max(0.7, st.base.s * Math.hypot(a.x - b.x, a.y - b.y) / st.d0))
+      zoomAt({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, s, st.base, st.c0)
+      apply()
+      return
+    }
+    const dx = e.clientX - st.p0.x, dy = e.clientY - st.p0.y
+    if (!st.moved && Math.hypot(dx, dy) > 8) st.moved = true
+    if (!st.moved) return
+    if (st.base.s > 1) { // 放大了：拖着看
+      st.mode = 'pan'
+      z.current = { s: st.base.s, x: st.base.x + dx, y: st.base.y + dy }
+      apply(); return
+    }
+    if (!st.mode) st.mode = dy > 0 && Math.abs(dy) > Math.abs(dx) ? 'drag' : 'none'
+    if (st.mode !== 'drag') return
+    // 往下拖：跟着手指走，越往下越小，背景越淡
+    const H = window.innerHeight, k = Math.max(0, dy) / H
+    z.current = { s: Math.max(0.45, 1 - k * 0.9), x: dx, y: dy }
+    apply(); setBg(Math.max(0, 1 - k * 2.2))
+  }
+  const up = (e) => {
+    const st = g.current
+    if (!st.pts.has(e.pointerId)) return
+    st.pts.delete(e.pointerId)
+    if (st.mode === 'pinch') {
+      if (st.pts.size) return // 还剩一根手指：等它也抬起来
+      if (z.current.s <= 1.02) reset()
+      else { if (z.current.s > 4) zoomAt(st.c0, 4); clampPan(); apply(220); setZoomed(true) }
+      st.mode = null; return
+    }
+    if (st.mode === 'pan') { clampPan(); apply(220); return }
+    if (st.mode === 'drag') {
+      const dy = e.clientY - st.p0.y, fast = dy > 40 && dy / Math.max(1, Date.now() - st.t0) > 0.6
+      if (dy > 110 || fast) close()
+      else { reset(); setBg(1, 220) }
+      return
+    }
+    if (st.moved || e.type === 'pointercancel' || Date.now() - st.t0 > 300) return
+    // 点了一下：250ms 里又点一下是双击（在点的位置放大到 2 倍 / 还原），不然就是单击，关
+    const p = { x: e.clientX, y: e.clientY }, last = lastTap.current
+    if (last && Date.now() - last.t < 250 && Math.hypot(p.x - last.x, p.y - last.y) < 30) {
+      clearTimeout(tapTimer.current); lastTap.current = null
+      if (z.current.s > 1) reset()
+      else { zoomAt(p, 2, { s: 1, x: 0, y: 0 }); clampPan(); apply(260); setZoomed(true) }
+      return
+    }
+    lastTap.current = { ...p, t: Date.now() }
+    clearTimeout(tapTimer.current)
+    tapTimer.current = setTimeout(() => { lastTap.current = null; close() }, 250)
+  }
+  useEffect(() => () => clearTimeout(tapTimer.current), [])
+  // 图一直没出来（取不到）：背景也照样变黑，不卡在透明
+  useEffect(() => { const t = setTimeout(() => { if (!opened.current) setBg(1, 200) }, 600); return () => clearTimeout(t) }, [])
+
   // 挂到 body 上：Vesper 的聊天在自己的层里，不挂出去会被底下的 tab 栏压住
   return createPortal(
-    <div className="image-lightbox-overlay" onClick={onClose}>
+    <div className={`image-lightbox-overlay${zoomed ? ' zoomed' : ''}`} ref={overlay}
+      onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div className="image-lightbox-bg" ref={bg} />
       {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
       <div className="image-lightbox-track" ref={track} onScroll={onScroll}>
-        {items.map((img, i) => <LightboxSlide key={img.path || img.localUrl || i} img={img} near={Math.abs(i - at) <= 1} onFile={f => onFile(i, f)} />)}
+        {items.map((img, i) => <LightboxSlide key={img.path || img.localUrl || i} img={img} near={Math.abs(i - at) <= 1}
+          onFile={f => onFile(i, f)} imgRef={el => { if (el) imgs.current.set(i, el); else imgs.current.delete(i) }}
+          onReady={i === index ? open : undefined} />)}
       </div>
       {items.length > 1 && <div className="image-lightbox-count">{at + 1} / {items.length}</div>}
     </div>,
     document.body,
   )
 }
-function LightboxSlide({ img, near, onFile }) {
+// 一张：先用已经有的缩略图（和聊天里那张同一个地址，不会空白），原图到了直接换掉，尺寸按原图比例铺满屏幕、不跳
+function LightboxSlide({ img, near, onFile, imgRef, onReady }) {
   const [shown, setShown] = useState(img.localUrl || (img.path && (ccImageCache.get(img.path) || ccImageCache.get(`${img.path}#thumb`))) || null)
   const [full, setFull] = useState(!img.path || !!ccImageCache.get(img.path))
+  const [size, setSize] = useState(null)
   useEffect(() => {
     if (full || !near) return
     let alive = true
@@ -3205,7 +3363,15 @@ function LightboxSlide({ img, near, onFile }) {
     }).catch(() => {})
     return () => { alive = false }
   }, [shown, full])
-  return <div className="image-lightbox-slide">{shown && <img src={shown} alt="" />}</div>
+  const el = useRef(null)
+  const onLoad = (e) => { const t = e.currentTarget; if (!size && t.naturalWidth) setSize(lbFit(t.naturalWidth, t.naturalHeight)) }
+  useLayoutEffect(() => { if (size && onReady) onReady(el.current) }, [size, onReady])
+  return (
+    <div className="image-lightbox-slide">
+      {shown && <img ref={n => { el.current = n; imgRef(n) }} src={shown} alt="" draggable={false} onLoad={onLoad}
+        style={size ? { width: size[0], height: size[1] } : { opacity: 0 }} />}
+    </div>
+  )
 }
 
 // 聊天里显示缩略图；点开交给 ImageLightbox 去取原图（刚发的图本地就有原图，直接用）
@@ -3221,7 +3387,7 @@ function CcImage({ img, onOpen }) {
   }, [img.path, url])
   if (failed) return <div className="cc-thumb cc-thumb-gone">{say('图片已过期', 'Image expired')}</div>
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
-  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(img)} />
+  return <img src={url} alt="" className="cc-thumb" data-lb={img.path || img.localUrl} onClick={() => onOpen(img)} />
 }
 // 按住说话：录音交给后端 /api/cc/listen（→ bridge → VPS 本机的 ears 转写 + 听语气），回 { path, text, emotion, … }
 // 声纹锁认不出是她（422）、太短（400）：这段不发，err.drop 让发送那边直接撤掉临时消息
@@ -3782,13 +3948,13 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const rows = useMemo(() => ccRows(messages), [messages])
   // 点开聊天里的一张图：聊天里所有的图按顺序排成一组，左右滑着看
   const openChatImage = (img) => {
-    const items = rows.flatMap(r => r.m?.images || []).map(im => ({ path: im.localUrl ? null : im.path, localUrl: im.localUrl }))
+    const items = rows.flatMap(r => r.m?.images || []).map(im => ({ path: im.localUrl ? null : im.path, localUrl: im.localUrl, lb: im.path || im.localUrl }))
     const all = rows.flatMap(r => r.m?.images || [])
     setLightbox({ items, index: Math.max(all.indexOf(img), 0) })
   }
   const openPendingImage = (p) => {
     const imgs = pending.filter(x => x.kind === 'image')
-    setLightbox({ items: imgs.map(x => ({ localUrl: x.previewUrl })), index: Math.max(imgs.indexOf(p), 0) })
+    setLightbox({ items: imgs.map(x => ({ localUrl: x.previewUrl, lb: x.previewUrl })), index: Math.max(imgs.indexOf(p), 0) })
   }
   // 正在说的那一块：还亮着"正在输入"，而且列表最后一行就是他的一块（她发完还没回时最后一行是她的，三个点单独一行）
   // 再加一道保险：这块的第一段得是"正在输入"亮起之后才到的，免得把上一轮已经说完的那块当成正在说
@@ -4226,9 +4392,9 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         </div>
         {attachOpen && (
           <div className="cc-attach-menu">
-            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
-            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
-            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
+            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}><i>{I.camera}</i><span>Camera</span></button>}
+            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}><i>{I.photo}</i><span>{say('照片', 'Photos')}</span></button>
+            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}><i>{I.file}</i><span>{say('文件', 'Files')}</span></button>
           </div>
         )}
         {emojiOpen && <div className="cc-emoji-panel"><div className="cc-emoji-soon">{say('表情包在做了', 'Stickers are on the way')}</div></div>}

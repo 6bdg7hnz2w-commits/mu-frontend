@@ -19,6 +19,9 @@
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);font-variant-numeric:lining-nums;line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
+/* 聊天的面板开着时外框不跟键盘缩：从键盘切到面板，面板一开始就在键盘后面那块，键盘退下去正好露出来，输入框不动；
+   切回键盘时键盘盖住面板升上来，升好了才收面板（App.jsx 的 onInputFocus） */
+.vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel){height:100%}
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
   --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;
@@ -524,13 +527,16 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
 .v-chat .send-btn{width:36px;height:36px;background:var(--v-acc)}
 .v-chat .send-btn svg path{stroke:var(--v-acc-ink)}
-.v-chat .cc-attach-menu button{flex-direction:column;justify-content:center;gap:8px;width:72px;height:76px;padding:0;border:1px solid var(--v-line);border-radius:18px;background:var(--v-card);color:var(--v-ink2);font-size:12.5px}
-.v-chat .cc-attach-menu button svg{width:22px;height:22px}
-/* 表情包面板占键盘的位置：高度 = 上次键盘的高度（VesperApp 记的 --v-kb）；加号面板只有一行按钮，高度跟内容走，三个按钮均分 */
-.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
-.v-chat .cc-emoji-panel{height:var(--v-kb,320px);padding:12px 10px var(--v-bottom)}
+.v-chat .cc-attach-menu button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--v-ink2);font-family:var(--v-sans);font-size:12.5px}
+.v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
+.v-chat .cc-attach-menu button:disabled{opacity:.4}
+.v-chat .cc-attach-menu button svg{width:28px;height:28px}
+/* 表情包、加号面板都占键盘的位置：高度 = 上次键盘的实际高度（VesperApp 用 visualViewport 记的 --v-kb，没记过先用 300px），
+   键盘和面板互换时输入框不动。加号面板照微信排成一格一格的大按钮，一行 4 个 */
+.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--v-kb,300px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
+.v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--v-bottom)}
 .v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
-.v-chat .cc-attach-menu{display:flex;justify-content:space-evenly;align-items:center;padding:18px 10px calc(var(--v-bottom) + 18px)}
+.v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--v-bottom)}
 .v-chat .cc-jump-btn{background:var(--v-card);border:1px solid var(--v-line);color:var(--v-ink);box-shadow:0 6px 18px rgba(20,30,60,.16)}
 .v-chat .cc-notice{border-radius:12px}
 
