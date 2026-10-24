@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import { UsagePage } from './Usage'
 import { setSkin } from './skin.js'
@@ -279,19 +279,38 @@ function useSwipeBack(onBack) {
 // 原生监听而不是 React 的 onTouch*：看大图是 portal 挂在 body 上的，React 的触摸事件会顺着组件树冒泡回聊天页，误触返回；
 // 另外跟手拖要在 touchmove 里 preventDefault，React 的 touchmove 是被动的。
 // blocked()：这时不许起手（大图、弹窗、录音…）；beforeBack()：真的要退时先做的事（收键盘、收面板）
+// 和聊天页同级、带 data-swipe-follow 的元素（Vesper 的壁纸）跟着一起移；onUnder(true/false)：拖动 / 滑入期间要不要在底下垫着对话列表
+// slideIn：这次挂载是从对话列表点进来的，从右边滑进来（和返回对称）
 const SWIPE_EDGE = 20
-function useChatSwipeBack(ref, { onBack, blocked, beforeBack }) {
+function chatSlider(el) {
+  const follow = () => el.parentElement?.querySelectorAll(':scope > [data-swipe-follow]') || []
+  return (x, ms) => {
+    for (const n of [el, ...follow()]) {
+      n.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.8,.2,1)` : 'none'
+      n.style.transform = x ? `translateX(${x}px)` : ''
+    }
+    el.style.boxShadow = x ? '-8px 0 24px rgba(0,0,0,.18)' : ''
+  }
+}
+function useChatSwipeBack(ref, { onBack, blocked, beforeBack, onUnder, slideIn }) {
   const cb = useRef({})
-  cb.current = { onBack, blocked, beforeBack }
+  cb.current = { onBack, blocked, beforeBack, onUnder }
+  // 滑入要在第一次画出来之前就放到右边，不然先闪一帧
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !slideIn) return
+    const set = chatSlider(el), w = el.offsetWidth || window.innerWidth
+    set(w, 0)
+    void el.offsetWidth // 先让「在右边」这一帧生效，再滑回来
+    set(0, 320)
+    const t = setTimeout(() => { set(0, 0); cb.current.onUnder?.(false) }, 340)
+    return () => { clearTimeout(t); set(0, 0) }
+  }, [ref]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    let s = null
-    const set = (x, ms) => {
-      el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.8,.2,1)` : 'none'
-      el.style.transform = x ? `translateX(${x}px)` : ''
-      el.style.boxShadow = x ? '-8px 0 24px rgba(0,0,0,.18)' : ''
-    }
+    let s = null, back = null
+    const set = chatSlider(el)
     const start = (e) => {
       s = null
       if (e.touches.length !== 1) return
@@ -311,6 +330,7 @@ function useChatSwipeBack(ref, { onBack, blocked, beforeBack }) {
         clearTimeout(s.timer)
         if (dx <= 0 || Math.abs(dy) > dx || e.touches.length > 1) { s = null; return } // 先往上下 / 往左走的不是返回
         s.on = true
+        cb.current.onUnder?.(true)
       }
       e.preventDefault()
       s.dx = Math.max(0, dx)
@@ -327,15 +347,18 @@ function useChatSwipeBack(ref, { onBack, blocked, beforeBack }) {
       if (e.type === 'touchend' && (g.dx > w * 0.35 || (g.v > 0.5 && g.dx > 40))) {
         cb.current.beforeBack?.()
         set(w, 200)
-        setTimeout(() => { cb.current.onBack?.(); set(0, 0) }, 200)
-      } else set(0, 220) // 不够远：弹回去
+        back = setTimeout(() => { cb.current.onBack?.(); set(0, 0) }, 200)
+      } else { // 不够远：弹回去，弹完再撤掉底下的列表
+        set(0, 220)
+        back = setTimeout(() => cb.current.onUnder?.(false), 240)
+      }
     }
     el.addEventListener('touchstart', start, { passive: true })
     el.addEventListener('touchmove', move, { passive: false })
     el.addEventListener('touchend', end)
     el.addEventListener('touchcancel', end)
     return () => {
-      clearTimeout(s?.timer)
+      clearTimeout(s?.timer); clearTimeout(back)
       el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move)
       el.removeEventListener('touchend', end); el.removeEventListener('touchcancel', end)
     }
@@ -525,24 +548,33 @@ function ChatListPage({ onOpenCC }) {
 
 const CC_SESSION = { id: 'cc' }
 
-function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage }) {
+function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage, slideIn }) {
   // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。都保留 tab 栏
   // 沐右上角 ⋮ 离开聊天页进 menu，里面三个入口各是一整页：search 查找聊天记录 / brain 回复方式 / usage
   const [view, setView] = useState('cc') // cc / list / menu / search / brain / usage
   const [jumpTo, setJumpTo] = useState(null) // 搜索结果点回来：{ id }，聊天页挂载时停在那条
   const searchSaved = useRef({ q: '', res: null, scrollTop: 0 }) // 搜过的词和结果，再进来还在
-  const go = (v) => { if (v === 'usage' && onUsage) { onUsage(); return } setJumpTo(null); setView(v) }
+  // slideIn（Vesper）：从列表点进沐时聊天页从右边滑进来；滑入和右滑返回的时候底下垫着列表（under）
+  const [under, setUnder] = useState(false)
+  const [entering, setEntering] = useState(false)
+  const go = (v) => {
+    if (v === 'usage' && onUsage) { onUsage(); return }
+    const enter = !!slideIn && view === 'list' && v === 'cc'
+    setEntering(enter); setUnder(enter); setJumpTo(null); setView(v)
+  }
   const swipeUsage = useSwipeBack(() => go('menu'))
   useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Vesper 要知道是不是进了二级页（menu / 查找 / 回复方式 / Usage）：二级页收起底部 tab
   useEffect(() => { onSubPage?.(view !== 'cc' && view !== 'list') }, [view, onSubPage])
   useEffect(() => () => onSubPage?.(false), [onSubPage])
-  const page = view === 'cc' ? <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} />
+  const list = <ChatListPage onOpenCC={() => go('cc')} />
+  const room = <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} slideIn={entering} onUnder={slideIn ? setUnder : undefined} />
+  const page = view === 'cc' ? <>{under && <div className="cc-under on">{list}</div>}{room}</>
     : view === 'menu' ? <CcMenuPage onBack={() => go('cc')} onOpen={go} />
     : view === 'search' ? <CcSearchPage saved={searchSaved} onBack={() => go('menu')} onPick={r => { setJumpTo({ id: r.id, n: Date.now() }); setView('cc') }} />
     : view === 'brain' ? <CcBrainScreen onBack={() => go('menu')} />
     : view === 'usage' ? <UsagePage apiFetch={apiFetch} onBack={() => go('menu')} backIcon={I.back} swipe={swipeUsage} />
-    : <ChatListPage onOpenCC={() => go('cc')} />
+    : list
   return <CcLang.Provider value={lang}>{page}</CcLang.Provider>
 }
 
