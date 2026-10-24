@@ -85,6 +85,18 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   | `--s-avatarBg` / `--s-avatarR` | 头像方块 | `--card` / 12px | `--v-cover` / 16px |
   | `--s-mute` / `--s-ink2` / `--s-draft` | 时间、预览、草稿预览的字色 | `--text-dim` / `--text-secondary` / `--accent` | `--v-mute` / `--v-ink2` / `--v-ink2` |
 
+  查找页（App.css 里 `.cc-search-*`）也读这一套：搜索框、结果卡片的底色 / 边框 / 阴影跟会话卡片用同一组 `--s-card` / `--s-cardLine` / `--s-cardShadow`，小字用 `--s-mute`，结果正文用 `--s-body` / `--s-ink2`，输入框字色用 `--s-ink`。另外加了：
+
+  | 变量 | 管什么 | Clawd 不设时 | Vesper |
+  |---|---|---|---|
+  | `--s-input` | 搜索框里输入的字体 | 继承 | `--v-scIn` |
+  | `--s-press` | 按住一条结果时的底色（`.cc-search-hit:active`） | `--card` | `--v-card`（不变色） |
+  | `--s-whoBg` / `--s-whoInk` | 结果上"Me / Soren"那个标签 | 无底 / `--text` | `--v-acc-soft` / `--v-acc`（小胶囊） |
+  | `--s-fromBg` / `--s-fromInk` | 出处标签（Thinking 之类） | `--accent-light` / `--accent` | 无底 / `--v-mute`（只是一行淡字） |
+  | `--s-markBg` / `--s-markInk` | 命中的词 | 无底 / `--accent` | 淡粉底 / `--v-ink` |
+
+  结果卡片 Clawd 只有底下一条线，Vesper 是四边框：写成 `border:var(--s-cardLine);border-bottom:var(--s-cardLine,1px solid var(--border))`，不设时四边清掉、底边兜回原来那条线。`.cc-search-hit:active` 原来被 Vesper 的卡片底色压着（同特异性、vesper.css 在后），所以单独给了 `--s-press`。"没找到 / 搜索中"用的是公共的 `.empty-state`，还留在 vesper.css 里。
+
   Vesper 以前的预览字色（`.v-chat .chatlist-page .session-preview`）把 `.draft` 的高亮也压住了，所以草稿在 Vesper 下和普通预览同色。改变量时单独给了 `--s-draft`，保持原样；想让草稿高亮，改 Vesper 的 `--s-draft` 就行。
 
   按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
@@ -98,6 +110,10 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
     - **原因**：Vesper 有一条全局重置 `.vesper button{background:initial;color:inherit}`，特异性 (0,1,1)，比 App.css 的 `.cc-thinking-head`、`.cc-jump-btn` (0,1,0) 高。以前 Vesper 自己写 `.v-chat .cc-jump-btn` (0,2,0) 把它压回来，删掉这条覆盖后，单类名的共用规则就输了。
     - **正确做法**：颜色这几条单独写一条 `.cc-room .xx{...}`（0,2,0），布局还留在原来的单类名规则里。`.msg-meta .copy-btn`、`.cc-composer-row .attach-btn` 本来就是两个类，不受影响。
     - 工具那行（`.cc-tools` 里的 `.cc-thinking-head`）当时看着是对的，只是因为它继承了 `.cc-tools` 的颜色；单独的"思考过程"没有这层，才露出来。所以比对要把每种状态都摆出来，不能只看 mock 里碰巧有的。
+  - 输入框同理（6f 比对时抓到）：
+    - **现象**：Vesper 下查找页输入框的字从衬线体变回系统字体，高度矮了 4px。
+    - **原因**：Vesper 还有一条 `.vesper input,.vesper textarea,.vesper select{font:inherit;color:var(--v-ink)}`，特异性 (0,1,1)，和 `.cc-search-box input` 一样高，vesper.css 又在后面，所以共用规则读的 `--s-input` 被它盖掉了。以前 Vesper 自己写 `.v-chat .cc-search-box input` (0,2,1) 压回来。
+    - **正确做法**：共用规则写成 `.cc-search-page .cc-search-box input` (0,2,1)。以后共用组件里读变量的 input / textarea 也要多挂一层类名。
   - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。 mock 里没有的状态（语音条、发送失败、补上的、打字中、加号键选中、回到底部键等）往 `.cc-room` 里塞一块静态 DOM 一起抓，动画关掉，免得 opacity 每次不同。
 - `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。
 
