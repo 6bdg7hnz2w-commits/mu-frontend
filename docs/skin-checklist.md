@@ -22,7 +22,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - `<TabShell shell prefix className tabs tab onTab subPage panelTab frameProps>`：画外框（带 `data-shell-frame`、钉在顶上）和 tab 栏，算 `tab-hidden` / `kb-open`。tab 栏类名按 `prefix` 拼（`v-tabbar` / `v-tab` / `v-tab-pill`）。
 
 - `chat/`：聊天页，Clawd 和 Vesper 共用一份（以前在 App.jsx 里）。
-  - `CcChat.jsx`：`CCChatPage`（状态、收发、SSE、键盘和面板三选一），还有菜单、查找、回复方式、图片查看器（查看器第 4 步再单独拆）。
+  - `CcChat.jsx`：`CCChatPage`（状态、收发、SSE、键盘和面板三选一），还有菜单、查找、回复方式。图片缓存 `ccImageCache` / `fetchCcImage` 也在这里。
   - `ChatHeader.jsx`：顶栏（返回、名字和连接状态、⋮）。
   - `Turn.jsx`：列表里的一行。`CcTurn` 是他的一轮，`CcUserMsg` 是她的一条，只管画，动作都从 props 传进来。
   - `Composer.jsx`：输入栏、加号面板、表情面板；`useVoiceRecorder` 管按住说话和语音 / 键盘模式。
@@ -31,11 +31,16 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - `voice.jsx`：语音气泡和播放。`markdown.jsx`：markdown 和复制。
   - 用到的接口（`apiFetch`）、图标 `I`、草稿、左滑返回还在 App.jsx，从那里 import。这是循环 import：只能在函数里用，模块顶层不要碰这些名字，不然加载时是 undefined。
   - 界面文字靠 `CcLang`：Vesper 外面包 `CcLang.Provider value="en"`，整套换英文。
+- `ImageLightbox.jsx` + `lightbox.css`：点开的大图（第 18 条），两个皮肤共用。`<ImageLightbox items index onClose>`，取图走聊天的 `fetchCcImage`（又是循环 import，规矩同上）。样式黑底全屏，不分皮肤，所以 CSS 也放在 shell 里。
+- `sheets.jsx`：底部面板，逻辑在这里，样式在皮肤 CSS 里，类名按 `prefix` 拼（默认 `v`）。
+  - `<ActionSheet title actions onClose>`：iOS 那种操作菜单（`{prefix}-sheet` / `-sheet-card` / `-sheet-title` / `-sheet-cancel`），带 `data-back`，左滑能关。
+  - `<BottomSheet title left right onClose>`：New Event 那种表单面板（`{prefix}-modal {prefix}-bsheet` 和 `-bsheet-*`）。跟着 visualViewport 贴在键盘上方、不让 iOS 滚页面、聚焦时只滚面板自己（第 9 条），新皮肤直接用，别再抄一份。
 
 新皮肤要做的：
 - 外框用 `TabShell`（不用的话：外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`）；
 - 按自己的路由算 `subPage` 传给 `TabShell`；
 - 自己的 CSS 里写外框 `height: var(--v-vh, 100%)`、`top: var(--v-vtop)`；
+- 自己的 CSS 里给 `ActionSheet` / `BottomSheet` 的类名写样式（照 `vesper.css` 的 `.v-sheet*` / `.v-bsheet*`）；
 - `[data-kb-anim]` 时的 height 过渡、面板开着时外框不跟键盘缩，也写在自己的 CSS 里（Vesper 的写法见 `vesper.css` 开头）。
 
 变量名还带着 `--v-` 前缀，等第 6 步统一改。
