@@ -589,8 +589,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .composer-image-preview img{width:64px;height:64px;object-fit:cover;border-radius:10px;display:block}
 .composer-image-preview button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--text);color:var(--bg);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .composer-image-preview button svg{width:12px;height:12px}
-.cc-pending{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px 6px}
-.cc-pending .composer-image-preview{margin:0}
+/* 待发的图和文件排成一行，多了左右滑；上右留出角上 × 的位置，不被滚动裁掉 */
+.cc-pending{display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;margin:0 0 2px;padding:8px 8px 6px 6px}
+.cc-pending::-webkit-scrollbar{display:none}
+.cc-pending .composer-image-preview{margin:0;flex-shrink:0}
 .cc-images{display:flex;flex-wrap:wrap;gap:4px;max-width:78%;margin-bottom:4px}
 .msg.user .cc-images{justify-content:flex-end;margin-left:auto}
 .cc-thumb{width:120px;height:120px;object-fit:cover;border-radius:12px;cursor:pointer;display:block}
@@ -623,9 +625,13 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-edit-actions button{border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:12px;padding:3px 12px;font-size:13px;cursor:pointer}
 .cc-edit-actions .cc-edit-save{color:var(--text);font-weight:600}
 .cc-edit-actions button:disabled{opacity:.45;cursor:default}
-.image-lightbox-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
-.image-lightbox-overlay img{max-width:100%;max-height:100%;border-radius:8px}
-.image-lightbox-more{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;color:#fff;background:rgba(255,255,255,.14)}
+.image-lightbox-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300}
+.image-lightbox-track{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior:contain;scrollbar-width:none}
+.image-lightbox-track::-webkit-scrollbar{display:none}
+.image-lightbox-slide{flex:0 0 100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+.image-lightbox-slide img{max-width:100%;max-height:100%;border-radius:8px}
+.image-lightbox-count{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);text-align:center;color:rgba(255,255,255,.75);font-size:13px;letter-spacing:.04em;pointer-events:none}
+.image-lightbox-more{position:absolute;z-index:1;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;color:#fff;background:rgba(255,255,255,.14)}
 
 /* --- Selectable text in chat (long-press to select / copy) --- */
 .msg .bubble,.msg .bubble *,.thinking-panel-body{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}

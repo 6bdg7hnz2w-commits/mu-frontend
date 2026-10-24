@@ -380,7 +380,6 @@ export default function CalendarTab() {
       )}
       {toast}
     </div>
-    <div className="v-page-fade" />
     </>
   )
 }

@@ -110,7 +110,6 @@ export default function MemoryPage({ onBack }) {
       <div className="v-map-head">
         <button className="v-rd-btn" onClick={onBack} aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg></button>
       </div>
-      <div className="v-map-topfade" />
       <div className="v-map-stamp">
         <svg width="30" height="18" viewBox="0 0 30 18"><path d="M1,17L10,5L15,11L20,3L29,17Z" className="ink" /><path d="M18,6L20,3L22,6Z" className="paper" /></svg>
         <b>S</b><span>EST. 2026</span>

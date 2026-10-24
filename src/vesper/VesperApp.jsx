@@ -149,7 +149,6 @@ function MorePage({ onOpen, onOpenSetting }) {
         <span className="v-row-chev">{V.chevron}</span>
       </div>
     </div>
-    <div className="v-page-fade" />
     </>
   )
 }
@@ -236,7 +235,7 @@ export default function VesperApp() {
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   const frame = useRef(null)
-  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' ? CHROME.home : CHROME.day)
+  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day) // 日记、读书这些从 Home 打开的浅色页也是浅底
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])

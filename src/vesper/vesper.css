@@ -11,7 +11,6 @@
   --v-wpF:brightness(1.02);--v-wpBase:#cdd2e2;--v-glass:rgba(248,249,252,.86);--v-glassLine:rgba(255,255,255,.6);
   --v-glassShadow:0 8px 30px rgba(20,30,60,.10);--v-glassDiv:rgba(28,38,66,.10);--v-hmute:#4a5265;
   --v-whisper:rgba(88,107,148,.76);--v-whisperLine:rgba(255,255,255,.22);
-  --v-topFade:linear-gradient(180deg,rgba(65,79,115,.94) 0%,rgba(65,79,115,.7) 55%,rgba(65,79,115,0) 100%);
   --v-cover:linear-gradient(140deg,#7084ab 0%,#5a6c93 100%);--v-coverIn:#e6eaf1;--v-page:#f8f9fb;
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
   --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'V Dots','Noto Serif SC',serif;--v-scIn:var(--v-sc);--v-serif:'Cormorant Garamond','V Dots','Noto Serif SC',serif;
@@ -29,15 +28,12 @@
   --v-wpF:brightness(.55) saturate(.85);--v-wpBase:#0b0e15;--v-glass:rgba(14,18,27,.52);--v-glassLine:rgba(255,255,255,.09);
   --v-glassShadow:0 10px 30px rgba(0,0,0,.35);--v-glassDiv:rgba(255,255,255,.08);--v-hmute:#9aa3b5;
   --v-whisper:rgba(22,30,48,.62);--v-whisperLine:rgba(136,167,221,.2);
-  --v-topFade:linear-gradient(180deg,rgba(38,46,69,.95) 0%,rgba(38,46,69,.7) 55%,rgba(38,46,69,0) 100%);
   --v-cover:linear-gradient(140deg,#1f293d 0%,#131a28 100%);--v-coverIn:#1a202b;--v-page:#cdd3de;
   color-scheme:dark;
 }
 .vesper button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* 整页（tab 下的四页） */
-/* 顶部那层和底色同色的雾：内容往上滚时淡进去（画布上 Calendar / More 都有） */
-.v-page-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 26px);z-index:2;pointer-events:none;background:linear-gradient(180deg,var(--v-bg) 0%,var(--v-bg) 45%,rgba(0,0,0,0) 100%);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(180deg,#000 45%,transparent);mask-image:linear-gradient(180deg,#000 45%,transparent)}
 .v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--v-top) + 33px) 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
 /* 滚动容器是 flex 列，里面的卡片不许被压扁 */
 .v-page>*,.v-sub-body>*{flex-shrink:0}
@@ -175,10 +171,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-home-scroll{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
 .v-home-body{display:flex;flex-direction:column;gap:14px;padding:calc(var(--v-top) + 45px) 20px calc(var(--v-bottom) + 110px)}
 /* 首页顶上：往上滑的内容到状态栏这里先糊、再压暗，不跟时间叠在一起。两层模糊，越往上越糊 */
-.v-home-fade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 44px);z-index:2;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.62) 0%,rgba(0,0,0,.32) 45%,rgba(0,0,0,0) 100%)}
-.v-home-fade::before,.v-home-fade::after{content:'';position:absolute;inset:0}
-.v-home-fade::before{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--v-top) + 4px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--v-top) + 4px),transparent)}
-.v-home-fade::after{height:calc(var(--v-top) + 16px);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent)}
 .v-hello{display:flex;flex-direction:column;gap:10px;padding:0 8px 22px;color:#fff}
 .v-hello-date{font-style:italic;font-size:17px;letter-spacing:.02em;opacity:.9}
 .v-hello-greet{font-size:31px;font-weight:500;line-height:1.1;letter-spacing:-.005em}
@@ -465,11 +457,16 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
 .v-chat .cc-room>.messages{padding-top:calc(var(--v-top) + 60px)}
 .v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
-.v-chat .cc-conn{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:4px 0 6px;font-size:11px;color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
-.v-chat .cc-room .chatroom-model{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:4px;font-size:11px;color:var(--v-mute)}
-.cc-status-dot{width:5px;height:5px;border-radius:50%;background:#9aa3b5}
-.cc-status-dot.live{background:#7fb89a}
-.cc-status-dot.connecting{background:#c4a06a}
+/* 连接状态：名字右边的小圆点。连接中黄点轻轻呼吸，连上了绿点亮一会儿淡掉，断开是暗红点；不占位、不推动消息列表 */
+.v-chat .cc-name-wrap{position:relative;display:inline-block}
+.v-chat .cc-head-dot{position:absolute;left:calc(100% + 7px);top:50%;width:7px;height:7px;margin-top:-3px;border-radius:50%;background:#9aa3b5;box-shadow:0 0 0 1.5px rgba(255,255,255,.55);pointer-events:none}
+.vesper[data-look="night"] .v-chat .cc-head-dot{box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
+.v-chat .cc-head-dot.connecting{background:#d9a93f;animation:v-dot-breathe 1.6s ease-in-out infinite}
+.v-chat .cc-head-dot.live{background:#5fb47f;animation:v-dot-out .8s ease 3s forwards}
+.v-chat .cc-head-dot.offline{background:#c0605e}
+@keyframes v-dot-breathe{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes v-dot-out{to{opacity:0}}
+@media(prefers-reduced-motion:reduce){.v-chat .cc-head-dot.connecting{animation:none}}
 .v-chat .messages{padding:18px 16px 14px}
 /* 消息之间、一轮里的各段、时间行，按画布的间距：行距 14，一轮内 7（上下各留 4），时间行 11px、图标之间 10 */
 .v-chat .cc-room .msg.user .bubble{box-sizing:content-box}
@@ -703,7 +700,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .vesper[data-look="night"] .v-map{--mps:0 14px 30px rgba(0,0,0,.45);--mp:#12161f;--mi:#dfe3ea;--mm:#7f8899;--mr:#d58c5e;--ml:rgba(200,210,230,.14);--mc:#181d28;--mg:rgba(200,210,230,.04);--mv:rgba(120,150,200,.55);--mct:rgba(200,210,230,.10);--mtx:#aab2c0;--mbody:#c9cfda}
 .v-map-head{position:absolute;top:var(--v-top);left:20px;height:60px;z-index:6;display:flex;align-items:center}
 .v-map-head .v-rd-btn{background:var(--mc)!important;border-color:var(--ml)!important;color:var(--mi)!important}
-.v-map-topfade{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 66px);z-index:3;pointer-events:none;background:linear-gradient(180deg,var(--mp) 55%,transparent)}
 .v-map-stamp{position:absolute;right:22px;top:calc(var(--v-top) + 10px);z-index:5;width:44px;height:50px;border:1.5px solid var(--mi);outline:1px solid var(--ml);outline-offset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--mi)}
 .v-map-stamp .ink{fill:var(--mi)}.v-map-stamp .paper{fill:var(--mp)}
 .v-map-stamp b{font-size:10px;font-weight:600;line-height:1}

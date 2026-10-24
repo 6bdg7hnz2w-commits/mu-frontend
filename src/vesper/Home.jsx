@@ -155,7 +155,6 @@ function HomeScreen({ diaries, opening, onOpenNotebook }) {
           </div>
         </div>
       </div>
-      <div className="v-home-fade" />
     </div>
   )
 }
