@@ -18,6 +18,8 @@ const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none
 const CC_EMOJI_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><circle cx="15" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><path d="M7.8 13.5h8.4a4.2 4.2 0 0 1-8.4 0z" strokeWidth="1.6"/></svg>
 const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
 // 表情面板：常用的这些，点一下插进输入框光标处
+// 面板从原来那块的高度长出来（皮肤的 CSS 用 --s-panelFrom 做开场动画，0 是从底下升上来）
+const panelFromProps = (from) => from == null ? {} : { 'data-from': from ? 'h' : '0', style: { '--s-panelFrom': `${from}px` } }
 const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
 
 // 按住说话。onVoice(blob, duration) 录完交出去发；textareaRef 用来切到语音前先让输入框失焦
@@ -111,7 +113,7 @@ export function useVoiceRecorder({ passcode, textareaRef, onVoice, onNotice }) {
 }
 
 // rec：useVoiceRecorder 的返回值
-export function Composer({ passcode, rec, notice, onClearNotice, pending, onReorderPending, onOpenPending, onRemovePending, textareaRef, input, onInput, onKeyDown, onFocus, onBlur, onTextTouchStart, emojiOpen, attachOpen, onTogglePanel, onCloseAttach, full, fileAccept, filesReady, onPickFiles, onPickImages, onSend }) {
+export function Composer({ passcode, rec, notice, onClearNotice, pending, onReorderPending, onOpenPending, onRemovePending, textareaRef, input, onInput, onKeyDown, onFocus, onBlur, onTextTouchStart, emojiOpen, attachOpen, panelFrom, onTogglePanel, onCloseAttach, full, fileAccept, filesReady, onPickFiles, onPickImages, onSend }) {
   const say = useCcSay()
   const { recording } = rec
   const photoInputRef = useRef(null)
@@ -146,13 +148,13 @@ export function Composer({ passcode, rec, notice, onClearNotice, pending, onReor
         {((!rec.voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={onSend} disabled={!passcode}>{I.send}</button>}
       </div>
       {attachOpen && (
-        <div className="cc-attach-menu">
+        <div className="cc-attach-menu" {...panelFromProps(panelFrom)}>
           {say(false, true) && <button onClick={() => { onCloseAttach(); cameraInputRef.current?.click() }} disabled={!passcode || full}><i>{I.camera}</i><span>Camera</span></button>}
           <button onClick={() => { onCloseAttach(); photoInputRef.current?.click() }} disabled={!passcode || full}><i>{I.photo}</i><span>{say('照片', 'Photos')}</span></button>
           <button onClick={() => { onCloseAttach(); fileInputRef.current?.click() }} disabled={!passcode || !filesReady || full}><i>{I.file}</i><span>{say('文件', 'Files')}</span></button>
         </div>
       )}
-      {emojiOpen && <div className="cc-emoji-panel"><div className="cc-emoji-soon">{say('表情包在做了', 'Stickers are on the way')}</div></div>}
+      {emojiOpen && <div className="cc-emoji-panel" {...panelFromProps(panelFrom)}><div className="cc-emoji-soon">{say('表情包在做了', 'Stickers are on the way')}</div></div>}
     </div>
   )
 }
