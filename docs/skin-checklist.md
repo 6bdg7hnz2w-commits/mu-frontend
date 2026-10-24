@@ -66,6 +66,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 不用 Telegram Web 那套：它现在在 iOS 上只锁 `html{position:fixed}`、高度按 `innerHeight`，以前的 visualViewport 改高度和"聚焦前把输入框挪到屏幕外"的办法都用 `&& false` 关掉了，键盘动画不跟。
   - 消息列表贴底沿用第 8 条的 ResizeObserver：列表高度一变，在画出来之前就把 `scrollTop` 补上差值，不用 smooth。没改成 `column-reverse`：现有的贴底已经够用，改了还会影响往上加载更早消息时的位置保持。
 - 代码在 `src/shell/viewport.js` 的 `useVisibleHeight`、`src/shell/viewport.css` 的 `html.v-lock`、`src/shell/preventScroll.js`。
+- **从一个输入框点到另一个，键盘状态闪一下**：先 focusout 再 focusin，键盘其实一直开着。`useKeyboardOpen` 以前在 focusout 50ms 后无条件判成"关了"，于是 `kb-open`、`tab-hidden` 掉一下，底部面板内容区的留白跟着变，内容先跳一下，然后才是 `reveal` 的平滑滚动。真机现象：New Event 里先点 Notes 再点 Location，先弹一下再滑。现在 50ms 后先看焦点是不是还在某个输入框上，在就不算关（`src/shell/viewport.js`）。
 - **iOS 26 新坑**：收起键盘后 `visualViewport.offsetTop` 有时回不到 0，或者 `height` 一直偏小（[Apple 论坛 800125](https://developer.apple.com/forums/thread/800125)、[WebKit 254861](https://bugs.webkit.org/show_bug.cgi?id=254861)，iOS 27 beta 又有）。我们的外框跟着 `offsetTop` 走，卡住就整体往下偏。现在的处理：失焦后 100ms、600ms 各查一次，`offsetTop` 还大于 0 就 `scrollBy(0,-1)` 再 `scrollBy(0,1)` 推一下。2026-10-24 真机（iOS 26.5.2）上 offsetTop 一直是 0，没遇到，这段先留着。
 
 ### 2c. 下拖收键盘要顺
@@ -150,6 +151,11 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **原因**：面板开合、待发图片那一排出现消失，都会改输入栏高度，列表没跟着补滚动距离。
 - **坑**：一开始在挂载时拿 `listRef`，那时列表还没渲染（先有“加载中”那一屏），是 null，监听根本没挂上。另外 ResizeObserver 在后台标签页里不触发。
 - **正确做法**（ee8a060）：用一个**不带依赖的 `useLayoutEffect`**，每次渲染后在绘制前对一下：贴底（没在看历史）时把高度差加回 scrollTop；换了列表元素就重新挂。键盘起落不经过渲染，交给 ResizeObserver。
+- **收键盘后最后一条离输入栏远一截**（这处改过 2 次）：
+  - 以前的做法：底部附近时把高度差 `d` 加回 scrollTop。
+  - 为什么不对：收键盘时列表一帧帧变高。列表变高时，浏览器自己会把 scrollTop 夹回新的底部，再 `+= d` 就多往上退一截；最后一帧退的那截留了下来，最后一条离输入栏空出一块。真机截图上差不多空了一行，本地模拟 404px 的键盘、24 帧缓出，最后差 49px。
+  - 现在的做法：变化前在底部 80px 以内的，一律直接钉到真正的底（`scrollTop = scrollHeight`），不按差值补。不在底部附近的（在看历史）不动。
+  - 收键盘后的目标距离 = 刚进聊天页时的距离，也就是消息列表自己的底部留白，不另外加减。
 
 ### 9. 弹窗、底部面板、输入卡片被键盘挡
 - **日历待办、日记 New page**：键盘升起后，把整张卡片滚到键盘上方 24px（`keepAboveKeyboard`，跟着 visualViewport 的 resize 对齐，最多 1 秒，再补两次兜底）。
@@ -308,4 +314,6 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - [ ] 下拖收键盘：输入栏贴着键盘往下走，tab 栏同时滑上来，键盘不弹回。
 - [ ] 键盘开着时，手指在顶栏、输入栏、气泡上下拖：整页一点不动；消息列表照常滚，滚到头不带着页面走。New Event 面板、写日记时也一样，面板头上拖不会带着后面那页滚。
 - [ ] 下拖收起键盘后马上再点输入框：键盘正常弹出，不会被收回去。
+- [ ] 收起键盘后，最后一条消息和输入栏的距离跟刚进聊天页时一样，不远也不近。
+- [ ] New Event 里 Notes ⇄ Location 来回点：两个方向都只有一次平滑滚动，不先跳一下。
 - [ ] 量键盘：`src/shell/kbDebug.js` 的读数（聊天顶栏名字 2 秒内连点 5 下）看新机型、新 iOS 版本键盘起落有没有中间值（`N mid values`），有的话可以考虑改回逐帧跟。

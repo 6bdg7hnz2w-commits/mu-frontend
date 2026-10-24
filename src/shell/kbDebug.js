@@ -14,9 +14,17 @@ const r = Math.round
 const bar = () => document.querySelector('.cc-room .composer')?.getBoundingClientRect().bottom
 const frameVh = () => { const f = document.querySelector('[data-shell-frame]'); return f ? f.style.getPropertyValue('--v-vh') || '-' : '-' }
 
-function sample(t0) {
+// 输入框所在的那个能滚的父元素（底部面板的内容区、日记页）
+function scroller(el) {
+  for (let n = el?.parentElement; n && n !== document.body; n = n.parentElement) if (/(auto|scroll)/.test(getComputedStyle(n).overflowY)) return n
+  return null
+}
+
+// 每帧：dt、vv 高度、vv offsetTop、innerHeight、聊天输入栏底边、输入框顶边、它所在滚动区的 scrollTop、底部面板的 top
+function sample(t0, el, sc) {
   const vv = window.visualViewport
-  return [r(performance.now() - t0), r(vv.height), r(vv.offsetTop), window.innerHeight, r(bar() ?? -1)]
+  return [r(performance.now() - t0), r(vv.height), r(vv.offsetTop), window.innerHeight, r(bar() ?? -1),
+    r(el?.getBoundingClientRect().top ?? -1), r(sc?.scrollTop ?? -1), r(document.querySelector('.v-bsheet')?.getBoundingClientRect().top ?? -1)]
 }
 
 // 一条录完：高度换了几次值、头一次变是第几毫秒、最后一次变在第几毫秒、开头和结尾之间有几个中间值
@@ -29,6 +37,7 @@ function summarize(tr) {
   return `${tr.kind === 'focusin' ? '▲open ' : '▼close'} ${a}→${z} · ${changes.length} changes` +
     ` · first ${changes[0]?.[0] ?? '-'}ms last ${changes.at(-1)?.[0] ?? '-'}ms · ${mids} mid values` +
     ` · resize@${tr.resizes.join(',') || '-'} · ${tr.frames.length} frames · bar gap ${Math.min(...gaps)}..${Math.max(...gaps)}` +
+    ` · field ${tr.field} top ${tr.frames[0][5]}→${tr.frames.at(-1)[5]} biggest 1-frame move ${Math.max(0, ...tr.frames.map((f, i) => i ? Math.abs(f[5] - tr.frames[i - 1][5]) : 0))}px` +
     (tr.notes.length ? ` · ${tr.notes.join(' ')}` : '')
 }
 
@@ -39,13 +48,13 @@ function render() {
 
 function record(e) {
   if (!box || !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
-  const t0 = performance.now(), vv = window.visualViewport
-  const tr = { kind: e.type, at: new Date().toISOString(), frames: [sample(t0)], resizes: [], notes: [] }
+  const t0 = performance.now(), vv = window.visualViewport, el = e.target, sc = scroller(el)
+  const tr = { kind: e.type, field: el.placeholder || el.tagName, at: new Date().toISOString(), frames: [sample(t0, el, sc)], resizes: [], notes: [] }
   traces.push(tr); if (traces.length > 10) traces.shift()
   const onResize = () => tr.resizes.push(r(performance.now() - t0))
   vv.addEventListener('resize', onResize)
   const tick = () => {
-    tr.frames.push(sample(t0))
+    tr.frames.push(sample(t0, el, sc))
     if (performance.now() - t0 < REC_MS) requestAnimationFrame(tick)
     else { vv.removeEventListener('resize', onResize); tr.summary = summarize(tr); render() }
   }
@@ -79,7 +88,7 @@ function show() {
   row.style.cssText = 'margin-top:6px;pointer-events:auto'
   row.append(
     btn('Copy', async () => {
-      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom', traces }, null, 0)
+      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom,fieldTop,scrollTop,sheetTop', traces }, null, 0)
       try { await navigator.clipboard.writeText(text); list.textContent = 'Copied ' + traces.length + ' traces\n' + list.textContent } catch {
         const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'width:100%;height:120px;font:9px monospace'; box.append(ta); ta.select()
       }
