@@ -28,6 +28,17 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 键盘收起后去掉 `--v-vh`，`--v-kb` 留着。
 - 代码在 `VesperApp.jsx` 的 `useVisibleHeight`。
 
+### 2b. 键盘起落时整页跳（顶栏被挤到中间、列表先掉下去再弹回）
+- **现象**：弹键盘时先白一帧，顶栏被整个往下挤到屏幕中间再回到位；收键盘时消息列表先掉到输入框下面再弹回来。
+- **原因**：iOS 点输入框后，会自己去滚整个文档（或把 visualViewport 在 layout viewport 里挪开，`offsetTop > 0`）来露出输入框。我们同时又按 `visualViewport.height` 改外框高度，两边叠在一起。光靠 `html, body { overflow: hidden }` 拦不住，iOS 照样会滚。
+- **正确做法**：
+  - 文档钉死：挂上 Vesper 时给 html 加 `v-lock`，`body { position: fixed; top: 0; height: var(--v-doc) }`。
+    - `--v-doc` 是量出来的 html 高度。不能写 `height: 100%`：fixed 的 100% 是视口高度，而 iOS 26 主屏幕模式下那个视口少算了状态栏，底下会又空一条黑（见第 1 条）。
+  - `useVisibleHeight` 在同一个回调里做三件事：`scrollTo(0,0)`；外框 `top` 设为 `visualViewport.offsetTop`（`--v-vtop`）；高度设为 `visualViewport.height`。外框正好盖住看得见的那块，不留空白帧。这个回调同时挂在 `visualViewport` 的 `resize`、`scroll` 和 `window` 的 `scroll` 上。
+  - 点输入框：`touchend` 里先 `preventDefault`，再 `focus({ preventScroll: true })`，iOS 就不会自己滚页面。只在还没聚焦时这么做，已经在打字时照常挪光标、长按选字。
+  - 消息列表贴底沿用第 8 条的 ResizeObserver：列表高度一变，在画出来之前就把 `scrollTop` 补上差值，不用 smooth。没改成 `column-reverse`：现有的贴底已经够用，改了还会影响往上加载更早消息时的位置保持。
+- 代码在 `VesperApp.jsx` 的 `useVisibleHeight`、`vesper.css` 的 `html.v-lock`、`App.jsx` 的 `onInputTouch`。
+
 ### 3. 背景图跟着键盘、面板缩放
 - **现象**：聊天背景是按外框高度铺的，键盘起落、面板开合时背景跟着变。
 - **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--v-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。
@@ -159,6 +170,15 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - iOS 会把拖动当成横向滚动接走，然后发 pointercancel。要用**非被动的 touchmove** 去 preventDefault 才拦得住。
 - 表情：系统 emoji 面板已撤掉，现在是空面板（“Stickers are on the way”），以后放自己的表情包。
 
+### 16b. 一次发多张：上限、进度、单张重试
+- 上限只有一个来源：VPS 上 `/opt/mu-bridge/file_types.json` 里的 `max_items`。前端（`CC_MAX_ITEMS_FALLBACK`）和后端的数字只是拿不到这个文件时的兜底，**只改前端没用**。
+- 一张一张排队传，不能并发：后端会把整份读进内存再转给 VPS，一起传会把 Render 的内存顶满。
+- 上传要用 XHR，不能用 fetch：fetch 拿不到上传进度（`ccUploadForm`）。进度到 95% 就停住，因为剩下的时间是在等后端转给 VPS。
+- 一张失败了接着传后面的，不要整条中断。每张的状态记在临时消息的 `up` 上：`{ pct }` 正在传，`{ failed }` 没传上，`null` 传完了。
+  - 点那张图上的重试，只重传那一张（`deliver(msg, key)`）；全部传上去以后才真正发出这条消息。
+  - 已经传上去的记在 `uploadedRef` 里，重试时不再传。
+- 超过 4 张缩成 84px，免得一条消息占好几屏。
+
 ### 17. 多图发送：一张变成 `[Image #N]`、消息重复、来源标成 “From Claude App”（mu-bridge PR #18）
 - **现象**：
   - 一次发两张图加多行文字，其中一张图在 Claude Code 里变成 `[Image #8]` 文字；
@@ -213,3 +233,5 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - [ ] 每个二级页：tab 收起，内容到底。
 - [ ] 打开 App、切 tab：数字不跳。
 - [ ] 图片查看器：打开和关闭有动画，捏合能缩回。
+- [ ] 聊天里弹键盘、收键盘各两次：顶栏和背景不动，最后一条消息贴着输入框，没有空白帧。
+- [ ] 一次发 20 张：逐张显示进度，断网让其中一张失败，点它能单独重传。
