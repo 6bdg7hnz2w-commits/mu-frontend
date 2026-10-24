@@ -19,6 +19,9 @@
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);font-variant-numeric:lining-nums;line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
+/* 聊天的面板开着时外框不跟键盘缩：从键盘切到面板，面板一开始就在键盘后面那块，键盘退下去正好露出来，输入框不动；
+   切回键盘时键盘盖住面板升上来，升好了才收面板（App.jsx 的 onInputFocus） */
+.vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel){height:100%}
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
   --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;
@@ -151,10 +154,10 @@
 .v-bsheet-head .v-text-btn.strong{font-weight:600}
 .v-bsheet-head .v-text-btn:disabled{opacity:.4}
 .v-bsheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column;gap:12px;padding:16px 16px calc(var(--v-bottom) + 16px)}
-.vesper.kb-open .v-bsheet-body{padding-bottom:16px}
+.vesper.kb-open .v-bsheet-body{padding-bottom:32px} /* 最后的 Notes 能整个滚出来 */
 .v-bsheet-body>*{flex-shrink:0}
 .v-bsheet .v-field{height:44px}
-.v-bsheet textarea.v-field{height:auto;min-height:88px}
+.v-bsheet textarea.v-field{height:auto;min-height:88px;font-family:var(--v-sans)!important;line-height:1.45}
 @keyframes vSheetUp{from{transform:translateY(100%)}to{transform:none}}
 .v-field{width:100%;min-width:0;height:46px;padding:0 14px;border-radius:13px;border:1px solid var(--v-line);background:var(--v-card);font-family:var(--v-sans)!important;font-size:15px;outline:0;-webkit-appearance:none;appearance:none}
 textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-family:var(--v-scIn)!important}
@@ -373,7 +376,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
 .v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
-.vesper.tab-hidden .v-chat,.v-chat:has(.cc-attach-menu){--v-tbSpace:0px} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
+.vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
   --accent:#4f638c;--accent-soft:rgba(95,115,156,.16);--accent-light:rgba(95,115,156,.08);
@@ -501,6 +504,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 /* 气泡里段落之间收紧一点（默认 .8em） */
 .v-chat .cc-turn-body .cc-md>*+*,.v-chat .cc-turn-body .msg-seg+.msg-seg{margin-top:.45em}
 .v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{background:var(--vc-glass)}
+/* 气泡里的代码块：长行自动换行，不横向滚、不超出气泡；字比正文小一号。Copy 复制的是原文，不受换行影响 */
+.v-chat .cc-turn-body .md-pre{max-width:100%}
+.v-chat .cc-turn-body .md-pre pre{overflow-x:visible;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+.v-chat .cc-turn-body .md-pre pre,.v-chat .cc-turn-body .md-pre code{font-size:12.5px}
 .v-chat .msg-time,.v-chat .msg-meta .copy-btn,.v-chat .msg-meta button,.v-chat .cc-thinking-head,.v-chat .cc-tools,.v-chat .cc-msg-note,.v-chat .cc-late{color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
 .v-chat .cc-tool-sum,.v-chat .cc-tool-fail{color:inherit;opacity:.82} /* 读的文件名：跟 Read 同色、略淡，壁纸上也看得清 */
 .v-chat .cc-thinking-body,.v-chat .cc-tools-body{background:var(--vc-glass);border:0;border-radius:12px;padding:10px 12px;color:var(--v-ink2);text-shadow:none}
@@ -520,11 +527,16 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
 .v-chat .send-btn{width:36px;height:36px;background:var(--v-acc)}
 .v-chat .send-btn svg path{stroke:var(--v-acc-ink)}
-.v-chat .cc-attach-menu button{flex-direction:column;justify-content:center;gap:8px;width:72px;height:76px;padding:0;border:1px solid var(--v-line);border-radius:18px;background:var(--v-card);color:var(--v-ink2);font-size:12.5px}
-.v-chat .cc-attach-menu button svg{width:22px;height:22px}
-/* 加号面板占键盘的位置：高度 = 上次键盘的高度（VesperApp 记的 --v-kb），输入框和弹键盘时在同一个高度 */
-.v-chat .cc-attach-menu{height:var(--v-kb,320px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);padding:12px 10px var(--v-bottom);border-top:1px solid var(--v-line)}
-.v-chat .cc-attach-menu{display:flex;align-items:flex-start;gap:14px;padding-top:18px;padding-left:20px}
+.v-chat .cc-attach-menu button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--v-ink2);font-family:var(--v-sans);font-size:12.5px}
+.v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
+.v-chat .cc-attach-menu button:disabled{opacity:.4}
+.v-chat .cc-attach-menu button svg{width:28px;height:28px}
+/* 表情包、加号面板都占键盘的位置：高度 = 上次键盘的实际高度（VesperApp 用 visualViewport 记的 --v-kb，没记过先用 300px），
+   键盘和面板互换时输入框不动。加号面板照微信排成一格一格的大按钮，一行 4 个 */
+.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--v-kb,300px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
+.v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--v-bottom)}
+.v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
+.v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--v-bottom)}
 .v-chat .cc-jump-btn{background:var(--v-card);border:1px solid var(--v-line);color:var(--v-ink);box-shadow:0 6px 18px rgba(20,30,60,.16)}
 .v-chat .cc-notice{border-radius:12px}
 
