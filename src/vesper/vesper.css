@@ -415,7 +415,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --s-himBg:var(--vc-his);--s-himInk:var(--vc-ink);--s-himR:17px 17px 17px 6px;--s-glass:blur(12px);
   --s-body:var(--v-sc);--s-title:var(--v-serif);
   --s-bar:var(--vc-head);--s-barGlass:blur(20px) saturate(1.3);--s-field:var(--v-card);--s-accent:var(--v-acc);--s-accentInk:var(--v-acc-ink);
-  --s-meta:var(--vc-meta);--s-metaShadow:var(--vc-meta-shadow);--s-icon:var(--v-mute);--s-card:var(--v-card);--s-ink:var(--v-ink)}
+  --s-meta:var(--vc-meta);--s-metaShadow:var(--vc-meta-shadow);--s-icon:var(--v-mute);--s-card:var(--v-card);--s-ink:var(--v-ink);
+  /* 按住说话键：录音中、上滑取消。.vesper button 把边框清成 0，描边用内阴影画，不改尺寸；淡色叠在卡片色上，别透出后面 */
+  --s-recBg:linear-gradient(var(--v-acc-soft),var(--v-acc-soft)),var(--v-card);--s-recInk:var(--v-acc);--s-recRing:inset 0 0 0 1px var(--v-acc);
+  --s-cancelBg:linear-gradient(rgba(192,96,94,.12),rgba(192,96,94,.12)),var(--v-card);--s-cancelInk:var(--v-danger);--s-cancelRing:inset 0 0 0 1px var(--v-danger)}
 .vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
@@ -545,7 +548,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);font-family:var(--v-scIn);font-size:15px}
 /* Noto Serif SC 的上沿留得高，西文的提示字会偏下；没字的时候整体往上挪 2px，视觉居中 */
 .v-chat .composer-input-row textarea:placeholder-shown{padding-top:6px;padding-bottom:10px}
-.v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
 .v-chat .send-btn{width:36px;height:36px}
 .v-chat .cc-attach-menu button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--v-ink2);font-family:var(--v-sans);font-size:12.5px}
 .v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}

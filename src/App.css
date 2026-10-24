@@ -840,8 +840,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-composer-row{align-items:center}
 .cc-composer-row .attach-btn{width:34px;height:34px;flex-shrink:0;color:var(--s-icon,var(--text-secondary))}
 .cc-hold-btn{flex:1;height:38px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:15px;font-weight:500;font-family:inherit;letter-spacing:.05em;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
-.cc-hold-btn.recording{background:var(--cc-user-bg);border-color:var(--text-secondary)}
-.cc-hold-btn.cancel{color:#d94444;border-color:#d94444;background:rgba(217,68,68,.08)}
+.cc-room .cc-hold-btn{background:var(--s-field,var(--surface))} /* 挂在 .cc-room 下，不然输给皮肤的 button 重置 */
+.cc-hold-btn.recording{background:var(--s-recBg,var(--cc-user-bg));border-color:var(--text-secondary);color:var(--s-recInk,var(--text));box-shadow:var(--s-recRing)}
+.cc-hold-btn.cancel{color:var(--s-cancelInk,#d94444);border-color:#d94444;background:var(--s-cancelBg,rgba(217,68,68,.08));box-shadow:var(--s-cancelRing)}
 .cc-hold-btn:disabled{opacity:.4;cursor:default}
 .attach-btn.active{color:var(--s-accent,var(--text))}
 .attach-btn:disabled{opacity:.35;cursor:default}
