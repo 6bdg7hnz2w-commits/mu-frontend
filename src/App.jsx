@@ -3244,6 +3244,7 @@ const CC_VOICE_MAX_S = 60 // 一段最多录这么久，到点自动发
 const CC_VOICE_MIN_S = 0.8
 // 输入框两边的圆圈按钮：语音（声波）/ 键盘、⊕
 const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.3 10.6a2 2 0 0 1 0 2.8" strokeWidth="1.8"/><path d="M11.8 8.6a5 5 0 0 1 0 6.8" strokeWidth="1.8"/><path d="M14.3 6.6a8 8 0 0 1 0 10.8" strokeWidth="1.8"/></svg>
+const CC_EMOJI_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><circle cx="15" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><path d="M7.8 13.5h8.4a4.2 4.2 0 0 1-8.4 0z" strokeWidth="1.6"/></svg>
 const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
 // 表情面板：常用的这些，点一下插进输入框光标处
 const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
@@ -3390,6 +3391,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
   const [lightbox, setLightbox] = useState(null) // { items, index }：点开的那组图和从第几张开始
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
+  const [emojiOpen, setEmojiOpen] = useState(false) // 表情包面板：表情包还在做，先是个空面板
   const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
   const [recNow, setRecNow] = useState(0)
   const recRef = useRef(null)
@@ -3699,13 +3701,13 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   }
 
   // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
-  // 键盘和面板二选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
+  // 键盘、表情包面板、加号面板三选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
   // 点输入框弹键盘时，面板等键盘真的升上来那一下再收，输入框一直在同一个高度，不会先掉下去再被顶上来
-  // 表情面板先撤了（等自己的表情包），现在只有加号面板；以后加面板接在这里
-  const panelOpen = attachOpen
-  const closePanels = () => setAttachOpen(false)
+  const panelOpen = emojiOpen || attachOpen
+  const closePanels = () => { setEmojiOpen(false); setAttachOpen(false) }
   const togglePanel = (which) => {
     textareaRef.current?.blur()
+    setEmojiOpen(which === 'emoji' ? o => !o : false)
     setAttachOpen(which === 'attach' ? o => !o : false)
   }
   const onInputFocus = () => {
@@ -4215,6 +4217,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           ) : (
             <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
+          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label={say('表情包', 'Stickers')} aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
@@ -4228,6 +4231,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
           </div>
         )}
+        {emojiOpen && <div className="cc-emoji-panel"><div className="cc-emoji-soon">{say('表情包在做了', 'Stickers are on the way')}</div></div>}
       </div>
 
       {lightbox && <ImageLightbox items={lightbox.items} index={lightbox.index} onClose={() => setLightbox(null)} />}

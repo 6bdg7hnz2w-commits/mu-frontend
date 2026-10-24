@@ -832,6 +832,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-attach-menu button{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer}
 .cc-attach-menu button:disabled{opacity:.4;cursor:default}
 .cc-attach-menu button:active{opacity:.7}
+/* 表情包面板：表情包还在做，先放一行字 */
+.cc-emoji-panel{display:flex;align-items:center;justify-content:center;height:220px;margin:8px 0 0;border-top:1px solid var(--border)}
+.cc-emoji-soon{font-size:14px;color:var(--text-secondary)}
 .cc-recording{display:flex;align-items:center;gap:8px;margin:0 6px 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px}
 .cc-recording.cancel{color:#d94444;border-color:#d94444}
 .cc-recording-dot{width:8px;height:8px;border-radius:50%;background:#d94444;animation:cc-rec-blink 1s ease-in-out infinite}
