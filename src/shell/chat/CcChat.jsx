@@ -10,6 +10,7 @@ import { Composer, useVoiceRecorder } from './Composer.jsx'
 import { CcTurn, CcUserMsg } from './Turn.jsx'
 import { useStickToBottom } from './useStickToBottom.js'
 import { ImageLightbox } from '../ImageLightbox.jsx'
+import { kbDebugOn, kbLog } from '../kbDebug.js'
 
 // ─── 聊天页（沐 / CC）────────────────────────────────
 // Clawd 和 Vesper 共用这一份（Vesper 外面包 CcLang.Provider value="en"）。从 App.jsx 原样搬过来，逻辑没改；
@@ -102,6 +103,16 @@ const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)
 const CC_TURN_GAP_MS = 3 * 60 * 1000
 export const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
 const ccIsHis = m => m.role === 'assistant' || ccIsTool(m) // 算进他那一块的：他的话和他调的工具
+// 往上加载前记下的锚点：屏幕顶上那一带的消息行，和它离列表顶的距离。
+// 跳过列表第一行：更早的话插进来时可能和它是同一轮，并进这一行、把它的顶往上撑；第一行后面那行的位置只跟插进来的总高度有关
+function ccListAnchor(el) {
+  if (!el) return null
+  const lt = el.getBoundingClientRect().top
+  const rows = [...el.querySelectorAll(':scope > [data-mids]')]
+  const row = rows.slice(1).find(r => r.getBoundingClientRect().bottom > lt) || rows[0]
+  return row ? { mid: row.dataset.mids.split(' ')[0], top: row.getBoundingClientRect().top - lt } : null
+}
+
 function ccRows(messages) {
   const rows = []
   const seen = new Map() // pid → 出现过几块（同一轮被她的消息隔开时，块的 key 不撞）
@@ -854,8 +865,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const rec = useVoiceRecorder({ passcode, textareaRef, onVoice: (blob, duration) => sendVoice(blob, duration), onNotice: setNotice })
   const messagesEndRef = useRef(null)
   const listRef = useRef(null)
-  const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，保持原位置
-  const prevHeightRef = useRef(0)
+  const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，位置交给 olderAnchorRef；stay：不动
+  const olderAnchorRef = useRef(null) // 往上加载前屏幕上那条消息：{ mid, top }，插进去之后按它补位
   const voice = useVoicePlayer()
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
@@ -1210,16 +1221,19 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   }, [])
   useEffect(() => { if (!detachedRef.current) setCcCacheStorage(history) }, [history, detached]) // 搜出来的那一段不进缓存
 
-  // 往上滑到顶加载更早的 30 条，保持当前位置不跳
+  // 往上滑到顶加载更早的 30 条，保持当前位置不跳（坑见 docs/skin-checklist.md 第 18b 条）
+  // 锚点在数据回来、插进去之前那一刻记（不是开始加载时）：等请求的时候手指和惯性还在滑，那段距离也要算上。
+  // 插入、顶上 Loading 那格拿掉、hasMore 变化都在同一次渲染里，下面的 layout effect 在画出来之前按锚点补回去
   const loadOlder = async () => {
     if (loadingMore || !hasMore || !history.length) return
     setLoadingMore(true)
-    prevHeightRef.current = listRef.current?.scrollHeight || 0
-    try {
-      const data = await fetchHistory(history[0].time)
+    let data = null
+    try { data = await fetchHistory(history[0].time) } catch {}
+    olderAnchorRef.current = ccListAnchor(listRef.current)
+    if (data) {
       mergeHistory((data.messages || []).map(ccFromServer), 'keep')
       setHasMore(!!data.has_more)
-    } catch {}
+    }
     setLoadingMore(false)
   }
 
@@ -1250,7 +1264,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
-    if (scrollModeRef.current === 'keep') el.scrollTop = el.scrollHeight - prevHeightRef.current
+    if (scrollModeRef.current === 'keep') scrollModeRef.current = 'stay' // 补位在下面；之后的更新（他回话、三个点）不再动位置
     else if (scrollModeRef.current === 'jump') {
       // 搜索跳过来：那条放到中间，之后的更新不再动位置
       const target = flashKey && el.querySelector(`[data-mids~="${CSS.escape(flashKey)}"]`)
@@ -1258,6 +1272,22 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
       if (messages.length) scrollModeRef.current = 'stay'
     } else if (scrollModeRef.current !== 'stay') messagesEndRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, typingNow, flashKey])
+  // 往上加载完：锚点那条回到原来离列表顶的距离。不靠 overflow-anchor（Safari 不支持），每次渲染完、画出来之前对一下
+  useLayoutEffect(() => {
+    const a = olderAnchorRef.current, el = listRef.current
+    if (!a || !el) return
+    olderAnchorRef.current = null
+    const row = a.mid && el.querySelector(`[data-mids~="${CSS.escape(a.mid)}"]`)
+    if (!row) return
+    const top = () => row.getBoundingClientRect().top - el.getBoundingClientRect().top
+    const before = el.scrollTop, d = top() - a.top
+    if (d) el.scrollTop += d
+    // 键盘调试读数开着时记一行：补完当帧、下一帧、300ms 后锚点还差几 px（iOS 惯性滚动中改 scrollTop 会不会被吃掉）
+    if (kbDebugOn()) {
+      const now = Math.round(top() - a.top), after = Math.round(el.scrollTop)
+      requestAnimationFrame(() => { const f1 = Math.round(top() - a.top); setTimeout(() => kbLog(`older: moved ${Math.round(d)}px · scrollTop ${Math.round(before)}→${after} · drift ${now}/${f1}/${Math.round(top() - a.top)}px`), 300) })
+    }
+  })
   useEffect(() => {
     if (!flashKey) return
     const t = setTimeout(() => setFlashKey(null), 2400)
@@ -1500,7 +1530,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
       <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove}>
-        {loadingMore && <div className="empty-state">Loading…</div>}
+        {/* 还有更早的就一直占着这一格（高度固定），加载时只换里面的字，出现、消失都不推动下面的消息 */}
+        {hasMore && messages.length > 0 && <div className="cc-older">{loadingMore ? 'Loading…' : ''}</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
           if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />

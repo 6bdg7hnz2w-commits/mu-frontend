@@ -3,12 +3,14 @@
 // 打开：聊天顶栏的名字 2 秒内连点 5 下（主屏幕 App 里没法带网址参数），或网址带 ?kbdebug；再连点 5 下关掉。
 // 输入框每次得到 / 失去焦点录 1.5 秒：每帧的 vv 高度、offsetTop、innerHeight、输入栏底边，和 vv resize 事件的时刻。
 // 录完一条出一行结论；Copy 把最近 10 条原始数据拷走，贴给 Claude
+// 别处也能往里记一行（kbLog）：聊天往上加载更早的消息后，锚点补完还差几 px
 
 const KEY = 'v_kbdebug'
 const REC_MS = 1500
 
 let box = null, live = null, list = null, raf = 0
 const traces = []
+const logs = []
 
 const r = Math.round
 const bar = () => document.querySelector('.cc-room .composer')?.getBoundingClientRect().bottom
@@ -43,7 +45,7 @@ function summarize(tr) {
 
 function render() {
   if (!list) return
-  list.textContent = traces.slice(-4).map(t => t.summary || '…recording').join('\n')
+  list.textContent = [...traces.slice(-4).map(t => t.summary || '…recording'), ...logs.slice(-4)].join('\n')
 }
 
 function record(e) {
@@ -88,12 +90,12 @@ function show() {
   row.style.cssText = 'margin-top:6px;pointer-events:auto'
   row.append(
     btn('Copy', async () => {
-      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom,fieldTop,scrollTop,sheetTop', traces }, null, 0)
+      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom,fieldTop,scrollTop,sheetTop', traces, logs }, null, 0)
       try { await navigator.clipboard.writeText(text); list.textContent = 'Copied ' + traces.length + ' traces\n' + list.textContent } catch {
         const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'width:100%;height:120px;font:9px monospace'; box.append(ta); ta.select()
       }
     }),
-    btn('Clear', () => { traces.length = 0; render() }),
+    btn('Clear', () => { traces.length = logs.length = 0; render() }),
     btn('Hide', () => toggle(false)),
   )
   box.append(live, list, row)
@@ -117,6 +119,13 @@ function toggle(on) {
 export function kbNote(msg) {
   const tr = traces.at(-1)
   if (box && tr && !tr.summary) tr.notes.push(msg)
+}
+
+export const kbDebugOn = () => !!box
+export function kbLog(msg) {
+  if (!box) return
+  logs.push(msg); if (logs.length > 10) logs.shift()
+  render()
 }
 
 export function installKbDebug() {
