@@ -501,6 +501,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 ### 21. 选了 System 也不跟系统换深色
 - **现象**：Vesper 设置里选 System，iPhone 已经是深色（凌晨一点），App 还是浅色；回到前台重读 `matchMedia` 也没用（#66）。
 - **原因**：`usePageChrome` 把 `color-scheme: light` 写在了 html 根元素上。Safari 算 `prefers-color-scheme` 时看根元素声明支持哪种配色，只支持 light 它就一直答"浅色"：页面一变浅就再也读不到系统的深色，自己把自己锁住。Clawd 的 `:root` 是 `light dark`，所以没事。本地 Chrome 不这么算，复现不出来。
-- **正确做法**：html 根元素固定 `color-scheme: light dark`；按页面深浅的 `light` / `dark` 只写在 body 和 #root 上，键盘、输入框照样跟页面。
+- **正确做法**：html、body、#root 都固定 `color-scheme: light dark`；按白天 / 夜间的 `light` / `dark` 只在皮肤外框（`.vesper`）上，键盘、输入框在外框里，照样跟页面。
+  - #67 只把 html 改成 `light dark`、body 还是 `light`：真机读数 `sys light · mode auto · html cs light dark · body cs light`，系统深色照样读成浅色。body 这一层也算。
 - **以前为什么不对**：#66 以为是后台切换时没收到 change 事件，补了回前台重读；但读到的值本身就是被根元素锁住的"浅色"。
 
