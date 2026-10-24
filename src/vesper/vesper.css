@@ -418,7 +418,13 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --s-meta:var(--vc-meta);--s-metaShadow:var(--vc-meta-shadow);--s-icon:var(--v-mute);--s-card:var(--v-card);--s-ink:var(--v-ink);
   /* 按住说话键：录音中、上滑取消。.vesper button 把边框清成 0，描边用内阴影画，不改尺寸；淡色叠在卡片色上，别透出后面 */
   --s-recBg:linear-gradient(var(--v-acc-soft),var(--v-acc-soft)),var(--v-card);--s-recInk:var(--v-acc);--s-recRing:inset 0 0 0 1px var(--v-acc);
-  --s-cancelBg:linear-gradient(rgba(192,96,94,.12),rgba(192,96,94,.12)),var(--v-card);--s-cancelInk:var(--v-danger);--s-cancelRing:inset 0 0 0 1px var(--v-danger)}
+  --s-cancelBg:linear-gradient(rgba(192,96,94,.12),rgba(192,96,94,.12)),var(--v-card);--s-cancelInk:var(--v-danger);--s-cancelRing:inset 0 0 0 1px var(--v-danger);
+  /* 她发的文件是一张卡片；缩略图、语音条带一点阴影；展开的思考 / 工具是一块玻璃底；读的文件名跟 Read 同色、略淡 */
+  --s-fileBg:var(--v-card);--s-fileLine:1px solid var(--v-line);--s-fileR:16px;--s-fileShadow:var(--v-shadow);
+  --s-thumbR:14px;--s-thumbShadow:0 4px 14px rgba(40,55,90,.16);
+  --s-meVoiceR:18px 18px 6px 18px;--s-voiceShadow:0 4px 14px rgba(40,55,90,.18);
+  --s-foldBg:var(--vc-glass);--s-foldInk:var(--v-ink2);--s-foldRule:0;--s-foldR:12px;--s-foldShadow:none;
+  --s-toolInk:currentColor;--s-toolAlpha:.82;--s-noticeR:12px}
 .vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
@@ -535,13 +541,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-turn-body .md-pre{max-width:100%}
 .v-chat .cc-turn-body .md-pre pre{overflow-x:visible;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
 .v-chat .cc-turn-body .md-pre pre,.v-chat .cc-turn-body .md-pre code{font-size:12.5px}
-.v-chat .cc-tool-sum,.v-chat .cc-tool-fail{color:inherit;opacity:.82} /* 读的文件名：跟 Read 同色、略淡，壁纸上也看得清 */
-.v-chat .cc-thinking-body,.v-chat .cc-tools-body{background:var(--vc-glass);border:0;border-radius:12px;padding:10px 12px;color:var(--v-ink2);text-shadow:none}
-.v-chat .cc-voice-bar,.v-chat .voice-bar{border-radius:18px 18px 6px 18px;box-shadow:0 4px 14px rgba(40,55,90,.18)}
-.v-chat .msg.assistant .voice-bar{border-radius:18px 18px 18px 6px}
-.v-chat .msg .bubble.cc-file{background:var(--v-card);border:1px solid var(--v-line);border-radius:16px;box-shadow:var(--v-shadow)}
-.v-chat .cc-thumb{border-radius:14px;box-shadow:0 4px 14px rgba(40,55,90,.16)}
-.v-chat .cc-up{border-radius:14px}.v-chat .cc-files .cc-up{border-radius:16px}
+.v-chat .cc-thinking-body,.v-chat .cc-tools-body{padding:10px 12px}
 .v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);border-top:1px solid var(--v-line)}
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px}
@@ -560,7 +560,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
 .v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--s-bottom)}
 .v-chat .cc-jump-btn{border:1px solid var(--v-line);box-shadow:0 6px 18px rgba(20,30,60,.16)}
-.v-chat .cc-notice{border-radius:12px}
 
 /* ─── More：Usage ─── */
 .v-limits{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
