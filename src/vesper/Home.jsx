@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { START_DATE, apiFetch, beijingDateStr } from '../App.jsx'
+import { START_DATE, apiFetch, beijingDateStr } from '../shell/data.js'
 import { useCached, setCached, refresh } from './data.js'
 import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast } from './ui.jsx'
 import { ActionSheet } from '../shell/sheets.jsx'

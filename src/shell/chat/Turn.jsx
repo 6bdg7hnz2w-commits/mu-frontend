@@ -1,4 +1,5 @@
-import { I, fmtMsgTime } from '../../App.jsx'
+import { I } from '../../App.jsx'
+import { fmtMsgTime } from '../data.js'
 import { CopyButton, messageCopyText } from './markdown.jsx'
 import { TranscriptToggle, hasVoiceSegment } from './voice.jsx'
 import { CcEditBox, CcFile, CcImage, CcPiece, CcTools, CcTurnBody, CcUpMark, CcVoice, ccIsTool, ccTurnParts, useCcSay } from './CcChat.jsx'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../App.jsx'
+import { apiFetch } from '../shell/data.js'
 import { SubPage } from './ui.jsx'
 
 // ─── Album ──────────────────────────────────────────
