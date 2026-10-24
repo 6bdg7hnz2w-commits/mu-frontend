@@ -157,11 +157,11 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .msg.user .bubble{background:var(--bubble-user);color:var(--text);border-bottom-right-radius:6px;text-align:left}
 .msg.assistant .bubble{background:var(--bubble-assistant);color:var(--text);border-bottom-left-radius:6px}
 .msg-meta{display:flex;align-items:center;gap:4px;margin-top:2px;padding:0 4px}
-.msg-time{font-size:11px;color:var(--text-dim)}
+.msg-time{font-size:11px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 .spinner.tiny{width:12px;height:12px;border-width:1.5px;margin:0}
 
 .voice-msg{display:flex;flex-direction:column;align-items:flex-start;gap:4px;max-width:78%}
-.voice-bar{display:flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border-radius:18px;border-bottom-left-radius:6px;padding:8px 12px;cursor:pointer;min-width:120px;max-width:100%;box-sizing:border-box;user-select:none;transition:width .2s ease}
+.voice-bar{display:flex;align-items:center;gap:10px;background:var(--s-accent,var(--accent));color:var(--s-accentInk,#fff);border-radius:18px;border-bottom-left-radius:6px;padding:8px 12px;cursor:pointer;min-width:120px;max-width:100%;box-sizing:border-box;user-select:none;transition:width .2s ease}
 .voice-bar:active{opacity:.85}
 .spinner.tiny.light{border-color:rgba(255,255,255,.4);border-top-color:#fff}
 .voice-wave{display:flex;align-items:center;justify-content:space-between;gap:0;flex:1;height:16px;min-width:0;overflow:hidden;cursor:pointer;touch-action:pan-y}
@@ -171,10 +171,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .voice-duration{font-size:12px;color:rgba(255,255,255,.9);flex-shrink:0;min-width:26px;text-align:right;font-variant-numeric:tabular-nums;display:inline-flex;justify-content:flex-end;align-items:center}
 .voice-transcript-btn{border:none;background:none;color:var(--text-dim);font-size:12px;padding:2px 6px;cursor:pointer}
 .voice-transcript-btn:active{opacity:.6}
-.voice-transcript{margin-top:2px;max-width:100%}
+.voice-transcript{margin-top:2px;max-width:100%;color:var(--s-meta);text-shadow:var(--s-metaShadow)}
 .voice-transcript-zh{margin-top:4px;font-size:12px;line-height:1.4;color:var(--text-dim)}
 .msg-seg + .msg-seg{margin-top:4px}
-.msg-meta .voice-transcript-btn{padding:0 4px;font-size:11px}
+.msg-meta .voice-transcript-btn{padding:0 4px;font-size:11px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 .thinking-trigger{display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:4px;font-size:13px;color:var(--text-secondary);cursor:pointer}
 .thinking-trigger:active{opacity:.6}
 .thinking-trigger svg:last-child{color:var(--text-dim)}
@@ -636,9 +636,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-pending-file .cc-file-name{max-width:120px;font-size:13px}
 .cc-notice{margin:0 6px 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px;line-height:1.4}
 /* 消息下面的小字："他这次没回上来 · 再叫他一下"、"他好像卡住了"、"发送失败 · 点一下重发" */
-.cc-msg-note{margin-top:2px;padding:0 4px;font-size:12px;color:var(--text-dim)}
+.cc-msg-note{margin-top:2px;padding:0 4px;font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 .cc-note-btn{border:none;background:none;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
-.msg-meta .cc-note-btn{font-size:11px}
+.msg-meta .cc-note-btn{font-size:11px;color:var(--s-meta,var(--text-secondary));text-shadow:var(--s-metaShadow)}
 .cc-note-btn:active{opacity:.5}
 /* 原地改自己发的文字 */
 .cc-edit{display:flex;flex-direction:column;gap:6px;width:min(100%,320px)}
@@ -656,6 +656,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .copy-btn{border:none;background:none;color:var(--text-dim);padding:2px 6px;display:inline-flex;align-items:center;cursor:pointer;line-height:1}
 .copy-btn:active{opacity:.5}
 .copy-btn svg{width:13px;height:13px}
+.msg-meta .copy-btn{color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 
 /* --- Markdown inside assistant bubbles --- */
 :root{--code-bg:rgba(0,0,0,.045);--code-inline-bg:rgba(0,0,0,.07)}
@@ -703,18 +704,19 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-md>*+*{margin-top:.8em}
 .cc-md .md-pre{width:100%}
 .cc-turn-body .msg-seg+.msg-seg{margin-top:.8em}
-.cc-late{font-size:11px;color:var(--text-dim);margin-top:2px}
+.cc-late{font-size:11px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow);margin-top:2px}
 .cc-turn .msg-meta{padding:0;margin-top:4px}
 .cc-via-api{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* API 回的思考过程：照 Claude App，一行小灰字"思考过程 ›"，默认收起；展开后小字、保留换行，太长在框里滚 */
 .cc-thinking{margin-bottom:6px}
-.cc-thinking-head{display:inline-flex;align-items:center;gap:2px;border:none;background:none;padding:2px 0;font:inherit;font-size:13px;line-height:1.4;color:var(--text-secondary);cursor:pointer}
+.cc-thinking-head{display:inline-flex;align-items:center;gap:2px;border:none;background:none;padding:2px 0;font:inherit;font-size:13px;line-height:1.4;cursor:pointer}
+.cc-room .cc-thinking-head{color:var(--s-meta,var(--text-secondary));text-shadow:var(--s-metaShadow)} /* 挂在 .cc-room 下：按钮单类名会输给皮肤的 button 重置（如 .vesper button），见 skin-checklist 第〇节 */
 .cc-thinking-head:active{opacity:.6}
 .cc-thinking-head svg{width:14px;height:14px;color:var(--text-dim);transition:transform .2s}
 .cc-thinking.open .cc-thinking-head svg{transform:rotate(90deg)}
 .cc-thinking-body{margin-top:4px;padding:2px 0 2px 12px;border-left:2px solid var(--border);font-size:13px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;overflow-wrap:break-word;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 /* 他调过的工具：和"思考过程"一样的小灰字；一个直接一行，几个折叠成"用了 N 个工具" */
-.cc-tools{margin:2px 0;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.cc-tools{margin:2px 0;font-size:13px;line-height:1.5;color:var(--s-meta,var(--text-secondary));text-shadow:var(--s-metaShadow)}
 .cc-tools.open .cc-thinking-head svg{transform:rotate(90deg)}
 .cc-tools-body{margin-top:2px;padding:2px 0 2px 12px;border-left:2px solid var(--border)}
 .cc-tool-line{padding:2px 0;overflow-wrap:anywhere}
@@ -726,7 +728,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 /* 正在输入：不要气泡，三个小点轻轻明暗 */
 .cc-typing{flex-direction:row;align-items:center;gap:5px;padding:6px 2px;width:auto}
 .cc-typing-inline{display:flex;padding:8px 0 2px}
-.cc-typing-dot{width:6px;height:6px;border-radius:50%;background:var(--text-secondary);opacity:.35;animation:ccPulse 1.2s ease-in-out infinite}
+.cc-typing-dot{width:6px;height:6px;border-radius:50%;background:var(--s-meta,var(--text-secondary));opacity:.35;animation:ccPulse 1.2s ease-in-out infinite}
 .cc-typing-dot:nth-child(2){animation-delay:.2s}
 .cc-typing-dot:nth-child(3){animation-delay:.4s}
 /* 正在压缩：聊天页正中一行小字，省略号一个个跳 */
@@ -836,12 +838,12 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 /* 沐聊天页：按住说话、"+"（照片 / 文件）、她发的语音 */
 .cc-composer-row{align-items:center}
-.cc-composer-row .attach-btn{width:34px;height:34px;flex-shrink:0;color:var(--text-secondary)}
+.cc-composer-row .attach-btn{width:34px;height:34px;flex-shrink:0;color:var(--s-icon,var(--text-secondary))}
 .cc-hold-btn{flex:1;height:38px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:15px;font-weight:500;font-family:inherit;letter-spacing:.05em;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .cc-hold-btn.recording{background:var(--cc-user-bg);border-color:var(--text-secondary)}
 .cc-hold-btn.cancel{color:#d94444;border-color:#d94444;background:rgba(217,68,68,.08)}
 .cc-hold-btn:disabled{opacity:.4;cursor:default}
-.attach-btn.active{color:var(--text)}
+.attach-btn.active{color:var(--s-accent,var(--text))}
 .attach-btn:disabled{opacity:.35;cursor:default}
 .cc-attach-menu{display:flex;gap:8px;margin:0 6px 8px}
 .cc-attach-menu button{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer}
@@ -856,7 +858,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-recording-time{font-variant-numeric:tabular-nums;color:var(--text);min-width:24px}
 @keyframes cc-rec-blink{50%{opacity:.25}}
 .cc-voice{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:78%;margin-bottom:4px}
-.cc-voice-bar{display:flex;align-items:center;gap:8px;background:var(--cc-user-bg);color:var(--text);border-radius:18px;padding:9px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box;min-width:110px;max-width:100%}
+.cc-voice-bar{display:flex;align-items:center;gap:8px;background:var(--s-meBg,var(--cc-user-bg));color:var(--s-meInk,var(--text));border-radius:18px;padding:9px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box;min-width:110px;max-width:100%}
 .cc-voice-bar:active{opacity:.8}
 .cc-voice-bar.loading{opacity:.6;cursor:default}
 .cc-voice-bar.gone{opacity:.5;cursor:default}
@@ -865,9 +867,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-voice-wave i{display:block;width:3px;border-radius:1.5px;background:var(--text-dim);flex-shrink:0;transition:background .15s}
 .cc-voice-wave i.on{background:var(--text)}
 .cc-voice-dur{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;flex-shrink:0}
-.cc-voice-text{font-size:14px;line-height:1.45;color:var(--text);text-align:left;padding:0 6px;white-space:pre-wrap;word-break:break-word}
+.cc-voice-text{font-size:14px;line-height:1.45;color:var(--s-meta,var(--text));text-shadow:var(--s-metaShadow);text-align:left;padding:0 6px;white-space:pre-wrap;word-break:break-word}
 .cc-voice-dim{color:var(--text-dim)}
-.cc-voice-tone{font-size:12px;color:var(--text-dim);padding:0 6px;text-align:right}
+.cc-voice-tone{font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow);padding:0 6px;text-align:right}
 
 /* ── 沐 ⋮ → 查找聊天记录 ── */
 .cc-search-page{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
@@ -897,8 +899,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 /* 向下箭头：浮在输入框右上方，不占位置 */
 .cc-jump-wrap{position:relative;height:0;z-index:20}
-.cc-jump-btn{position:absolute;right:16px;bottom:12px;width:40px;height:40px;border-radius:50%;border:none;background:var(--surface);color:var(--text-secondary);box-shadow:0 2px 10px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.cc-jump-btn{position:absolute;right:16px;bottom:12px;width:40px;height:40px;border-radius:50%;border:none;box-shadow:0 2px 10px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .cc-jump-btn:active{transform:scale(.94)}
+.cc-room .cc-jump-btn{background:var(--s-card,var(--surface));color:var(--s-ink,var(--text-secondary))}
 .cc-jump-badge{position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center}
 @media(prefers-reduced-motion:reduce){.msg.cc-flash{animation:none;background:var(--accent-soft)}}
 

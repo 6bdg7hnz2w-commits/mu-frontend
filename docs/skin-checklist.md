@@ -61,11 +61,20 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   | `--s-body` / `--s-title` | 气泡字体、顶栏名字字体 | 继承 | `--v-sc` / `--v-serif` |
   | `--s-bar` / `--s-barGlass` | 输入栏底色、毛玻璃 | `--bg` / 无 | `--vc-head` / `blur(20px) saturate(1.3)` |
   | `--s-field` | 输入框底色 | `--surface` | `--v-card` |
-  | `--s-accent` / `--s-accentInk` | 发送键底色、箭头色 | `--text` / #fff | `--v-acc` / `--v-acc-ink` |
+  | `--s-accent` / `--s-accentInk` | 发送键底色、箭头色；他那边语音条（`.voice-bar`）底色、字色；加号键选中（`.attach-btn.active`）的颜色 | 发送键 `--text` / #fff，语音条 `--accent` / #fff，加号键选中 `--text` | `--v-acc` / `--v-acc-ink` |
+  | `--s-meBg` / `--s-meInk`（再用一次） | 她的语音条（`.cc-voice-bar`）底色、字色，和她的气泡同色 | `--cc-user-bg` / `--text` | 同上 |
+  | `--s-meta` / `--s-metaShadow` | 小字：时间、复制 / 编辑 / 重发 / 转文字按钮（`.msg-meta` 里的）、思考过程和工具那行、`cc-msg-note`、`cc-late`、语音转的文字和语气；打字中的三个点的底色也用 `--s-meta` | 各自原来的 `--text-dim` / `--text-secondary` / `--text`，阴影无 | `--vc-meta` / `--vc-meta-shadow` |
+  | `--s-icon` | 输入栏左边那排图标键（`.cc-composer-row .attach-btn`）没选中时的颜色 | `--text-secondary` | `--v-mute` |
+  | `--s-card` / `--s-ink` | 回到底部键（`.cc-jump-btn`）的底色、图标色 | `--surface` / `--text-secondary` | `--v-card` / `--v-ink` |
 
   间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里。往后一步一步把颜色类的覆盖换成变量。
-  - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。
-  - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。
+  - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。（6c 把加号键连 `.active` 一起换成了变量；按住说话键还没动，Vesper 下录音和取消时底色、边框不变，这是现状，要不要改等决定。）
+  - 共用组件里的按钮，读变量的那条要挂在 `.cc-room` 下面（`.cc-room .cc-thinking-head`），不能只写单个类名。
+    - **现象**（6c 比对时抓到）：Vesper 下"思考过程"那行字变成正文色，回到底部键底色变透明。
+    - **原因**：Vesper 有一条全局重置 `.vesper button{background:initial;color:inherit}`，特异性 (0,1,1)，比 App.css 的 `.cc-thinking-head`、`.cc-jump-btn` (0,1,0) 高。以前 Vesper 自己写 `.v-chat .cc-jump-btn` (0,2,0) 把它压回来，删掉这条覆盖后，单类名的共用规则就输了。
+    - **正确做法**：颜色这几条单独写一条 `.cc-room .xx{...}`（0,2,0），布局还留在原来的单类名规则里。`.msg-meta .copy-btn`、`.cc-composer-row .attach-btn` 本来就是两个类，不受影响。
+    - 工具那行（`.cc-tools` 里的 `.cc-thinking-head`）当时看着是对的，只是因为它继承了 `.cc-tools` 的颜色；单独的"思考过程"没有这层，才露出来。所以比对要把每种状态都摆出来，不能只看 mock 里碰巧有的。
+  - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。 mock 里没有的状态（语音条、发送失败、补上的、打字中、加号键选中、回到底部键等）往 `.cc-room` 里塞一块静态 DOM 一起抓，动画关掉，免得 opacity 每次不同。
 - `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。
 
 ## 一、高度和安全区
