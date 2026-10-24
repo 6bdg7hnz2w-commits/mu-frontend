@@ -22,22 +22,59 @@ export function useStickToBottom(listRef, detachedRef, kick) {
     const el = listRef.current
     if (anchorRef.current?.el !== el) {
       anchorRef.current?.ro?.disconnect()
-      anchorRef.current?.el?.removeEventListener('scroll', anchorRef.current.onScroll)
+      const o = anchorRef.current
+      if (o?.el) {
+        o.el.removeEventListener('scroll', o.onScroll)
+        for (const t of ['touchstart', 'touchend', 'touchcancel']) o.el.removeEventListener(t, o.onTouch)
+        clearTimeout(o.timer)
+      }
       anchorRef.current = null
       if (!el) return
       const a = { el, h: el.clientHeight, stuck: true, seen: new WeakSet() }
-      // 本来就在底部附近（80px 内）就直接钉到真正的底，不按差值去补：列表变高时（收键盘）浏览器自己已经把 scrollTop 夹到底了，
-      // 再 += d 就多退一截，收完键盘最后一条离输入栏远出一块（skin-checklist 第 8 条）
+      // 本来就在底部附近（80px 内）就钉到底。列表变高（收键盘、关面板）时不靠浏览器把 scrollTop 夹回去：
+      // iOS 手指还按着（向下滑收键盘）或刚松手时，它不夹，当成"拉过头"留着、松手后慢慢弹回来，我们写的 scrollTop 也被它盖掉，
+      // 最后一条停在原地、和输入栏之间空一大块（真机读数 listToBottom 到 −126，skin-checklist 第 8 条第 5 次）。
+      // 所以变高多出来的那截先垫在列表顶上（padding-top），能滚的范围跟着变大，scrollTop 一直合法、不用动，最后一条自然跟着底边走；
+      // 手松开、不滚了（settle）再把垫的拿掉、钉回底
+      a.pad = 0
+      a.setPad = (v) => {
+        if (!a.pad) { el.style.paddingTop = ''; a.base = parseFloat(getComputedStyle(el).paddingTop) || 0 }
+        a.pad = v
+        el.style.paddingTop = v ? `${a.base + v}px` : ''
+      }
       a.adjust = () => {
         if (detachedRef.current) return
         const d = a.h - el.clientHeight
         a.h = el.clientHeight
-        const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-        if (d) { if ((d > 0 ? toBottom - d : toBottom) < 80) pin(el) }
+        let toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+        // 变矮（弹键盘、开面板）先把垫的退掉
+        if (d > 0 && a.pad) { const t = Math.min(a.pad, d); a.setPad(a.pad - t); toBottom -= t }
+        if (d) {
+          if ((d > 0 ? toBottom - d : toBottom) < 80) {
+            if (toBottom < 0) a.setPad(a.pad - toBottom)
+            else pin(el)
+          }
+        }
         else if (a.stuck && toBottom > 0) pin(el)
+        a.settle()
       }
+      a.touching = false
+      a.settle = () => {
+        clearTimeout(a.timer)
+        if (a.pad) a.timer = setTimeout(() => {
+          if (a.touching) return
+          const p = a.pad
+          a.setPad(0)
+          if (a.stuck) pin(el)
+          else el.scrollTop -= p
+        }, 350)
+      }
+      a.onTouch = (e) => { a.touching = e.type === 'touchstart'; a.settle() }
+      el.addEventListener('touchstart', a.onTouch, { passive: true })
+      el.addEventListener('touchend', a.onTouch, { passive: true })
+      el.addEventListener('touchcancel', a.onTouch, { passive: true })
       // 手指滚开 80px 以上就不再贴底（在看历史），滚回底部附近又贴上
-      a.onScroll = () => { a.stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }
+      a.onScroll = () => { a.stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 80; a.settle() }
       el.addEventListener('scroll', a.onScroll, { passive: true })
       if (typeof ResizeObserver !== 'undefined') { a.ro = new ResizeObserver(a.adjust); a.ro.observe(el) }
       anchorRef.current = a
