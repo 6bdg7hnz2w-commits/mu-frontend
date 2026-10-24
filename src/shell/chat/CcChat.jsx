@@ -868,6 +868,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，位置交给 olderAnchorRef；stay：不动
   const olderAnchorRef = useRef(null) // 往上加载前屏幕上那条消息：{ mid, top }，插进去之后按它补位
   const settlingOlderRef = useRef(false) // 刚补完位、下一帧复核前：这期间的滚动事件不触发再往上加载
+  const listTouchingRef = useRef(false) // 手指按在消息列表上
+  const olderWaitRef = useRef(0) // 数据到了以后等列表停稳等了多久（调试读数用）
   const voice = useVoicePlayer()
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
@@ -1189,7 +1191,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
   const listSwipe = useRef(null)
   const swipeBlurAt = useRef(0) // 下拖刚收了键盘：这之后一小会儿里冒出来的 focus 不是她点的（列表在动、iOS 自己聚焦回去），再收一次，键盘不弹回
-  const onListTouchStart = (e) => { const t = e.touches[0]; listSwipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, done: false } : null }
+  const onListTouchEnd = (e) => { if (!e.touches.length) listTouchingRef.current = false }
+  const onListTouchStart = (e) => { listTouchingRef.current = true; const t = e.touches[0]; listSwipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, done: false } : null }
   const onListTouchMove = (e) => {
     const sw = listSwipe.current, t = e.touches[0]
     if (!sw || sw.done || !t) return
@@ -1225,11 +1228,16 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 往上滑到顶加载更早的 30 条，保持当前位置不跳（坑见 docs/skin-checklist.md 第 18b 条）
   // 锚点在数据回来、插进去之前那一刻记（不是开始加载时）：等请求的时候手指和惯性还在滑，那段距离也要算上。
   // 插入、顶上 Loading 那格拿掉、hasMore 变化都在同一次渲染里，下面的 layout effect 在画出来之前按锚点补回去
+  // 数据到了先看列表停稳没有：iOS 顶上回弹中（scrollTop 是负的）、手指还按着，这时改 scrollTop 会被回弹盖掉，
+  // 强行停掉回弹又会顿一下（真机试过），所以先拿在手里，等回弹弹完、手指松开再插（第 18b 条）
   const loadOlder = async () => {
     if (loadingMore || !hasMore || !history.length) return
     setLoadingMore(true)
     let data = null
     try { data = await fetchHistory(history[0].time) } catch {}
+    const waitFrom = performance.now()
+    while (listRef.current && (listRef.current.scrollTop < 0 || listTouchingRef.current)) await new Promise(r => setTimeout(r, 50))
+    olderWaitRef.current = Math.round(performance.now() - waitFrom)
     olderAnchorRef.current = ccListAnchor(listRef.current)
     if (data) {
       mergeHistory((data.messages || []).map(ccFromServer), 'keep')
@@ -1284,7 +1292,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     const before = el.scrollTop, d = top() - a.top
     // 甩到顶时 iOS 在回弹（scrollTop 是负的）：这时改 scrollTop，下一帧会被回弹动画盖回负数，屏幕闪到刚插进来的最老那几条，
     // 那一帧 scrollTop < 80 还会再拉一页（真机读数：drift 0/7571/0）。先 overflow hidden 把回弹停掉再设，下一帧放开。
-    // 停掉回弹那一下 scrollTop 不再是负的，所以按 before + d 直接设绝对值，不用 +=
+    // 停掉回弹那一下 scrollTop 不再是负的，所以按 before + d 直接设绝对值，不用 +=。
+    // 停掉回弹会顿一下，所以 loadOlder 先等回弹弹完再插；这里只是兜底（等的时候又甩回顶上之类）
     const bounce = before < 0
     settlingOlderRef.current = true
     if (bounce) el.style.overflowY = 'hidden'
@@ -1292,12 +1301,13 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     const now = Math.round(top() - a.top), after = Math.round(el.scrollTop)
     requestAnimationFrame(() => {
       if (bounce) el.style.overflowY = ''
-      // 复核一次：还被别的（惯性滚动）吃掉了就再补一次
-      const f1 = top() - a.top
-      if (Math.abs(f1) > 2) el.scrollTop += f1
+      // 回弹兜底那条路才复核：滚动已经停掉了，还差就再补一次。平时不补：这一帧里手指、惯性自己走的距离会被当成偏差拽回去
+      const f1 = top() - a.top, refix = bounce && Math.abs(f1) > 2
+      if (refix) el.scrollTop += f1
       settlingOlderRef.current = false
       // 键盘调试读数开着时记一行：补完当帧、下一帧（复核前）、300ms 后锚点还差几 px
-      if (kbDebugOn()) setTimeout(() => kbLog(`older: moved ${Math.round(d)}px · scrollTop ${Math.round(before)}→${after}${bounce ? ' · bounce' : ''}${Math.abs(f1) > 2 ? ' · refix' : ''} · drift ${now}/${Math.round(f1)}/${Math.round(top() - a.top)}px`), 300)
+      // then：补完之后 300ms 里列表自己又走了多少（不是 0 = 惯性没被打断，还在滑）
+      if (kbDebugOn()) { const wait = olderWaitRef.current, s1 = el.scrollTop; setTimeout(() => kbLog(`older: moved ${Math.round(d)}px · waited ${wait}ms · scrollTop ${Math.round(before)}→${after}${bounce ? ' · bounce' : ''}${refix ? ' · refix' : ''} · drift ${now}/${Math.round(f1)}px · then ${Math.round(el.scrollTop - s1)}px`), 300) }
     })
   })
   useEffect(() => {
@@ -1308,7 +1318,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const onListScroll = (e) => {
     const el = e.currentTarget
     const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (el.scrollTop < 80 && !settlingOlderRef.current) loadOlder()
+    // 离顶还有一屏就开始拉：往上翻得不太快时，数据在碰到顶之前就到了，不用进回弹
+    if (el.scrollTop < Math.max(80, el.clientHeight) && !settlingOlderRef.current) loadOlder()
     if (toBottom < 200) loadNewer()
     setFarFromBottom(toBottom > el.clientHeight)
   }
@@ -1541,7 +1552,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove} onTouchEnd={onListTouchEnd} onTouchCancel={onListTouchEnd}>
         {/* 还有更早的就一直占着这一格（高度固定），加载时只换里面的字，出现、消失都不推动下面的消息 */}
         {hasMore && messages.length > 0 && <div className="cc-older">{loadingMore ? 'Loading…' : ''}</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
