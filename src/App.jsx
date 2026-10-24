@@ -1,9 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
-import StatusScrim from './StatusScrim.jsx'
 import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 import { setSkin } from './skin.js'
+import { loadDraftFiles, saveDraftFiles, draftFileCount } from './draftFiles.js'
 
 // 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
 const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
@@ -1001,7 +1001,9 @@ function ChatListPage({ onOpenCC }) {
   const say = useCcSay()
   const [ccLast] = useState(getCcLast)
   const draft = getDraft('cc')
-  const preview = draft ? `[Draft] ${draft.length > 25 ? draft.slice(0, 25) + '...' : draft}` : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''
+  const draftFiles = draftFileCount('cc')
+  const draftClip = draft.length > 25 ? draft.slice(0, 25) + '...' : draft
+  const preview = draft || draftFiles ? `[Draft] ${draftFiles ? say(`[${draftFiles} 个附件] `, `[${draftFiles} attachment${draftFiles === 1 ? '' : 's'}] `) : ''}${draftClip}` : ccLast ? (ccLast.text.length > 30 ? ccLast.text.slice(0, 30) + '...' : ccLast.text) : ''
   return (
     <div className="chatlist-page">
       <div className="page-header"><h1>Chats</h1></div>
@@ -3301,6 +3303,20 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const lockOut = lockApp
 
   useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
+  // 没发出去的图和文件也留作草稿（IndexedDB）：进来先读回来，读完之后每次变动都存一份
+  const draftLoadedRef = useRef(false)
+  useEffect(() => {
+    let alive = true
+    loadDraftFiles(CC_SESSION.id).then(saved => {
+      if (!alive) return
+      draftLoadedRef.current = true
+      if (!saved.length) return
+      const back = saved.map(p => p.kind === 'image' ? { ...p, previewUrl: URL.createObjectURL(p.blob) } : p)
+      setPending(prev => [...back, ...prev.filter(p => !back.some(b => b.key === p.key))])
+    })
+    return () => { alive = false }
+  }, [])
+  useEffect(() => { if (draftLoadedRef.current) saveDraftFiles(CC_SESSION.id, pending) }, [pending])
   useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode, voiceMode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
@@ -3854,12 +3870,17 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     msg.items.forEach(p => { uploadedRef.current.delete(p.key); URL.revokeObjectURL(p.previewUrl || p.localUrl) })
     setTemp(prev => prev.filter(m => m.key !== msg.key))
   }
-  // 离开页面时，发送失败的文字放回草稿，不会就这么丢了（图和文件留不住）
+  // 离开页面时，发送失败的文字、图和文件放回草稿，不会就这么丢了
   const tempRef = useRef(temp)
   useEffect(() => { tempRef.current = temp }, [temp])
+  const pendingRef = useRef(pending)
+  useEffect(() => { pendingRef.current = pending }, [pending])
   useEffect(() => () => {
-    const lost = tempRef.current.filter(m => m.failed && m.text).map(m => m.text)
+    const failed = tempRef.current.filter(m => m.failed)
+    const lost = failed.filter(m => m.text).map(m => m.text)
     if (lost.length) setDraftStorage(CC_SESSION.id, [...lost, getDraft(CC_SESSION.id)].filter(Boolean).join('\n'))
+    const lostItems = failed.flatMap(m => m.items || [])
+    if (lostItems.length && draftLoadedRef.current) saveDraftFiles(CC_SESSION.id, [...lostItems, ...pendingRef.current])
   }, [])
 
   // 沐这轮没回上来：把她那条再交给他一次（bridge 不会新增她的消息）
@@ -4172,7 +4193,6 @@ function App() {
 
   return (
     <div className="app">
-      <StatusScrim lightOnly />
       <div className="page-container">
         {tab === 'today' && <TodayPage />}
         {tab === 'chat' && <ChatPage onEnterRoom={setInRoom} />}
