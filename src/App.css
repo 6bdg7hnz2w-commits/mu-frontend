@@ -593,6 +593,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-pending{display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;margin:0 0 2px;padding:8px 8px 6px 6px}
 .cc-pending::-webkit-scrollbar{display:none}
 .cc-pending .composer-image-preview{margin:0;flex-shrink:0}
+.cc-pending [data-pk]{touch-action:pan-x;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.cc-pending [data-pk].dragging{z-index:2}
+.cc-pending [data-pk].dragging img,.cc-pending .cc-pending-file.dragging{box-shadow:0 8px 20px rgba(0,0,0,.28)}
+.cc-pending [data-pk].dragging button{opacity:0}
 .cc-images{display:flex;flex-wrap:wrap;gap:4px;max-width:78%;margin-bottom:4px}
 .msg.user .cc-images{justify-content:flex-end;margin-left:auto}
 .cc-thumb{width:120px;height:120px;object-fit:cover;border-radius:12px;cursor:pointer;display:block}
@@ -701,9 +705,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-tool-line{padding:2px 0;overflow-wrap:anywhere}
 .cc-tool-sum{margin-left:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-dim);word-break:break-all}
 .cc-tool-fail{margin-left:6px;color:var(--text-dim)}
-/* 新到的段落整段淡入：只改透明度，不遮罩、不位移；字早就在页面里 */
-.cc-reveal{animation:ccFade var(--cc-reveal-ms,400ms) ease-out both}
-@keyframes ccFade{from{opacity:0}to{opacity:1}}
+/* 新到的一轮整块（底色和字一起）淡入、往上浮 6px；同一轮后面到的段落也这样；字早就在页面里 */
+.cc-reveal{animation:ccFade var(--cc-reveal-ms,350ms) ease-out both}
+@keyframes ccFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 /* 正在输入：不要气泡，三个小点轻轻明暗 */
 .cc-typing{flex-direction:row;align-items:center;gap:5px;padding:6px 2px;width:auto}
 .cc-typing-inline{display:flex;padding:8px 0 2px}
@@ -846,12 +850,6 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-voice-text{font-size:14px;line-height:1.45;color:var(--text);text-align:left;padding:0 6px;white-space:pre-wrap;word-break:break-word}
 .cc-voice-dim{color:var(--text-dim)}
 .cc-voice-tone{font-size:12px;color:var(--text-dim);padding:0 6px;text-align:right}
-.cc-emoji-panel{position:relative;margin:8px 0 0;border-top:1px solid var(--border);padding-top:8px}
-.cc-emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:220px;overflow-y:auto;padding-bottom:44px;-webkit-overflow-scrolling:touch}
-.cc-emoji-grid button{border:none;background:none;font-size:26px;line-height:1;padding:6px 0;cursor:pointer;border-radius:8px;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
-.cc-emoji-grid button:active{background:var(--surface)}
-.cc-emoji-del{position:absolute;right:6px;bottom:6px;width:52px;height:36px;border-radius:8px;border:none;background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.cc-emoji-del:disabled{opacity:.4;cursor:default}
 
 /* ── 沐 ⋮ → 查找聊天记录 ── */
 .cc-search-page{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}

@@ -237,6 +237,7 @@ export default function VesperApp() {
   const [moreView, setMoreView] = useState(null)
   const [chatUsage, setChatUsage] = useState(false) // 聊天里点开的 Usage：叠在聊天上面，返回回到聊天
   const [immersive, setImmersive] = useState(false)
+  const [chatSub, setChatSub] = useState(false) // 聊天里进了 menu / 查找 / 回复方式
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false) // 聊天的表情 / 加号面板开着：和键盘一样收起 tab 栏
   useEffect(() => {
@@ -251,6 +252,7 @@ export default function VesperApp() {
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])
+  const onChatSub = useCallback((v) => setChatSub(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
   const swipe = useEdgeSwipe(() => { if (tab === 'more' && moreView) setMoreView(null); else if (chatUsage) setChatUsage(false) })
 
@@ -265,14 +267,17 @@ export default function VesperApp() {
   if (!unlocked) return <LockScreen expired={lockExpired} onUnlock={() => setUnlocked(true)} />
 
   const goTab = (k) => { setTab(k); setChatUsage(false); if (k !== 'more') setMoreView(null) }
-  // 键盘弹出来时底下的 tab 栏都收起来（聊天、日历的待办输入……）
-  const tabHidden = immersive || keyboardOpen || (tab === 'chat' && panelOpen)
+  // 底部 tab 只在一级页（Home、Chats、Calendar、More）显示；带返回键的二级页一律收起，在这里统一判断，页面自己不管：
+  // Home 里打开的日记、信这些（immersive）、More 里的每一页、聊天里的 menu / 查找 / 回复方式 / Usage。
+  // 另外键盘弹出、聊天面板打开时也收起。收起 / 回来都是 tab 栏自己往下滑出、滑回
+  const subPage = immersive || (tab === 'more' && !!moreView) || (tab === 'chat' && (chatUsage || chatSub))
+  const tabHidden = subPage || keyboardOpen || (tab === 'chat' && panelOpen)
 
   return (
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
     <div ref={frame} className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' && !chatUsage ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
-      {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} />}
+      {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} />}
       {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}
       {tab === 'calendar' && <CalendarTab />}
       {tab === 'more' && <MorePage onOpen={setMoreView} onOpenSetting={() => setMoreView('setting')} />}

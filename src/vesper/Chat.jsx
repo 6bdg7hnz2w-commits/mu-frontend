@@ -5,11 +5,11 @@ import { ChatPage } from '../App.jsx'
 // 文字用 lang="en"（画布上的英文），样子靠 .v-clawd 下的样式照画布改：壁纸、雾面顶栏和输入栏、她的蓝气泡、他的衬线正文
 const noop = () => {}
 
-export default function ChatTab({ onUsage }) {
+export default function ChatTab({ onUsage, onSubPage }) {
   return (
     <div className="v-clawd v-chat">
       <div className="v-chat-wall"><img src="/vesper/chat-bg.webp" alt="" /><i /></div>
-      <ChatPage onEnterRoom={noop} lang="en" onUsage={onUsage} />
+      <ChatPage onEnterRoom={noop} lang="en" onUsage={onUsage} onSubPage={onSubPage} />
     </div>
   )
 }
