@@ -66,9 +66,13 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   | `--s-meta` / `--s-metaShadow` | 小字：时间、复制 / 编辑 / 重发 / 转文字按钮（`.msg-meta` 里的）、思考过程和工具那行、`cc-msg-note`、`cc-late`、语音转的文字和语气；打字中的三个点的底色也用 `--s-meta` | 各自原来的 `--text-dim` / `--text-secondary` / `--text`，阴影无 | `--vc-meta` / `--vc-meta-shadow` |
   | `--s-icon` | 输入栏左边那排图标键（`.cc-composer-row .attach-btn`）没选中时的颜色 | `--text-secondary` | `--v-mute` |
   | `--s-card` / `--s-ink` | 回到底部键（`.cc-jump-btn`）的底色、图标色 | `--surface` / `--text-secondary` | `--v-card` / `--v-ink` |
+  | `--s-recBg` / `--s-recInk` / `--s-recRing` | 按住说话键录音中（`.cc-hold-btn.recording`）的底、字色、描边 | `--cc-user-bg` / `--text` / 无（边框是 `--text-secondary`） | 主色淡底叠在 `--v-card` 上 / `--v-acc` / 1px 主色内描边 |
+  | `--s-cancelBg` / `--s-cancelInk` / `--s-cancelRing` | 上滑取消（`.cc-hold-btn.cancel`） | 淡红 / #d94444 / 无（边框 #d94444） | `--v-danger` 淡底叠在 `--v-card` 上 / `--v-danger` / 1px 内描边 |
+
+  按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
 
   间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里。往后一步一步把颜色类的覆盖换成变量。
-  - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。（6c 把加号键连 `.active` 一起换成了变量；按住说话键还没动，Vesper 下录音和取消时底色、边框不变，这是现状，要不要改等决定。）
+  - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。（6c 把加号键连 `.active` 一起换成了变量；按住说话键的录音 / 取消状态以前在 Vesper 下被压没了，后来按用户的意思补上了，见下面变量表。）
   - 共用组件里的按钮，读变量的那条要挂在 `.cc-room` 下面（`.cc-room .cc-thinking-head`），不能只写单个类名。
     - **现象**（6c 比对时抓到）：Vesper 下"思考过程"那行字变成正文色，回到底部键底色变透明。
     - **原因**：Vesper 有一条全局重置 `.vesper button{background:initial;color:inherit}`，特异性 (0,1,1)，比 App.css 的 `.cc-thinking-head`、`.cc-jump-btn` (0,1,0) 高。以前 Vesper 自己写 `.v-chat .cc-jump-btn` (0,2,0) 把它压回来，删掉这条覆盖后，单类名的共用规则就输了。
