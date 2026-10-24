@@ -3,9 +3,12 @@ import { createPortal } from 'react-dom'
 import { CcLimitedNotice, useCcUsageBrief } from '../../Usage'
 import { loadDraftFiles, saveDraftFiles } from '../../draftFiles.js'
 import { usePreventPageScroll } from '../preventScroll.js'
-import { API, CC_SESSION, I, SH_TZ, apiFetch, fmtMsgTime, getDraft, getPasscode, lockApp, setDraftStorage, useChatSwipeBack, useSwipeBack } from '../../App.jsx'
-import { CopyButton, messageCopyText } from './markdown.jsx'
-import { TranscriptToggle, VoiceAwareContent, estimateVoiceDurations, hasVoiceSegment, useVoicePlayer } from './voice.jsx'
+import { API, CC_SESSION, I, SH_TZ, apiFetch, getDraft, getPasscode, lockApp, setDraftStorage, useChatSwipeBack, useSwipeBack } from '../../App.jsx'
+import { VoiceAwareContent, estimateVoiceDurations, useVoicePlayer } from './voice.jsx'
+import { ChatHeader } from './ChatHeader.jsx'
+import { Composer, useVoiceRecorder } from './Composer.jsx'
+import { CcTurn, CcUserMsg } from './Turn.jsx'
+import { useStickToBottom } from './useStickToBottom.js'
 
 // ─── 聊天页（沐 / CC）────────────────────────────────
 // Clawd 和 Vesper 共用这一份（Vesper 外面包 CcLang.Provider value="en"）。从 App.jsx 原样搬过来，逻辑没改；
@@ -96,7 +99,7 @@ const ccPos = m => (m.displayBefore != null ? m.displayBefore - 0.5 : m.seq)
 const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq) : new Date(a.time) - new Date(b.time))
 // 他同一轮（bridge 给的 pid）里的几段话合成一块显示；没有 pid 的旧记录，挨着的、前后不超过 3 分钟的算一轮
 const CC_TURN_GAP_MS = 3 * 60 * 1000
-const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
+export const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
 const ccIsHis = m => m.role === 'assistant' || ccIsTool(m) // 算进他那一块的：他的话和他调的工具
 function ccRows(messages) {
   const rows = []
@@ -134,11 +137,11 @@ function useCcReveal(key, live) {
   return [anim ? ' cc-reveal' : '', e => { if (e.target === e.currentTarget) setAnim(false) }]
 }
 // 他的一轮的气泡：新的一轮整个气泡（底色带字）一起淡入；第一段跟着气泡出现，自己不再播
-function CcTurnBody({ rowKey, live, children }) {
+export function CcTurnBody({ rowKey, live, children }) {
   const [cls, onEnd] = useCcReveal(`turn:${rowKey}`, live)
   return <div className={`cc-turn-body${cls}`} onAnimationEnd={onEnd}>{children}</div>
 }
-function CcPiece({ m, player, showTranscript, first }) {
+export function CcPiece({ m, player, showTranscript, first }) {
   const say = useCcSay()
   const [cls, onEnd] = useCcReveal(m.key, m.live && !first)
   return (
@@ -162,7 +165,7 @@ function ccToolLabel(t, say) {
   const verb = say(CC_TOOL_VERB[t.tool], CC_TOOL_VERB_EN[t.tool]) || say(`用了 ${t.tool}`, `Used ${t.tool}`)
   return <><span>{verb}</span>{t.sum && <code className="cc-tool-sum">{t.sum}</code>}{!t.ok && <span className="cc-tool-fail">{say('没成功', 'failed')}</span>}</>
 }
-function CcTools({ tools }) {
+export function CcTools({ tools }) {
   const say = useCcSay()
   const [open, setOpen] = useState(false)
   if (tools.length === 1) return <div className="cc-tools"><div className="cc-tool-line">{ccToolLabel(tools[0], say)}</div></div>
@@ -177,7 +180,7 @@ function CcTools({ tools }) {
   )
 }
 // 一块里的东西按先后分组：挨着的工具合成一组，话一段一个
-function ccTurnParts(items) {
+export function ccTurnParts(items) {
   const parts = []
   for (const it of items) {
     const prev = parts[parts.length - 1]
@@ -508,7 +511,7 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
 const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 // 自己发的文字原地改：和原话一样（只差首尾空格也算）就当取消，不发请求；不能改成空的
-function CcEditBox({ text, onSave, onCancel }) {
+export function CcEditBox({ text, onSave, onCancel }) {
   const say = useCcSay()
   const [value, setValue] = useState(text)
   const [saving, setSaving] = useState(false)
@@ -537,7 +540,7 @@ const CC_PAGE = 30
 // （白名单唯一来源是 VPS 上的 /opt/mu-bridge/file_types.json，前端不写死）。拿不到时图片照常能发，按 20 个算
 const CC_MAX_ITEMS_FALLBACK = 20
 const ccExt = (name) => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : '' }
-const fmtFileSize = (n) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
+export const fmtFileSize = (n) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
 // 带口令取回 bridge 上的图或文件（<img>/<a> 带不了 Authorization），blob 地址按 path 缓存在内存里。
 // 聊天里的图要缩略图（thumb：bridge 做的 360×360 webp，十几 KB），点开大图才要原图；内存里缩略图的 key 是 `${path}#thumb`。
 // 图还存进浏览器的 Cache Storage：文件名是 uuid、内容永远不变，存一次下次打开 App 直接读，不用再绕 Render 和梯子。
@@ -605,7 +608,7 @@ async function uploadCcFile(file, onProgress) {
   return (await ccUploadForm(form, onProgress)).path
 }
 // 刚发出去还在传的图 / 文件上盖一层：一圈进度；这张传失败了换成重试按钮，点了只重传这一张
-function CcUpMark({ st, onRetry }) {
+export function CcUpMark({ st, onRetry }) {
   if (!st) return null
   if (st.failed) return (
     <button className="cc-up failed" onClick={e => { e.stopPropagation(); onRetry() }} aria-label="Retry">
@@ -633,12 +636,12 @@ const isMobileUa = () => /iPhone|iPad|Android/i.test(navigator.userAgent)
 const CC_FILE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
 const CC_DOWNLOAD_ICON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
 const CC_OFFICE_EXTS = new Set(['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt'])
-function CcFileIcon({ name }) {
+export function CcFileIcon({ name }) {
   return <span className="cc-file-icon">{CC_FILE_ICON}<span className="cc-file-ext">{ccExt(name).slice(0, 4).toUpperCase()}</span></span>
 }
 
 // 聊天里自己发的文件：类型图标 + 原文件名 + 大小，点一下打开，右边按钮下载。bridge 只留 7 天，过期了灰掉
-function CcFile({ file }) {
+export function CcFile({ file }) {
   const say = useCcSay()
   const [state, setState] = useState('idle') // idle | loading | gone
   const getUrl = async () => file.localUrl || await fetchCcImage(file.path)
@@ -669,108 +672,6 @@ function CcFile({ file }) {
         <span className="cc-file-size">{state === 'gone' ? say('文件已过期', 'Expired') : state === 'loading' ? say('打开中…', 'Opening…') : fmtFileSize(file.size || 0)}</span>
       </span>
       {state !== 'gone' && <button className="cc-file-dl" onClick={e => { e.stopPropagation(); open(true) }} aria-label="Download">{CC_DOWNLOAD_ICON}</button>}
-    </div>
-  )
-}
-
-// 输入框上面待发的图和文件那一排：左右滑着看；长按一张（不动 300ms）拿起来，左右拖换位置，松手放下。
-// 发送、存草稿都按这一排的顺序。拿起来以后挡住浏览器的横向滚动，别的几张让位时滑过去
-const CC_LIFT_MS = 300
-function CcPendingRow({ items, onReorder, onOpen, onRemove }) {
-  const rowRef = useRef(null)
-  const els = useRef(new Map())
-  const drag = useRef(null) // { key, id, x0, y0, timer, on, grab, x }
-  const [dragKey, setDragKey] = useState(null)
-  const before = useRef(null) // 换位置前各张的位置，换完从旧位置滑到新位置
-  const follow = () => { // 被拖的那张跟着手指走（offsetLeft 不受 transform 影响，是它在排里的位置）
-    const d = drag.current, row = rowRef.current, el = d && els.current.get(d.key)
-    if (!d?.on || !row || !el) return
-    const left = d.x - row.getBoundingClientRect().left + row.scrollLeft - d.grab
-    el.style.transform = `translateX(${left - el.offsetLeft}px) scale(1.06)`
-    return left + el.offsetWidth / 2
-  }
-  const move = (e) => {
-    const d = drag.current
-    if (!d || e.pointerId !== d.id) return
-    if (!d.on) { if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) { clearTimeout(d.timer); drag.current = null } return }
-    d.x = e.clientX
-    const row = rowRef.current, r = row.getBoundingClientRect()
-    if (e.clientX < r.left + 28) row.scrollLeft -= 8; else if (e.clientX > r.right - 28) row.scrollLeft += 8
-    const mid = follow()
-    const rest = items.filter(p => p.key !== d.key)
-    const at = rest.filter(p => { const el = els.current.get(p.key); return el && el.offsetLeft + el.offsetWidth / 2 < mid }).length
-    if (items[at]?.key !== d.key) {
-      before.current = new Map([...els.current].map(([k, el]) => [k, el.offsetLeft]))
-      const it = items.find(p => p.key === d.key)
-      onReorder([...rest.slice(0, at), it, ...rest.slice(at)])
-    }
-  }
-  const drop = (e) => {
-    const d = drag.current
-    if (!d || e.pointerId !== d.id) return
-    clearTimeout(d.timer); drag.current = null
-    if (!d.on) return
-    const el = els.current.get(d.key)
-    if (el) { el.style.transition = 'transform .18s ease'; el.style.transform = '' }
-    setDragKey(null)
-    drag.current = { dropped: true }; setTimeout(() => { if (drag.current?.dropped) drag.current = null }, 50) // 松手那下的 click 不当成点开大图
-  }
-  const down = (e) => {
-    const item = e.target.closest('[data-pk]')
-    if (!item || e.target.closest('button') || drag.current) return
-    const key = item.dataset.pk, id = e.pointerId
-    drag.current = { key, id, x0: e.clientX, y0: e.clientY, x: e.clientX }
-    drag.current.timer = setTimeout(() => {
-      const d = drag.current, row = rowRef.current, el = els.current.get(key)
-      if (!d || d.key !== key || !row || !el) return
-      d.on = true
-      d.grab = d.x - row.getBoundingClientRect().left + row.scrollLeft - el.offsetLeft
-      el.style.transition = 'none'
-      try { row.setPointerCapture(id) } catch {}
-      navigator.vibrate?.(10)
-      setDragKey(key); follow()
-    }, CC_LIFT_MS)
-  }
-  // 拿起来以后手指再动，iOS 会当成横向滚动接走（随后 pointercancel）；touchmove 要非被动监听才拦得住
-  useEffect(() => {
-    const row = rowRef.current
-    if (!row) return
-    const stop = (e) => { if (drag.current?.on) e.preventDefault() }
-    row.addEventListener('touchmove', stop, { passive: false })
-    return () => row.removeEventListener('touchmove', stop)
-  }, [])
-  useLayoutEffect(() => {
-    const old = before.current
-    before.current = null
-    if (old) els.current.forEach((el, k) => {
-      if (k === drag.current?.key || !old.has(k) || old.get(k) === el.offsetLeft) return
-      el.style.transition = 'none'
-      el.style.transform = `translateX(${old.get(k) - el.offsetLeft}px)`
-      void el.offsetWidth
-      el.style.transition = 'transform .2s ease'
-      el.style.transform = ''
-    })
-    follow()
-  }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
-  const keep = (key) => (el) => { if (el) els.current.set(key, el); else els.current.delete(key) }
-  return (
-    <div className="cc-pending" ref={rowRef} onPointerDown={down} onPointerMove={move} onPointerUp={drop} onPointerCancel={drop}
-      onClickCapture={e => { if (drag.current?.dropped) { e.stopPropagation(); e.preventDefault() } }} onContextMenu={e => e.preventDefault()}>
-      {items.map(p => p.kind === 'file' ? (
-        <div key={p.key} ref={keep(p.key)} data-pk={p.key} className={`composer-image-preview cc-pending-file${dragKey === p.key ? ' dragging' : ''}`} title={p.file.name}>
-          <CcFileIcon name={p.file.name} />
-          <span className="cc-file-info">
-            <span className="cc-file-name">{p.file.name}</span>
-            <span className="cc-file-size">{fmtFileSize(p.file.size)}</span>
-          </span>
-          <button onClick={() => onRemove(p.key)} aria-label="Remove file">{I.close}</button>
-        </div>
-      ) : (
-        <div key={p.key} ref={keep(p.key)} data-pk={p.key} className={`composer-image-preview${dragKey === p.key ? ' dragging' : ''}`}>
-          <img src={p.previewUrl} alt="" draggable={false} data-lb={p.previewUrl} onClick={() => onOpen(p)} />
-          <button onClick={() => onRemove(p.key)} aria-label="Remove image">{I.close}</button>
-        </div>
-      ))}
     </div>
   )
 }
@@ -1007,7 +908,7 @@ function LightboxSlide({ img, near, onFile, imgRef, onReady }) {
 }
 
 // 聊天里显示缩略图；点开交给 ImageLightbox 去取原图（刚发的图本地就有原图，直接用）
-function CcImage({ img, onOpen }) {
+export function CcImage({ img, onOpen }) {
   const say = useCcSay()
   const [url, setUrl] = useState(img.localUrl || (img.path && (ccImageCache.get(`${img.path}#thumb`) || ccImageCache.get(img.path))) || null)
   const [failed, setFailed] = useState(false)
@@ -1033,26 +934,13 @@ async function listenCcVoice(blob, duration) {
   if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { drop: res.status === 400 || res.status === 422 })
   return data
 }
-// 录音格式：Chrome 录 webm/opus，iPhone Safari 只会 mp4
-function ccRecorderMime() {
-  if (typeof MediaRecorder === 'undefined') return null
-  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported?.(t)) || ''
-}
-const CC_VOICE_MAX_S = 60 // 一段最多录这么久，到点自动发
-const CC_VOICE_MIN_S = 0.8
-// 输入框两边的圆圈按钮：语音（声波）/ 键盘、⊕
-const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.3 10.6a2 2 0 0 1 0 2.8" strokeWidth="1.8"/><path d="M11.8 8.6a5 5 0 0 1 0 6.8" strokeWidth="1.8"/><path d="M14.3 6.6a8 8 0 0 1 0 10.8" strokeWidth="1.8"/></svg>
-const CC_EMOJI_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><circle cx="15" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><path d="M7.8 13.5h8.4a4.2 4.2 0 0 1-8.4 0z" strokeWidth="1.6"/></svg>
-const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
-// 表情面板：常用的这些，点一下插进输入框光标处
-const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
 const CC_PLAY_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
 const CC_PAUSE_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>
 
 // 她发的语音：点一下放 / 停，下面是 ears 转出来的字和语气（和她平时比偏了多少）
 // 录音先取好放着，点的那一下同步 play()，iPhone 才不会因为"不是用户点的"拦掉
 let ccVoiceNow = null // 同一时间只放一条
-function CcVoice({ v }) {
+export function CcVoice({ v }) {
   const say = useCcSay()
   const [url, setUrl] = useState(v.localUrl || (v.path && ccImageCache.get(v.path)) || null)
   const [state, setState] = useState('idle') // idle | playing | gone
@@ -1190,22 +1078,9 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
   const [lightbox, setLightbox] = useState(null) // { items, index }：点开的那组图和从第几张开始
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
   const [emojiOpen, setEmojiOpen] = useState(false) // 表情包面板：表情包还在做，先是个空面板
-  const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
-  const [recNow, setRecNow] = useState(0)
-  const recRef = useRef(null)
-  const canRecord = ccRecorderMime() !== null && !!navigator.mediaDevices?.getUserMedia
-  const [voiceMode, setVoiceMode] = useState(() => { try { return canRecord && localStorage.getItem('cc_voice_mode') === '1' } catch { return false } }) // 上次用的是语音还是键盘，下次进来照旧
-  const toggleVoiceMode = () => {
-    const next = !voiceMode
-    setVoiceMode(next)
-    try { localStorage.setItem('cc_voice_mode', next ? '1' : '0') } catch {}
-    // 切到语音前先让输入框失焦：直接卸掉的话浏览器不发 focusout，底部 tab 会一直藏着；切回键盘也不自动聚焦，点了输入框才藏 tab
-    if (next) textareaRef.current?.blur()
-  }
-  const photoInputRef = useRef(null)
-  const cameraInputRef = useRef(null) // Vesper 的 Camera 按钮用
-  const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
+  // 按住说话、语音 / 键盘模式（Composer.jsx）；sendVoice 在下面，用的时候才取
+  const rec = useVoiceRecorder({ passcode, textareaRef, onVoice: (blob, duration) => sendVoice(blob, duration), onNotice: setNotice })
   const messagesEndRef = useRef(null)
   const listRef = useRef(null)
   const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，保持原位置
@@ -1232,7 +1107,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
     return () => { alive = false }
   }, [])
   useEffect(() => { if (draftLoadedRef.current) saveDraftFiles(CC_SESSION.id, pending) }, [pending])
-  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode, voiceMode])
+  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode, rec.voiceMode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
   // 同一个 id 更正过（edited_at 更新）的新版本要盖掉旧的；只是更正旧消息时不滚动
@@ -1547,52 +1422,14 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
   // 侧滑返回：大图、录音、改消息、任何弹窗或底部面板开着时不许；键盘、表情面板、加号面板开着可以，退之前先收起
   useChatSwipeBack(roomRef, {
     onBack,
-    blocked: () => !!lightbox || !!recording || !!editingKey || !!document.querySelector('.modal-overlay,.v-modal,.v-bsheet,.image-lightbox-overlay'),
+    blocked: () => !!lightbox || !!rec.recording || !!editingKey || !!document.querySelector('.modal-overlay,.v-modal,.v-bsheet,.image-lightbox-overlay'),
     beforeBack: () => { textareaRef.current?.blur(); closePanels() },
   })
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
   useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
   useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
-  // 输入栏变高变矮（面板开合、键盘起落、草稿图那一排）时消息列表贴着底：最后一条跟着输入栏走，不跳
-  // 面板开合、草稿图那一排是渲染引起的：每次渲染完、画出来之前对一下；键盘起落不经过渲染，交给 ResizeObserver。
-  // 列表是后来才渲染出来的（先有加载中那一屏），换了元素就重新挂
-  // 停在底部时（stuck），列表里的内容变高也要贴住：网页字体晚到、图片晚到会把上面的消息撑高，
-  // Safari 不支持 overflow-anchor，scrollTop 不变，最后一条就被往下推、离底差一截（刚进聊天页常见）。所以每条消息也挂上 ResizeObserver
-  const anchorRef = useRef(null)
-  useLayoutEffect(() => {
-    const el = listRef.current
-    if (anchorRef.current?.el !== el) {
-      anchorRef.current?.ro?.disconnect()
-      anchorRef.current?.el?.removeEventListener('scroll', anchorRef.current.onScroll)
-      anchorRef.current = null
-      if (!el) return
-      const a = { el, h: el.clientHeight, stuck: true, seen: new WeakSet() }
-      // 本来就在底部附近（80px 内）就直接钉到真正的底，不按差值去补：列表变高时（收键盘）浏览器自己已经把 scrollTop 夹到底了，
-      // 再 += d 就多退一截，收完键盘最后一条离输入栏远出一块（skin-checklist 第 8 条）
-      a.adjust = () => {
-        if (detachedRef.current) return
-        const d = a.h - el.clientHeight
-        a.h = el.clientHeight
-        const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-        if (d) { if ((d > 0 ? toBottom - d : toBottom) < 80) el.scrollTop = el.scrollHeight }
-        else if (a.stuck && toBottom > 0) el.scrollTop = el.scrollHeight
-      }
-      // 手指滚开 80px 以上就不再贴底（在看历史），滚回底部附近又贴上
-      a.onScroll = () => { a.stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }
-      el.addEventListener('scroll', a.onScroll, { passive: true })
-      if (typeof ResizeObserver !== 'undefined') { a.ro = new ResizeObserver(a.adjust); a.ro.observe(el) }
-      anchorRef.current = a
-    }
-    const a = anchorRef.current
-    if (a.ro) for (const c of el.children) if (!a.seen.has(c)) { a.seen.add(c); a.ro.observe(c) }
-    a.adjust()
-  })
-  useEffect(() => () => anchorRef.current?.ro?.disconnect(), [])
-  const stickBottom = () => {
-    if (say(true, false) || detachedRef.current) return
-    const go = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
-    go(); setTimeout(go, 120); setTimeout(go, 360)
-  }
+  // 消息列表贴底（useStickToBottom.js）；stickBottom：英文版（Vesper）点输入框、收起键盘时回到最底下
+  const stickBottom = useStickToBottom(listRef, detachedRef, say(false, true))
 
   // 缓存里垫上的他的话：语音段的时长也要估（mergeHistory 只估新来的）
   useEffect(() => {
@@ -1818,8 +1655,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
     }
   }
 
-  // ─── 按住说话 ───
-  // 按下开麦克风开始录，松开就发；按着往上滑超过 60px 松开是取消。第一次按会弹麦克风权限，没开好就松手的这次不算
+  // 按住说话录完的一段：和打字一样先放临时消息再 deliver（录音本身在 Composer.jsx 的 useVoiceRecorder）
   const sendVoice = (blob, duration) => {
     const localUrl = URL.createObjectURL(blob)
     const item = { key: `voice-${Date.now()}`, kind: 'voice', blob, duration, localUrl }
@@ -1829,76 +1665,6 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
     setTemp(prev => [...prev, msg])
     deliver(msg)
   }
-  const finishRecording = (rec) => {
-    rec.stream?.getTracks().forEach(t => t.stop())
-    if (recRef.current === rec) recRef.current = null
-    if (rec.cancel) return
-    if (rec.duration < CC_VOICE_MIN_S) { setNotice(say('太短了，按住多说一会儿', 'Too short — hold a little longer')); return }
-    const type = rec.recorder?.mimeType || rec.chunks[0]?.type || 'audio/webm'
-    const blob = new Blob(rec.chunks, { type })
-    if (blob.size) sendVoice(blob, rec.duration)
-  }
-  const stopRecording = (cancel) => {
-    const rec = recRef.current
-    if (!rec || rec.released) return
-    rec.released = true
-    rec.cancel = cancel
-    rec.duration = rec.startedAt ? (Date.now() - rec.startedAt) / 1000 : 0
-    clearTimeout(rec.timer)
-    setRecording(null)
-    if (rec.recorder && rec.recorder.state !== 'inactive') rec.recorder.stop() // onstop 里收尾
-    else finishRecording({ ...rec, cancel: true })
-  }
-  const startRecording = async (e) => {
-    e.preventDefault()
-    if (recRef.current || !passcode) return
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    const rec = { chunks: [], y0: e.clientY, released: false, cancel: false }
-    recRef.current = rec
-    setRecording({ start: null, cancel: false })
-    let stream
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
-    } catch {
-      recRef.current = null
-      setRecording(null)
-      setNotice(say('没拿到麦克风权限（设置里允许这个网页用麦克风）', 'No microphone access — allow it in Settings'))
-      return
-    }
-    rec.stream = stream
-    if (rec.released) { // 在弹权限的时候已经松手了
-      stream.getTracks().forEach(t => t.stop())
-      if (recRef.current === rec) recRef.current = null
-      if (!rec.cancel) setNotice(say('好了，再按住说一次', 'Ready — hold to talk again'))
-      return
-    }
-    const mime = ccRecorderMime()
-    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
-    recorder.ondataavailable = ev => { if (ev.data?.size) rec.chunks.push(ev.data) }
-    recorder.onstop = () => finishRecording(rec)
-    rec.recorder = recorder
-    rec.startedAt = Date.now()
-    recorder.start()
-    rec.timer = setTimeout(() => stopRecording(false), CC_VOICE_MAX_S * 1000)
-    setRecording({ start: rec.startedAt, cancel: false })
-  }
-  const moveRecording = (e) => {
-    const rec = recRef.current
-    if (!rec || rec.released) return
-    const cancel = rec.y0 - e.clientY > 60
-    setRecording(r => r && r.cancel !== cancel ? { ...r, cancel } : r)
-  }
-  const releaseRecording = (e) => {
-    const rec = recRef.current
-    if (!rec) return
-    stopRecording(rec.y0 - e.clientY > 60)
-  }
-  useEffect(() => {
-    if (!recording?.start) return
-    const t = setInterval(() => setRecNow(Date.now()), 200)
-    return () => clearInterval(t)
-  }, [recording?.start])
-  useEffect(() => () => { const rec = recRef.current; if (rec) { rec.cancel = true; stopRecording(true) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const discardFailed = (msg) => {
     msg.items.forEach(p => { uploadedRef.current.delete(p.key); URL.revokeObjectURL(p.previewUrl || p.localUrl) })
     setTemp(prev => prev.filter(m => m.key !== msg.key))
@@ -1950,8 +1716,6 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
     return false
   }
 
-  const handleInputChange = (e) => setInput(e.target.value)
-
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
   const handleKeyDown = (e) => { if (isMobile) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() } }
   const statusLabel = { connecting: 'Connecting…', live: ccBrainLabel(brain) || 'Claude Code', offline: 'Offline · reconnecting' }[status]
@@ -1959,19 +1723,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
   return (
     <>
     <div className="chatroom cc-room" ref={roomRef}>
-      <div className="chatroom-header">
-        <button className="icon-btn" onClick={onBack}>{I.back}</button>
-        <div className="chatroom-title">
-          {/* 英文版（Vesper）连接状态是名字右边一个小圆点，绝对定位挂着，名字还在正中、顶栏不变高 */}
-          <div className="chatroom-name">{say('沐 (CC)', <span className="cc-name-wrap">Soren<span key={passcode ? status : 'locked'} className={`cc-head-dot ${passcode ? status : 'offline'}`} role="status" aria-label={passcode ? statusLabel : 'Locked'} /></span>)}</div>
-          {say(<div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>, null)}
-        </div>
-        <div className="chatroom-header-right">
-          <button className="icon-btn" onClick={onMenu} aria-label={say('更多', 'More')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          </button>
-        </div>
-      </div>
+      <ChatHeader onBack={onBack} onMenu={onMenu} passcode={passcode} status={status} statusLabel={statusLabel} />
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
@@ -1979,71 +1731,13 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
-          if (row.turn) {
-            // 他的一轮：几段合成一块，没有气泡；时间、复制整块、转文字放在块下面
-            // 还在说（服务器的"正在输入"亮着、这是最后一块）：不显示操作行，三个点跟在这块最后面
-            const live = liveTurnKey === row.key
-            const items = row.items
-            const said = items.filter(it => !ccIsTool(it)) // 他说的话（复制、转文字只管这些）
-            const last = items[items.length - 1]
-            const voiced = said.some(it => hasVoiceSegment(it.text))
-            const viaApi = items.findLast(it => it.viaApi) // 这块是 API 替班回的：时间后面标上模型
-            const open = !!transcripts[row.key]
-            return (
-              <div key={row.key} className={`msg assistant cc-turn${items.some(it => it.key === flashKey) ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')}>
-                <CcTurnBody rowKey={row.key} live={items[0].live}>
-                  {ccTurnParts(items).map((part, i) => part.tools
-                    ? <CcTools key={part.key} tools={part.tools} />
-                    : <CcPiece key={part.key} m={part.m} player={voice} showTranscript={open} first={i === 0} />)}
-                  {live && <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
-                </CcTurnBody>
-                {!live && (
-                  <div className="msg-meta">
-                    <span className="msg-time">{fmtMsgTime(last.time, say(false, true))}</span>
-                    {viaApi && <span className="msg-time cc-via-api">{viaApi.model ? `API · ${viaApi.model}` : 'API'}</span>}
-                    {said.length > 0 && <CopyButton getText={() => said.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />}
-                    {voiced && <TranscriptToggle open={open} onClick={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />}
-                  </div>
-                )}
-              </div>
-            )
-          }
+          if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />
           const m = row.m
           const failure = failures.get(m.key)
           const showFailure = failure && !calledAgain.has(failure.key)
-          const editing = editingKey === m.key
-          return (
-          <div key={m.key} className={`msg ${m.role}${m.key === flashKey ? ' cc-flash' : ''}`} data-mids={m.key}>
-            {m.images?.length > 0 && <div className={`cc-images${m.images.length > 4 ? ' many' : ''}`}>{m.images.map((im, i) => m.up?.[im.key]
-              ? <div key={im.key} className="cc-up-wrap"><CcImage img={im} onOpen={openChatImage} /><CcUpMark st={m.up[im.key]} onRetry={() => deliver(m, im.key)} /></div>
-              : <CcImage key={im.path || im.key || i} img={im} onOpen={openChatImage} />)}</div>}
-            {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => m.up?.[f.key]
-              ? <div key={f.key} className="cc-up-wrap"><CcFile file={f} /><CcUpMark st={m.up[f.key]} onRetry={() => deliver(m, f.key)} /></div>
-              : <CcFile key={f.path || f.key || i} file={f} />)}</div>}
-            {m.voices?.length > 0 && m.voices.map((v, i) => <CcVoice key={v.path || v.key || i} v={v} />)}
-            {m.text && (editing
-              ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
-              : <div className="bubble">{m.text}</div>)}
-            <div className="msg-meta">
-              {m.failed
-                ? <>
-                    <button className="cc-note-btn" onClick={() => deliver(m)}>{say('发送失败 · 点一下重发', 'Not sent · tap to retry')}</button>
-                    <button className="copy-btn" onClick={() => discardFailed(m)} aria-label="Delete">{I.close}</button>
-                  </>
-                : <span className="msg-time">{fmtMsgTime(m.time, say(false, true))}</span>}
-              {m.editedAt && <span className="msg-time">{say('已编辑', 'Edited')}</span>}
-              {m.viaApp && <span className="msg-time">{say('来自 Claude App', 'From Claude App')}</span>}
-              {m.text && !editing && <CopyButton getText={() => m.text} />}
-              {m.text && !m.local && !m.viaApp && !editing && (
-                <button className="copy-btn" onClick={() => setEditingKey(m.key)} aria-label="Edit">{I.edit}</button>
-              )}
-            </div>
-            {showFailure && (
-              <div className="cc-msg-note">{failure.partial ? say('话没说完就断了', 'Cut off mid-reply') : say('他这次没回上来', "He didn't reply this time")} · <button className="cc-note-btn" onClick={() => callAgain(m, failure)}>{say('再叫他一下', 'Call him again')}</button></div>
-            )}
-            {!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey && <div className="cc-msg-note">{say('他好像卡住了', 'He seems stuck')}</div>}
-          </div>
-          )
+          return <CcUserMsg key={m.key} m={m} flash={m.key === flashKey} failure={showFailure ? failure : null} editing={editingKey === m.key}
+            stuckNote={!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey}
+            onOpenImage={openChatImage} onRetry={deliver} onDiscard={discardFailed} onEdit={setEditingKey} onSaveEdit={saveEdit} onCancelEdit={() => setEditingKey(null)} onCallAgain={callAgain} />
         })}
         {loadingNewer && <div className="empty-state">Loading…</div>}
         {typingNow && !liveTurnKey && !detached && <div className="msg assistant cc-typing" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
@@ -2060,42 +1754,11 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
         </div>
       )}
 
-      <div className="composer">
-        {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
-        {pending.length > 0 && <CcPendingRow items={pending} onReorder={setPending} onOpen={openPendingImage} onRemove={removePending} />}
-        {recording && (
-          <div className={`cc-recording${recording.cancel ? ' cancel' : ''}`} role="status">
-            <span className="cc-recording-dot" />
-            <span className="cc-recording-time">{recording.start ? `${Math.floor(Math.max(0, recNow - recording.start) / 1000)}"` : '…'}</span>
-            <span>{!recording.start ? 'Opening mic…' : recording.cancel ? 'Release to cancel' : 'Release to send · slide up to cancel'}</span>
-          </div>
-        )}
-        {/* 左边切语音 / 键盘；语音模式下输入框换成整条"按住 说话"；右边 ⊕ 是照片和文件，有东西要发时多一个发送 */}
-        <div className="composer-input-row cc-composer-row">
-          <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? say('切换到键盘', 'Keyboard') : say('切换到语音', 'Voice')}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
-          {voiceMode ? (
-            <button className={`cc-hold-btn${recording ? ' recording' : ''}${recording?.cancel ? ' cancel' : ''}`} disabled={!passcode}
-              onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
-              onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
-          ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onTouchStart={() => { swipeBlurAt.current = 0 }} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
-          )}
-          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label={say('表情包', 'Stickers')} aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
-          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
-          <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
-          <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
-          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
-          {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
-        </div>
-        {attachOpen && (
-          <div className="cc-attach-menu">
-            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}><i>{I.camera}</i><span>Camera</span></button>}
-            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}><i>{I.photo}</i><span>{say('照片', 'Photos')}</span></button>
-            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}><i>{I.file}</i><span>{say('文件', 'Files')}</span></button>
-          </div>
-        )}
-        {emojiOpen && <div className="cc-emoji-panel"><div className="cc-emoji-soon">{say('表情包在做了', 'Stickers are on the way')}</div></div>}
-      </div>
+      <Composer passcode={passcode} rec={rec} notice={notice} onClearNotice={() => setNotice('')}
+        pending={pending} onReorderPending={setPending} onOpenPending={openPendingImage} onRemovePending={removePending}
+        textareaRef={textareaRef} input={input} onInput={setInput} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} onTextTouchStart={() => { swipeBlurAt.current = 0 }}
+        emojiOpen={emojiOpen} attachOpen={attachOpen} onTogglePanel={togglePanel} onCloseAttach={() => setAttachOpen(false)}
+        full={full} fileAccept={fileAccept} filesReady={!!fileTypes} onPickFiles={handleFileSelect} onPickImages={handleImageSelect} onSend={sendMessage} />
 
       {lightbox && <ImageLightbox items={lightbox.items} index={lightbox.index} onClose={() => setLightbox(null)} />}
 
