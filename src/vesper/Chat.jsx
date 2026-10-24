@@ -8,8 +8,8 @@ const noop = () => {}
 export default function ChatTab({ onUsage, onSubPage }) {
   return (
     <div className="v-clawd v-chat">
-      <div className="v-chat-wall"><img src="/vesper/chat-bg.webp" alt="" /><i /></div>
-      <ChatPage onEnterRoom={noop} lang="en" onUsage={onUsage} onSubPage={onSubPage} />
+      <div className="v-chat-wall" data-swipe-follow><img src="/vesper/chat-bg.webp" alt="" /><i /></div>
+      <ChatPage onEnterRoom={noop} lang="en" slideIn onUsage={onUsage} onSubPage={onSubPage} />
     </div>
   )
 }

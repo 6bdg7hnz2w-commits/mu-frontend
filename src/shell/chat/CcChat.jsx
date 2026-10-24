@@ -1022,7 +1022,7 @@ function setCcCacheStorage(history) {
   try { localStorage.setItem(CC_CACHE_KEY, JSON.stringify(out)) } catch {}
 }
 
-export function CCChatPage({ onBack, onMenu, jumpTo }) {
+export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const say = useCcSay()
   // App 没解锁根本不会渲染到这里；口令失效时 apiFetch 收到 401 会让整个 App 回锁屏
   const passcode = getPasscode()
@@ -1424,6 +1424,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo }) {
     onBack,
     blocked: () => !!lightbox || !!rec.recording || !!editingKey || !!document.querySelector('.modal-overlay,.v-modal,.v-bsheet,.image-lightbox-overlay'),
     beforeBack: () => { textareaRef.current?.blur(); closePanels() },
+    onUnder, slideIn,
   })
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
   useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])

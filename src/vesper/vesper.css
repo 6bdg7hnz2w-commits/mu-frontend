@@ -417,7 +417,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
 /* 背景按整个屏幕的高度铺（--v-full，html 的高度不随键盘变），键盘、面板起落时只有消息区在变，背景不缩放 */
-.v-chat-wall{position:absolute;top:0;left:0;right:0;height:var(--v-full,100lvh);background:var(--vc-base)}
+.v-chat-wall{position:absolute;top:0;left:0;right:0;height:var(--v-full,100lvh);background:var(--vc-base);z-index:1}
+/* 滑入、右滑返回时底下垫着的对话列表；壁纸（data-swipe-follow）和聊天页一起移，盖在列表上面 */
+.v-chat>.cc-under{position:absolute;inset:0;z-index:0}
 .v-chat-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--vc-f)}
 .v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
