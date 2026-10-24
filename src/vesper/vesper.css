@@ -432,7 +432,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --s-toolInk:currentColor;--s-toolAlpha:.82;--s-noticeR:12px;
   /* 查找页（App.css 里 .cc-search-*）：搜索框、结果卡片和会话卡片一样；"我 / 沐"是主题色小胶囊，出处只是一行淡字，命中的词是一层淡粉底 */
   --s-input:var(--v-scIn);--s-press:var(--v-card);--s-whoBg:var(--v-acc-soft);--s-whoInk:var(--v-acc);--s-fromBg:none;--s-fromInk:var(--v-mute);
-  --s-markBg:rgba(212,174,189,.55);--s-markInk:var(--v-ink)}
+  --s-markBg:rgba(212,174,189,.55);--s-markInk:var(--v-ink);
+  /* 回复方式页（App.css 里 .cc-brain-*）：CC / API 开关是一块方圆的浅底，滑块是卡片色；选项之间一条细线，测试键是一张小卡片 */
+  --s-track:var(--v-card2);--s-knob:var(--v-card);--s-knobShadow:0 1px 2px rgba(20,30,60,.08),0 4px 10px rgba(20,30,60,.06);--s-faint:var(--v-faint);--s-ok:#5d9b7a}
 .vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
@@ -490,24 +492,19 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-search-end,.v-chat .cc-search-results .empty-state{padding:14px 0;text-align:center;font-size:13px}
 .v-chat .cc-search-results .empty-state{font-family:var(--v-sc);color:var(--v-mute)}
 .v-chat .cc-brain-scroll{padding:22px 20px;display:flex;flex-direction:column;gap:14px}
-.v-chat .cc-brain-switch{height:46px;margin:0;padding:4px;border-radius:15px;background:var(--v-card2)}
-.v-chat .cc-brain-thumb{top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:11px;background:var(--v-card);box-shadow:0 1px 2px rgba(20,30,60,.08),0 4px 10px rgba(20,30,60,.06);transition:transform .38s cubic-bezier(.3,.7,.2,1)}
-.v-chat .cc-brain-switch button{padding:0;font-family:var(--v-sans);font-size:15px;font-weight:600;letter-spacing:.06em;color:var(--v-mute)}
-.v-chat .cc-brain-switch button[aria-checked="true"]{color:var(--v-ink)}
-.v-chat .cc-brain-hint{margin:0;padding:0 4px;font-family:var(--v-sc);font-size:13px;line-height:1.7;color:var(--v-mute)}
+.v-chat .cc-brain-switch{height:46px;margin:0;padding:4px;border-radius:15px}
+.v-chat .cc-brain-thumb{top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:11px;transition:transform .38s cubic-bezier(.3,.7,.2,1)}
+.v-chat .cc-brain-switch button{padding:0;font-size:15px;font-weight:600;letter-spacing:.06em}
+.v-chat .cc-brain-hint{margin:0;padding:0 4px;font-size:13px;line-height:1.7}
 .v-chat .cc-brain-scroll .card-title-outer{margin:0;padding:8px 4px 0;font-family:var(--v-sc);font-size:13px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--v-mute)}
 .v-chat .cc-brain-scroll .settings-card{margin:0;padding:0;background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow);overflow:hidden}
-.v-chat .cc-brain-row{min-height:62px;padding:10px 16px 10px 18px;border-bottom:1px solid var(--v-line)}
-.v-chat .cc-brain-row:last-child{border-bottom:0}
+.v-chat .cc-brain-row{min-height:62px;padding:10px 16px 10px 18px}
 .v-chat .cc-brain-row-main{gap:3px}
-.v-chat .cc-brain-row-name{font-family:var(--v-serif);font-size:19px;font-weight:600;line-height:1.15}
-.v-chat .cc-brain-row-sub{font-family:var(--v-sans);font-size:12px;color:var(--v-mute)}
-.v-chat .cc-brain-row-model{font-size:10.5px;color:var(--v-faint)}
-.v-chat .cc-brain-check{color:var(--v-acc)}
+.v-chat .cc-brain-row-name{font-size:19px;font-weight:600;line-height:1.15}
+.v-chat .cc-brain-row-sub{font-size:12px}
 .v-chat .cc-brain-test{flex-direction:row;align-items:center;flex-wrap:wrap;gap:12px;margin:0}
-.v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);font-family:var(--v-sc);font-size:14px;font-weight:400;color:var(--v-ink)}
-.v-chat .cc-brain-test-result{padding:0;font-family:var(--v-sans);font-size:13px}
-.v-chat .cc-brain-test-result.ok{color:#5d9b7a}
+.v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:400}
+.v-chat .cc-brain-test-result{padding:0;font-size:13px}
 /* 聊天顶栏：浮在消息上面的玻璃，往下渐进变透明——两层模糊，上面那层更重、先淡掉；最顶上和状态栏同色接上 */
 .v-chat .chatroom-header{padding:calc(var(--s-top) + 4px) 10px 4px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
