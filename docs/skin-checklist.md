@@ -232,6 +232,10 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
     - 拖动开始和滑入期间，`ChatPage` 在底下垫一份对话列表（`.cc-under`，`z-index:0`，壁纸是 1，聊天页是 1、排在壁纸后面）。弹回之后、滑入结束时再撤掉。
     - 滑入在 `useLayoutEffect` 里做：先放到右边，强制回流一次，再加过渡滑到 0。用 `useEffect` 会先在原位画出一帧，看起来还是闪。
     - 滑入只对传了 `slideIn` 的皮肤生效（Vesper）；Clawd 不传，行为不变。
+    - `.v-chat` 要用 `overflow:clip`，不能只写 `overflow:hidden`。
+      - **现象**：PR #45 上线后，从列表点进去，聊天页和壁纸整体往左偏出去一截，右边露出空白，而且一直停在那里。
+      - **原因**：`overflow:hidden` 的盒子仍然能被程序滚动。滑入开始时聊天页在右边屏幕外，挂载时又会把最后一条消息 `scrollIntoView`。iOS 为了让它露出来，把 `.v-chat` 横着滚了过去；等聊天页滑回 0，`scrollLeft` 还在，整页就偏了。电脑上的 Chrome 复现不出来。
+      - **正确做法**：`overflow:clip` 不是滚动容器，谁都滚不动它；外框 `.vesper` 早就这么写了。以后凡是会用 `transform` 把内容挪到外面的容器，都用 `clip`。
 
 
 ---
