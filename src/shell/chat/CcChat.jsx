@@ -867,6 +867,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const listRef = useRef(null)
   const scrollModeRef = useRef('bottom') // bottom：滚到底；keep：往上加载旧消息，位置交给 olderAnchorRef；stay：不动
   const olderAnchorRef = useRef(null) // 往上加载前屏幕上那条消息：{ mid, top }，插进去之后按它补位
+  const settlingOlderRef = useRef(false) // 刚补完位、下一帧复核前：这期间的滚动事件不触发再往上加载
   const voice = useVoicePlayer()
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
@@ -1281,12 +1282,23 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     if (!row) return
     const top = () => row.getBoundingClientRect().top - el.getBoundingClientRect().top
     const before = el.scrollTop, d = top() - a.top
-    if (d) el.scrollTop += d
-    // 键盘调试读数开着时记一行：补完当帧、下一帧、300ms 后锚点还差几 px（iOS 惯性滚动中改 scrollTop 会不会被吃掉）
-    if (kbDebugOn()) {
-      const now = Math.round(top() - a.top), after = Math.round(el.scrollTop)
-      requestAnimationFrame(() => { const f1 = Math.round(top() - a.top); setTimeout(() => kbLog(`older: moved ${Math.round(d)}px · scrollTop ${Math.round(before)}→${after} · drift ${now}/${f1}/${Math.round(top() - a.top)}px`), 300) })
-    }
+    // 甩到顶时 iOS 在回弹（scrollTop 是负的）：这时改 scrollTop，下一帧会被回弹动画盖回负数，屏幕闪到刚插进来的最老那几条，
+    // 那一帧 scrollTop < 80 还会再拉一页（真机读数：drift 0/7571/0）。先 overflow hidden 把回弹停掉再设，下一帧放开。
+    // 停掉回弹那一下 scrollTop 不再是负的，所以按 before + d 直接设绝对值，不用 +=
+    const bounce = before < 0
+    settlingOlderRef.current = true
+    if (bounce) el.style.overflowY = 'hidden'
+    if (d) el.scrollTop = before + d
+    const now = Math.round(top() - a.top), after = Math.round(el.scrollTop)
+    requestAnimationFrame(() => {
+      if (bounce) el.style.overflowY = ''
+      // 复核一次：还被别的（惯性滚动）吃掉了就再补一次
+      const f1 = top() - a.top
+      if (Math.abs(f1) > 2) el.scrollTop += f1
+      settlingOlderRef.current = false
+      // 键盘调试读数开着时记一行：补完当帧、下一帧（复核前）、300ms 后锚点还差几 px
+      if (kbDebugOn()) setTimeout(() => kbLog(`older: moved ${Math.round(d)}px · scrollTop ${Math.round(before)}→${after}${bounce ? ' · bounce' : ''}${Math.abs(f1) > 2 ? ' · refix' : ''} · drift ${now}/${Math.round(f1)}/${Math.round(top() - a.top)}px`), 300)
+    })
   })
   useEffect(() => {
     if (!flashKey) return
@@ -1296,7 +1308,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const onListScroll = (e) => {
     const el = e.currentTarget
     const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (el.scrollTop < 80) loadOlder()
+    if (el.scrollTop < 80 && !settlingOlderRef.current) loadOlder()
     if (toBottom < 200) loadNewer()
     setFarFromBottom(toBottom > el.clientHeight)
   }
