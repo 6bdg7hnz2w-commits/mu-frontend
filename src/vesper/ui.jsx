@@ -89,19 +89,3 @@ export function useToast() {
   const show = (s) => { clearTimeout(t.current); setText(s); setOn(true); t.current = setTimeout(() => setOn(false), 2400) }
   return [<div key="toast" className={`v-toast ${on ? 'on' : ''}`}>{text}</div>, show]
 }
-
-
-// iOS 那种从底部弹出的操作菜单；actions 里的 false 会被跳过
-export function ActionSheet({ title, actions, onClose }) {
-  return (
-    <div className="v-sheet" data-back onClick={onClose}>
-      <div className="v-sheet-card" onClick={e => e.stopPropagation()}>
-        {title && <div className="v-sheet-title">{title}</div>}
-        {actions.filter(Boolean).map(a => (
-          <button key={a.label} className={a.danger ? 'danger' : ''} onClick={a.onClick}>{a.label}</button>
-        ))}
-      </div>
-      <button className="v-sheet-cancel" onClick={onClose}>Cancel</button>
-    </div>
-  )
-}

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
-import { V, MONS, MONF, ActionSheet, useToast } from './ui.jsx'
+import { V, MONS, MONF, useToast } from './ui.jsx'
+import { ActionSheet, BottomSheet } from '../shell/sheets.jsx'
 import { keepAboveKeyboard } from '../shell/viewport.js'
-import { usePreventPageScroll } from '../shell/preventScroll.js'
 
 // ─── Calendar ───────────────────────────────────────
 // 和 Clawd 的 CalendarPage 同一套接口：/api/events（日程 + kind=important 的重要日期）、/api/todos、/api/periods。
@@ -23,47 +23,6 @@ function Modal({ title, onClose, children }) {
       <div className="v-modal-card" onClick={e => e.stopPropagation()}>
         <div className="v-modal-title">{title}</div>
         {children}
-      </div>
-    </div>
-  )
-}
-
-// 新建日程用的底部面板（照 iOS 日历）：从底边滑上来，弹键盘时贴在键盘上方；
-// 标题和 Cancel / Save 钉在顶上，下面的表单在面板里滚，输入框不跟着键盘压扁
-function BottomSheet({ title, left, right, onClose, children }) {
-  // 面板跟着 visualViewport 走：键盘（连同上面那条工具栏）弹起时，面板的底边贴着它的顶边，不被盖住
-  const wrap = useRef(null)
-  useEffect(() => {
-    const vv = window.visualViewport, el = wrap.current
-    if (!vv || !el) return
-    const fit = () => { el.style.top = `${vv.offsetTop}px`; el.style.height = `${vv.height}px` }
-    fit()
-    vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit)
-    return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit) }
-  }, [])
-  usePreventPageScroll(wrap) // 点输入框、在面板头上拖都不让 iOS 滚页面（New Event、纪念日都用这个面板）
-  // 输入框获得焦点：等键盘升好、面板缩好，把它滚到面板可见区域的中间
-  const reveal = (e) => {
-    const el = e.target
-    if (!el.matches?.('input, textarea')) return
-    const box = e.currentTarget // 只滚面板自己的内容区，不让 scrollIntoView 把底下的页面也带着滚
-    const go = () => {
-      if (document.activeElement !== el) return
-      const b = box.getBoundingClientRect(), r = el.getBoundingClientRect()
-      box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (b.top + b.height / 2), behavior: 'smooth' })
-    }
-    setTimeout(go, 350); setTimeout(go, 700)
-  }
-  return (
-    <div ref={wrap} className="v-modal v-bsheet" onClick={onClose}>
-      <div className="v-bsheet-card" onClick={e => e.stopPropagation()}>
-        <div className="v-bsheet-head">
-          <i className="v-bsheet-grab" />
-          <div className="v-bsheet-side">{left}</div>
-          <div className="v-bsheet-title">{title}</div>
-          <div className="v-bsheet-side end">{right}</div>
-        </div>
-        <div className="v-bsheet-body" onFocus={reveal}>{children}</div>
       </div>
     </div>
   )
