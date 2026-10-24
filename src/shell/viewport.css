@@ -1,6 +1,14 @@
 /* 视口（viewport.js 的 useVisibleHeight 挂上 / 卸下 html.v-lock），只在用了它的皮肤里生效 */
-/* 文档本身不让滚：body 钉在顶上、高度定死（--v-doc = html 的高度，useVisibleHeight 量的）。
+/* 文档本身不让滚：body 钉在顶上、高度定死（--s-doc = html 的高度，useVisibleHeight 量的）。
    不能写 height:100%：fixed 的 100% 是少算了状态栏的那个视口，主屏幕模式底下会又空一条黑（checklist 第 1 条）。
    iOS 弹键盘会去滚文档露出输入框，这里滚不动；visualViewport 自己偏开的那点由外框的 top 跟上 */
 html.v-lock,html.v-lock body{overflow:hidden;overscroll-behavior:none}
-html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--v-doc,100%)}
+html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--s-doc,100%)}
+
+/* shell 给外框（data-shell-frame）的变量，皮肤直接读：
+   --s-top / --s-bottom：安全区；--s-kbDur / --s-kbEase：键盘起落的时长和曲线（外框高度、tab 栏滑出滑回都用它）。
+   useVisibleHeight 另外往外框上写 --s-vh / --s-vtop / --s-full / --s-kb，往 html 上写 --s-doc */
+[data-shell-frame]{
+  --s-top:env(safe-area-inset-top,0px);--s-bottom:env(safe-area-inset-bottom,0px);
+  --s-kbDur:.4s;--s-kbEase:cubic-bezier(.3,.7,.2,1);
+}

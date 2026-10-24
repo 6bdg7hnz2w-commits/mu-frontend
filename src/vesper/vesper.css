@@ -14,8 +14,7 @@
   --v-cover:linear-gradient(140deg,#7084ab 0%,#5a6c93 100%);--v-coverIn:#e6eaf1;--v-page:#f8f9fb;
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
   --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'V Dots','Noto Serif SC',serif;--v-scIn:var(--v-sc);--v-serif:'Cormorant Garamond','V Dots','Noto Serif SC',serif;
-  --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
-  position:relative;top:var(--v-vtop,0px);height:100%;height:var(--v-vh,100%);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
+  position:relative;top:var(--s-vtop,0px);height:100%;height:var(--s-vh,100%);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);font-variant-numeric:lining-nums;line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
@@ -24,9 +23,8 @@
 .vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel){height:100%}
 /* 键盘起落：iOS 主屏幕模式下 visualViewport 一下子跳到最终高度、不给中间值，外框高度改用过渡跟上键盘的节奏
    （data-kb-anim 由 useVisibleHeight 在高度一下变 150px 以上时加，600ms 后去掉）。时长、曲线和 tab 栏滑出滑回同一套。
-   面板开着时不过渡（JS 那边也不加 data-kb-anim）：面板和键盘互换要在同一帧 */
-.vesper{--v-kbDur:.4s;--v-kbEase:cubic-bezier(.3,.7,.2,1)}
-.vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)){transition:height var(--v-kbDur) var(--v-kbEase)}
+   面板开着时不过渡（JS 那边也不加 data-kb-anim）：面板和键盘互换要在同一帧。--s-kbDur / --s-kbEase 在 shell/viewport.css */
+.vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)){transition:height var(--s-kbDur) var(--s-kbEase)}
 /* 文档钉死（html.v-lock）在 shell/viewport.css */
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
@@ -43,7 +41,7 @@
 .vesper button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* 整页（tab 下的四页） */
-.v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--v-top) + 33px) 20px calc(var(--v-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
+.v-page{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding:calc(var(--s-top) + 33px) 20px calc(var(--s-bottom) + 110px);display:flex;flex-direction:column;gap:12px}
 /* 滚动容器是 flex 列，里面的卡片不许被压扁 */
 .v-page>*,.v-sub-body>*{flex-shrink:0}
 .v-big-title{font-size:42px;font-weight:500;line-height:1;padding-bottom:20px;margin-bottom:6px}
@@ -71,10 +69,10 @@
 
 /* 二级页：顶栏 + 内容 */
 .v-sub{position:absolute;inset:0;z-index:5;background:var(--v-bg);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
-.v-sub-head{position:absolute;top:var(--v-top);left:0;right:0;height:60px;z-index:4;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--v-line);background:var(--v-bg)}
+.v-sub-head{position:absolute;top:var(--s-top);left:0;right:0;height:60px;z-index:4;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--v-line);background:var(--v-bg)}
 .v-chip{position:absolute;left:20px;top:10px;width:40px;height:40px;border-radius:13px;background:var(--v-card)!important;border:1px solid var(--v-line)!important;box-shadow:var(--v-shadow);display:flex;align-items:center;justify-content:center}
 .v-sub-title{font-size:24px;font-weight:600}
-.v-sub-body{position:absolute;top:calc(var(--v-top) + 60px);left:0;right:0;bottom:0;overflow-y:auto;scrollbar-width:none;padding:20px 20px calc(var(--v-bottom) + 24px);display:flex;flex-direction:column;gap:14px}
+.v-sub-body{position:absolute;top:calc(var(--s-top) + 60px);left:0;right:0;bottom:0;overflow-y:auto;scrollbar-width:none;padding:20px 20px calc(var(--s-bottom) + 24px);display:flex;flex-direction:column;gap:14px}
 .v-sec{padding:4px 4px 0;font-family:var(--v-sc);font-size:13px;color:var(--v-mute)}
 .v-card{background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow)}
 .v-tip{padding:0 4px;font-family:var(--v-sc);font-size:12px;line-height:1.7;color:var(--v-faint)}
@@ -98,7 +96,7 @@
 .v-mode.on span{color:var(--v-ink)}
 
 /* 底部 tab */
-.v-tabbar{--tb-h:62px;--tb-b:max(calc(var(--v-bottom) - 8px),14px);position:absolute;left:16px;right:16px;bottom:var(--tb-b);z-index:30;height:var(--tb-h);padding:5px;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 12px 32px rgba(10,16,32,.22);transition:transform var(--v-kbDur) var(--v-kbEase)}
+.v-tabbar{--tb-h:62px;--tb-b:max(calc(var(--s-bottom) - 8px),14px);position:absolute;left:16px;right:16px;bottom:var(--tb-b);z-index:30;height:var(--tb-h);padding:5px;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 12px 32px rgba(10,16,32,.22);transition:transform var(--s-kbDur) var(--s-kbEase)}
 .v-tab-pill{position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 10px) / 4);border-radius:999px;background:var(--v-tbPill);box-shadow:inset 0 1px 0 var(--v-tbHi),inset 0 0 0 1px var(--v-tbLine);transition:transform .45s cubic-bezier(.3,.8,.25,1.05)}
 .v-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--v-mute)!important;transition:color .25s}
 .v-tab svg{width:21px;height:21px}
@@ -129,16 +127,16 @@
 .v-spark i+i{left:0;top:5px;width:11px;height:1px;background:linear-gradient(90deg,transparent,currentColor,transparent)}
 .v-spark b{position:absolute;left:4px;top:4px;width:3px;height:3px;border-radius:50%;background:currentColor}
 .v-spark.big{transform:scale(1.36)}
-.v-toast{position:fixed;left:50%;bottom:calc(var(--v-bottom) + 96px);z-index:90;transform:translate(-50%,12px);opacity:0;pointer-events:none;max-width:calc(100% - 48px);padding:10px 16px;border-radius:14px;background:rgba(28,34,50,.92);color:#fff;font-family:var(--v-sans);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .25s,transform .25s}
+.v-toast{position:fixed;left:50%;bottom:calc(var(--s-bottom) + 96px);z-index:90;transform:translate(-50%,12px);opacity:0;pointer-events:none;max-width:calc(100% - 48px);padding:10px 16px;border-radius:14px;background:rgba(28,34,50,.92);color:#fff;font-family:var(--v-sans);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .25s,transform .25s}
 .v-toast.on{opacity:1;transform:translate(-50%,0)}
-.v-sheet{position:fixed;inset:0;z-index:76;background:rgba(10,14,24,.34);display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:0 12px calc(var(--v-bottom) + 20px);animation:vFade .2s ease}
+.v-sheet{position:fixed;inset:0;z-index:76;background:rgba(10,14,24,.34);display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:0 12px calc(var(--s-bottom) + 20px);animation:vFade .2s ease}
 .v-sheet-card{border-radius:18px;overflow:hidden;background:var(--v-card);font-family:var(--v-sans);text-align:center;display:flex;flex-direction:column}
 .v-sheet-title{padding:12px 16px;font-size:12.5px;color:var(--v-mute);border-bottom:1px solid var(--v-line)}
 .v-sheet-card button{height:54px;font-family:var(--v-sans)!important;font-size:17px;color:var(--v-acc)!important;border-bottom:1px solid var(--v-line)!important}
 .v-sheet-card button:last-child{border-bottom:0!important}
 .v-sheet-card button.danger{color:var(--v-danger)!important}
 .v-sheet-cancel{height:54px;border-radius:18px;background:var(--v-card)!important;font-family:var(--v-sans)!important;font-size:17px;font-weight:600}
-.v-modal{position:fixed;left:0;right:0;top:0;height:var(--v-vh,100%);z-index:70;background:rgba(10,14,24,.4);display:flex;align-items:center;justify-content:center;padding:calc(var(--v-top) + 16px) 20px 16px;animation:vFade .2s ease}
+.v-modal{position:fixed;left:0;right:0;top:0;height:var(--s-vh,100%);z-index:70;background:rgba(10,14,24,.4);display:flex;align-items:center;justify-content:center;padding:calc(var(--s-top) + 16px) 20px 16px;animation:vFade .2s ease}
 .v-modal-card{width:330px;max-width:100%;max-height:100%;overflow-y:auto;scrollbar-width:none;padding:22px 20px 18px;border-radius:24px;background:var(--v-card);box-shadow:0 24px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:12px;animation:vPop .28s cubic-bezier(.2,.7,.2,1)}
 .v-modal-title{text-align:center;font-size:24px;font-weight:600}
 .v-modal .v-field{background:var(--v-bg);height:44px;border-radius:12px}
@@ -149,7 +147,7 @@
 @keyframes vPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
 .v-modal-note{flex:1;font-family:var(--v-sans);font-size:13px;color:var(--v-mute)}
 /* 新建日程的底部面板：贴底（弹键盘时 .v-modal 的高度 = 键盘上方那块，面板就贴在键盘上），最高到状态栏下面 */
-.v-bsheet{align-items:flex-end;padding:calc(var(--v-top) + 12px) 0 0}
+.v-bsheet{align-items:flex-end;padding:calc(var(--s-top) + 12px) 0 0}
 .v-bsheet-card{width:100%;max-width:600px;max-height:100%;display:flex;flex-direction:column;border-radius:22px 22px 0 0;background:var(--v-card);box-shadow:0 -12px 40px rgba(0,0,0,.22);animation:vSheetUp .32s cubic-bezier(.2,.8,.2,1)}
 .v-bsheet-head{position:relative;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:18px 16px 12px;border-bottom:1px solid var(--v-line)}
 .v-bsheet-grab{position:absolute;top:6px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--v-line)}
@@ -159,7 +157,7 @@
 .v-bsheet-head .v-text-btn{font-size:16px}
 .v-bsheet-head .v-text-btn.strong{font-weight:600}
 .v-bsheet-head .v-text-btn:disabled{opacity:.4}
-.v-bsheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column;gap:12px;padding:16px 16px calc(var(--v-bottom) + 16px)}
+.v-bsheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column;gap:12px;padding:16px 16px calc(var(--s-bottom) + 16px)}
 .vesper.kb-open .v-bsheet-body{padding-bottom:32px} /* 最后的 Notes 能整个滚出来 */
 .v-bsheet-body>*{flex-shrink:0}
 .v-bsheet .v-field{height:44px}
@@ -185,10 +183,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 
 /* ─── Home ─── */
 /* 一级页顶上的渐进模糊：两层，上面那层更糊、先淡掉；只模糊不加色。高度只到状态栏下 18px，页面在顶上时标题不被糊到 */
-.v-top-blur{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 18px);z-index:2;pointer-events:none}
+.v-top-blur{position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 18px);z-index:2;pointer-events:none}
 .v-top-blur::before,.v-top-blur::after{content:'';position:absolute;left:0;right:0;top:0}
 .v-top-blur::before{bottom:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent)}
-.v-top-blur::after{height:var(--v-top);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);-webkit-mask-image:linear-gradient(180deg,#000 40%,transparent);mask-image:linear-gradient(180deg,#000 40%,transparent)}
+.v-top-blur::after{height:var(--s-top);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);-webkit-mask-image:linear-gradient(180deg,#000 40%,transparent);mask-image:linear-gradient(180deg,#000 40%,transparent)}
 .v-home{position:absolute;inset:0;background:var(--v-wpBase)}
 .v-wall{position:absolute;inset:0;overflow:hidden;background:#445475}
 .vesper[data-look="night"] .v-wall{background:#262e3f}
@@ -200,7 +198,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .vesper[data-look="night"] .v-wall-glow{position:absolute;inset:0;background:radial-gradient(circle 54px at 65.4% 74.3%,rgba(255,198,128,.32),rgba(255,198,128,0))}
 .v-wall-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,22,42,.28) 0%,rgba(15,22,42,0) 24%)}
 .v-home-scroll{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
-.v-home-body{display:flex;flex-direction:column;gap:14px;padding:calc(var(--v-top) + 45px) 20px calc(var(--v-bottom) + 110px)}
+.v-home-body{display:flex;flex-direction:column;gap:14px;padding:calc(var(--s-top) + 45px) 20px calc(var(--s-bottom) + 110px)}
 /* 首页顶上：往上滑的内容到状态栏这里先糊、再压暗，不跟时间叠在一起。两层模糊，越往上越糊 */
 .v-hello{display:flex;flex-direction:column;gap:10px;padding:0 8px 22px;color:#fff}
 .v-hello-date{font-style:italic;font-size:17px;letter-spacing:.02em;opacity:.9}
@@ -253,7 +251,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-nb-count span{font-size:11px;letter-spacing:.08em;opacity:.75;font-family:var(--v-sans);white-space:nowrap}
 
 /* ─── Diary / Read ─── */
-.v-diary-body{padding:24px 20px calc(var(--v-bottom) + 48px)!important;gap:0!important}
+.v-diary-body{padding:24px 20px calc(var(--s-bottom) + 48px)!important;gap:0!important}
 .v-diary-top,.v-cal-top{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--v-line)}
 .v-diary-titles{display:flex;flex-direction:column;gap:8px}
 .v-diary-title{font-size:42px;font-weight:500;line-height:1}
@@ -299,7 +297,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-entry-sheen{position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 28%,rgba(244,196,214,.38) 44%,rgba(190,212,255,.42) 56%,transparent 72%);transform:translateX(-110%)}
 .v-entry.fresh .v-entry-text{animation:vUnseal 1s ease both}
 .v-entry.fresh .v-entry-sheen{animation:vSheen 1.3s cubic-bezier(.4,0,.2,1) .1s both}
-.v-read-body{padding:32px 28px calc(var(--v-bottom) + 72px)!important;gap:0!important}
+.v-read-body{padding:32px 28px calc(var(--s-bottom) + 72px)!important;gap:0!important}
 .v-read-date{display:flex;align-items:flex-start;gap:12px}
 .v-read-day{font-size:70px;font-weight:500;line-height:.8}
 .v-read-meta{display:flex;flex-direction:column;gap:8px;padding-top:1px}
@@ -386,10 +384,10 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-switch.on i{transform:translateX(20px)}
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
-.v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;overflow:clip;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.v-chat{--v-tbSpace:calc(62px + max(calc(var(--s-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;overflow:clip;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 /* --v-tbSpace 注册成长度才能过渡：收键盘时 tab 栏从下面滑上来，输入栏底下让出的空间同一个节奏慢慢长出来，不是最后一下顶上去 */
 @property --v-tbSpace{syntax:'<length>';inherits:true;initial-value:0px}
-.v-chat{transition:--v-tbSpace var(--v-kbDur) var(--v-kbEase)}
+.v-chat{transition:--v-tbSpace var(--s-kbDur) var(--s-kbEase)}
 .vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px}
 .v-chat:has(.cc-emoji-panel,.cc-attach-menu){transition:none} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
 .v-clawd{
@@ -416,17 +414,17 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
-/* 背景按整个屏幕的高度铺（--v-full，html 的高度不随键盘变），键盘、面板起落时只有消息区在变，背景不缩放 */
-.v-chat-wall{position:absolute;top:0;left:0;right:0;height:var(--v-full,100lvh);background:var(--vc-base);z-index:1}
+/* 背景按整个屏幕的高度铺（--s-full，html 的高度不随键盘变），键盘、面板起落时只有消息区在变，背景不缩放 */
+.v-chat-wall{position:absolute;top:0;left:0;right:0;height:var(--s-full,100lvh);background:var(--vc-base);z-index:1}
 /* 滑入、右滑返回时底下垫着的对话列表；壁纸（data-swipe-follow）和聊天页一起移，盖在列表上面 */
 .v-chat>.cc-under{position:absolute;inset:0;z-index:0}
 /* .v-chat 用 overflow:clip 而不是 hidden：hidden 的盒子还能被滚。滑入时聊天页先在右边，进来就 scrollIntoView 到最后一条，iOS 会把 .v-chat 横着滚过去，整页停在往左偏的位置 */
 .v-chat-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--vc-f)}
 .v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
-.v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--v-top);padding-bottom:var(--v-tbSpace)}
+.v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--s-top);padding-bottom:var(--v-tbSpace)}
 /* 对话列表照画布：大标题 + 一条线，沐那张卡片（雾蓝方块里一颗星） */
-.v-chat .chatlist-page{padding:calc(var(--v-top) + 33px) 20px var(--v-tbSpace);font-family:var(--v-serif)}
+.v-chat .chatlist-page{padding:calc(var(--s-top) + 33px) 20px var(--v-tbSpace);font-family:var(--v-serif)}
 .v-chat .chatlist-page .page-header{padding:0 0 20px;border-bottom:1px solid var(--v-line)}
 .v-chat .chatlist-page .page-header h1{font-size:42px;font-weight:500;line-height:1;letter-spacing:0}
 .v-chat .chatlist-page .session-list{padding:0}
@@ -448,7 +446,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .more-sub-page>.page-header .icon-btn,.v-chat .cc-brain-page>.chatroom-header .icon-btn{position:absolute;left:20px;top:10px;width:40px;height:40px;border-radius:13px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
 .v-chat .more-sub-page>.page-header .icon-btn svg,.v-chat .cc-brain-page>.chatroom-header .icon-btn svg{width:18px;height:18px;stroke-width:1.6}
 .v-chat .more-sub-page>.page-header h1,.v-chat .cc-brain-page .chatroom-name{font-family:var(--v-sc);font-size:18px;font-weight:500;font-style:normal;line-height:normal;letter-spacing:0}
-.v-chat .cc-brain-page{position:absolute;z-index:5;padding-top:var(--v-top)}
+.v-chat .cc-brain-page{position:absolute;z-index:5;padding-top:var(--s-top)}
 .v-chat .more-sub-page>.settings-card{margin:22px 20px;padding:0;background:var(--v-card);border:1px solid var(--v-line);border-radius:20px;box-shadow:var(--v-shadow);overflow:hidden}
 .v-chat .settings-card .setting-item{height:56px;padding:0 18px;gap:10px;border-bottom:1px solid var(--v-line);font-family:var(--v-sc);font-size:15px}
 .v-chat .settings-card .setting-item:last-child{border-bottom:0}
@@ -489,13 +487,13 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-test-result{padding:0;font-family:var(--v-sans);font-size:13px}
 .v-chat .cc-brain-test-result.ok{color:#5d9b7a}
 /* 聊天顶栏：浮在消息上面的玻璃，往下渐进变透明——两层模糊，上面那层更重、先淡掉；最顶上和状态栏同色接上 */
-.v-chat .chatroom-header{padding:calc(var(--v-top) + 4px) 10px 4px;min-height:0;background:none;border-bottom:0;z-index:3}
+.v-chat .chatroom-header{padding:calc(var(--s-top) + 4px) 10px 4px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
 .v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;padding-bottom:26px}
 .v-chat .cc-room>.chatroom-header::before,.v-chat .cc-room>.chatroom-header::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none}
 .v-chat .cc-room>.chatroom-header::before{background:linear-gradient(180deg,var(--v-bg) 0%,var(--vc-head) calc(100% - 30px),rgba(0,0,0,0) 100%);backdrop-filter:blur(10px) saturate(1.5);-webkit-backdrop-filter:blur(10px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
 .v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
-.v-chat .cc-room>.messages{padding-top:calc(var(--v-top) + 60px)}
+.v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 60px)}
 .v-chat .cc-room .chatroom-name{font-family:var(--v-serif);font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 /* 连接状态：名字右边的小圆点。连接中黄点轻轻呼吸，连上了绿点亮一会儿淡掉，断开是暗红点；不占位、不推动消息列表 */
 .v-chat .cc-name-wrap{position:relative;display:inline-block}
@@ -551,12 +549,12 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
 .v-chat .cc-attach-menu button:disabled{opacity:.4}
 .v-chat .cc-attach-menu button svg{width:28px;height:28px}
-/* 表情包、加号面板都占键盘的位置：高度 = 上次键盘的实际高度（VesperApp 用 visualViewport 记的 --v-kb，没记过先用 300px），
+/* 表情包、加号面板都占键盘的位置：高度 = 上次键盘的实际高度（VesperApp 用 visualViewport 记的 --s-kb，没记过先用 300px），
    键盘和面板互换时输入框不动。加号面板照微信排成一格一格的大按钮，一行 4 个 */
-.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--v-kb,300px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
-.v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--v-bottom)}
+.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--s-kb,300px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
+.v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--s-bottom)}
 .v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
-.v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--v-bottom)}
+.v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--s-bottom)}
 .v-chat .cc-jump-btn{background:var(--v-card);border:1px solid var(--v-line);color:var(--v-ink);box-shadow:0 6px 18px rgba(20,30,60,.16)}
 .v-chat .cc-notice{border-radius:12px}
 
@@ -634,20 +632,20 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-cart-title{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-family:var(--v-sc);font-size:15px;color:#eef1f6;letter-spacing:.12em}
 .v-cart-pin{position:absolute;left:50%;bottom:0;width:54px;height:6px;margin-left:-27px;border-radius:3px 3px 0 0;background:rgba(255,255,255,.08)}
 .v-cart-empty{height:196px;border-radius:10px 10px 16px 16px;border:1.5px dashed var(--v-faint);display:flex;align-items:center;justify-content:center;font-family:var(--v-sc);font-size:13px;color:var(--v-faint)}
-.v-overlay-clawd{position:absolute;inset:0;z-index:20;background:var(--bg);padding-top:var(--v-top);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.v-overlay-clawd{position:absolute;inset:0;z-index:20;background:var(--bg);padding-top:var(--s-top);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 
 /* ─── More：Reading 书架 ─── */
 .v-shelf{position:absolute;inset:0;z-index:5;background:#2f4a66;overflow:hidden;animation:vFade .4s ease}
 .v-shelf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .vesper[data-look="night"] .v-shelf-bg{filter:brightness(.5) saturate(.9)}
 .v-shelf-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,34,52,.55) 0%,rgba(20,34,52,.12) 22%,rgba(20,34,52,.18) 60%,rgba(20,34,52,.6) 100%)}
-.v-shelf-head{position:absolute;top:var(--v-top);left:0;right:0;height:60px;z-index:4;display:flex;align-items:center;gap:10px;padding:0 20px}
+.v-shelf-head{position:absolute;top:var(--s-top);left:0;right:0;height:60px;z-index:4;display:flex;align-items:center;gap:10px;padding:0 20px}
 .v-shelf-title{flex:1;text-align:center;font-size:24px;font-weight:600;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.25)}
 .v-gchip{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff!important;background:rgba(255,255,255,.2)!important;border:1px solid rgba(255,255,255,.28)!important;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
 .v-gchip.on{background:rgba(255,255,255,.34)!important}
 .vesper[data-look="night"] .v-gchip,.vesper[data-look="night"] .v-gsearch,.vesper[data-look="night"] .v-hero{background:rgba(14,20,34,.5)!important}
-.v-shelf-scroll{position:absolute;top:calc(var(--v-top) + 60px);left:0;right:0;bottom:0;overflow-y:auto;scrollbar-width:none}
-.v-shelf-body{padding:8px 20px calc(var(--v-bottom) + 24px);display:flex;flex-direction:column;gap:18px}
+.v-shelf-scroll{position:absolute;top:calc(var(--s-top) + 60px);left:0;right:0;bottom:0;overflow-y:auto;scrollbar-width:none}
+.v-shelf-body{padding:8px 20px calc(var(--s-bottom) + 24px);display:flex;flex-direction:column;gap:18px}
 .v-gsearch{display:flex;align-items:center;gap:8px;height:44px;padding:0 6px 0 14px;border-radius:15px;color:#fff;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .v-gsearch>svg{opacity:.8;flex:none}
 .v-gsearch input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#fff!important;font-family:var(--v-sans);font-size:15px}
@@ -688,8 +686,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   position:absolute;inset:0;z-index:40;background:var(--rp);color:var(--ri);animation:vUp .45s cubic-bezier(.2,.7,.2,1)}
 .vesper[data-look="night"] .v-reader{--rp:#12161f;--ri:#dfe3ea;--ri2:#b8c0cd;--rm:#7f8899;--rr:#d58c5e;--rn:#a9c2dd;--rl:rgba(200,210,230,.12);--rb:rgba(18,22,31,.94);--rs:#181d28;--rhl:rgba(213,140,94,.12)}
 .v-reader-bar{position:absolute;left:0;right:0;z-index:3;display:flex;gap:10px;padding:0 20px;background:var(--rb);transition:opacity .3s,transform .3s}
-.v-reader-bar.top{top:0;height:calc(var(--v-top) + 60px);padding-top:var(--v-top);align-items:center;border-bottom:1px solid var(--rl)}
-.v-reader-bar.bottom{bottom:0;height:calc(var(--v-bottom) + 52px);padding-top:10px;align-items:flex-start;border-top:1px solid var(--rl)}
+.v-reader-bar.top{top:0;height:calc(var(--s-top) + 60px);padding-top:var(--s-top);align-items:center;border-bottom:1px solid var(--rl)}
+.v-reader-bar.bottom{bottom:0;height:calc(var(--s-bottom) + 52px);padding-top:10px;align-items:flex-start;border-top:1px solid var(--rl)}
 .v-reader-bar.top.hide{opacity:0;transform:translateY(-12px);pointer-events:none}
 .v-reader-bar.bottom.hide{opacity:0;transform:translateY(12px);pointer-events:none}
 .v-rd-btn{width:40px;height:40px;flex:none;border-radius:13px;display:flex;align-items:center;justify-content:center;color:var(--ri)!important;border:1px solid var(--rl)!important}
@@ -697,7 +695,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-reader-crumb{flex:1;min-width:0;text-align:center;font-family:var(--v-sc);font-size:14px;color:var(--rm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .v-reader-pos{flex:1;height:40px;display:flex;align-items:center;justify-content:center;font-family:var(--v-sans);font-size:12.5px;color:var(--rm)}
 .v-reader-body{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
-.v-reader-page{padding:calc(var(--v-top) + 100px) 30px calc(var(--v-bottom) + 140px)}
+.v-reader-page{padding:calc(var(--s-top) + 100px) 30px calc(var(--s-bottom) + 140px)}
 .v-rd-kicker{font-family:var(--v-sans);font-size:10.5px;letter-spacing:.32em;color:var(--rr);text-align:center}
 .v-rd-title{margin-top:10px;font-family:var(--v-sc);font-size:26px;font-weight:500;letter-spacing:.12em;text-align:center}
 .v-rd-orn{display:flex;align-items:center;gap:8px;margin:18px auto 28px;width:140px}
@@ -718,7 +716,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-rd-select{position:fixed;z-index:60;transform:translate(-50%,calc(-100% - 10px));padding:8px 14px!important;border-radius:10px;background:var(--rn)!important;color:var(--rp)!important;font-family:var(--v-sans)!important;font-size:13px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 .v-rd-sheet-wrap{position:absolute;inset:0;z-index:5;background:rgba(40,34,24,.28);animation:vFade .2s ease}
 .vesper[data-look="night"] .v-rd-sheet-wrap{background:rgba(4,6,10,.5)}
-.v-rd-sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;display:flex;flex-direction:column;border-radius:22px 22px 0 0;background:var(--rs);box-shadow:0 -12px 40px rgba(0,0,0,.18);animation:vUp .35s cubic-bezier(.2,.7,.2,1);padding-bottom:var(--v-bottom)}
+.v-rd-sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;display:flex;flex-direction:column;border-radius:22px 22px 0 0;background:var(--rs);box-shadow:0 -12px 40px rgba(0,0,0,.18);animation:vUp .35s cubic-bezier(.2,.7,.2,1);padding-bottom:var(--s-bottom)}
 .v-rd-grip{width:36px;height:4px;border-radius:2px;background:var(--rl);margin:10px auto 12px;flex:none}
 .v-rd-sheet-head{display:flex;align-items:center;justify-content:space-between;padding:0 22px 12px;font-family:var(--v-sans);font-size:10.5px;letter-spacing:.26em;color:var(--rm)}
 .v-rd-sheet-head button{font-family:var(--v-sans)!important;font-size:12.5px;letter-spacing:0;color:var(--rr)!important}
@@ -751,14 +749,14 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-map{--mps:0 14px 30px rgba(60,50,30,.16);--mp:#efebe2;--mi:#1f2a44;--mm:#8b8372;--mr:#b5622f;--ml:rgba(31,42,68,.18);--mc:#f7f4ee;--mg:rgba(110,98,76,.06);--mv:rgba(150,180,214,.85);--mct:rgba(110,98,76,.22);--mtx:#4d4a42;--mbody:#3a3730;
   position:absolute;inset:0;z-index:5;background:var(--mp);color:var(--mi);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
 .vesper[data-look="night"] .v-map{--mps:0 14px 30px rgba(0,0,0,.45);--mp:#12161f;--mi:#dfe3ea;--mm:#7f8899;--mr:#d58c5e;--ml:rgba(200,210,230,.14);--mc:#181d28;--mg:rgba(200,210,230,.04);--mv:rgba(120,150,200,.55);--mct:rgba(200,210,230,.10);--mtx:#aab2c0;--mbody:#c9cfda}
-.v-map-head{position:absolute;top:var(--v-top);left:20px;height:60px;z-index:6;display:flex;align-items:center}
+.v-map-head{position:absolute;top:var(--s-top);left:20px;height:60px;z-index:6;display:flex;align-items:center}
 .v-map-head .v-rd-btn{background:var(--mc)!important;border-color:var(--ml)!important;color:var(--mi)!important}
-.v-map-stamp{position:absolute;right:22px;top:calc(var(--v-top) + 10px);z-index:5;width:44px;height:50px;border:1.5px solid var(--mi);outline:1px solid var(--ml);outline-offset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--mi)}
+.v-map-stamp{position:absolute;right:22px;top:calc(var(--s-top) + 10px);z-index:5;width:44px;height:50px;border:1.5px solid var(--mi);outline:1px solid var(--ml);outline-offset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--mi)}
 .v-map-stamp .ink{fill:var(--mi)}.v-map-stamp .paper{fill:var(--mp)}
 .v-map-stamp b{font-size:10px;font-weight:600;line-height:1}
 .v-map-stamp span{font-family:var(--v-sans);font-size:5.5px;letter-spacing:.1em}
 .v-map-scroll{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none}
-.v-map-sheet{position:relative;overflow:hidden;padding-bottom:var(--v-bottom)}
+.v-map-sheet{position:relative;overflow:hidden;padding-bottom:var(--s-bottom)}
 .v-map-svg{position:absolute;left:0;top:0}
 .v-map-grid{stroke:var(--mg)}
 .v-map-contour{fill:none;stroke:var(--mct);stroke-width:.8}
@@ -773,11 +771,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-map-date{font-family:var(--v-serif);font-size:21px;font-weight:500;fill:var(--mm)}
 .v-map-date.done{fill:var(--mi)}
 .v-map-file{font-family:var(--v-sans);font-size:9.5px;letter-spacing:.16em;fill:var(--mm)}
-.v-map-title{position:absolute;left:24px;top:calc(var(--v-top) + 74px);right:100px}
+.v-map-title{position:absolute;left:24px;top:calc(var(--s-top) + 74px);right:100px}
 .v-map-kicker{font-family:var(--v-sans);font-size:10.5px;letter-spacing:.3em;color:var(--mr)}
 .v-map-big{margin-top:8px;font-size:38px;line-height:1;letter-spacing:.06em;font-weight:500}
 .v-map-sub{margin-top:10px;font-family:var(--v-sc);font-size:12.5px;color:var(--mm)}
-.v-map-compass{position:absolute;right:26px;top:calc(var(--v-top) + 142px)}
+.v-map-compass{position:absolute;right:26px;top:calc(var(--s-top) + 142px)}
 .v-map-compass .line{fill:none;stroke:var(--ml);stroke-width:1}
 .v-map-compass .dot{stroke-width:.6;stroke-dasharray:1 3}
 .v-map-compass .mute{fill:var(--mm);opacity:.5}.v-map-compass .faint{opacity:.35}
@@ -798,7 +796,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-map-end{position:absolute;left:0;right:0;text-align:center;font-family:var(--v-sans);font-size:10.5px;letter-spacing:.32em;color:rgba(235,238,245,.85)}
 .v-map-reader-wrap{position:absolute;inset:0;z-index:8;background:rgba(40,34,24,.28);animation:vFade .25s ease}
 .vesper[data-look="night"] .v-map-reader-wrap{background:rgba(4,6,10,.5)}
-.v-map-reader{position:absolute;left:14px;right:14px;top:calc(var(--v-top) + 66px);bottom:calc(var(--v-bottom) + 16px);background:var(--mc);border:1px solid var(--ml);outline:1px solid var(--ml);outline-offset:4px;box-shadow:0 24px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;animation:vUp .4s cubic-bezier(.2,.7,.2,1)}
+.v-map-reader{position:absolute;left:14px;right:14px;top:calc(var(--s-top) + 66px);bottom:calc(var(--s-bottom) + 16px);background:var(--mc);border:1px solid var(--ml);outline:1px solid var(--ml);outline-offset:4px;box-shadow:0 24px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;animation:vUp .4s cubic-bezier(.2,.7,.2,1)}
 .v-map-reader-head{padding:18px 22px 12px;border-bottom:1px solid var(--ml);display:flex;align-items:flex-end;gap:10px}
 .v-map-reader-head>div{flex:1;min-width:0}
 .v-map-reader-title{margin-top:4px;font-family:var(--v-sc);font-size:21px;font-weight:500}

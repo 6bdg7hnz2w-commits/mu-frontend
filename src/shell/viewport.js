@@ -5,7 +5,7 @@ import './viewport.css'
 // ─── 视口：键盘、可见高度、状态栏底色 ─────────────────────
 // 和皮肤无关的部分，哪个皮肤都能用（Vesper 先用；Clawd 暂时只用 useKeyboardOpen）。
 // 外框要带 data-shell-frame：preventScroll、kbDebug 靠它认出外框。
-// 写进外框的变量：--v-vh（看得见的高度）、--v-vtop、--v-full（整屏高度）、--v-kb（键盘高度）；html 上：--v-doc。
+// 写进外框的变量：--s-vh（看得见的高度）、--s-vtop、--s-full（整屏高度）、--s-kb（键盘高度）；html 上：--s-doc。
 // 键盘起落的过渡节奏（data-kb-anim 时的 height transition）、面板开着不跟键盘缩，这些写在皮肤自己的 CSS 里。
 // 坑都记在 docs/skin-checklist.md 第 1、2、2b、2c、4 条
 
@@ -26,16 +26,16 @@ export function useVisibleHeight(ref) {
       // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
       // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
       if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
-      css('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
+      css('--s-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
       // 拿 html 的高度比较有没有键盘：它不随键盘变（innerHeight 在有的 iOS 版本上会跟着变小，有的不会，不可靠）
       const full = root.getBoundingClientRect().height, h = vv.height
-      css('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
-      root.style.setProperty('--v-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
+      css('--s-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
+      root.style.setProperty('--s-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
       if (h >= full - 150) gap = full - h
       const kb = full - (gap ?? 0) - h // 现在露出来的键盘有多高
       if (kb > 8 && h < full - 150) {
         // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
-        css('--v-kb', `${Math.round(full - h)}px`)
+        css('--s-kb', `${Math.round(full - h)}px`)
         try { localStorage.setItem('v_kb_h', String(Math.round(full - h))) } catch {}
       }
       // 没键盘时写成整屏的 px（不是删掉回到 100%）：键盘起落的过渡是 px 到 px，不跨单位
@@ -50,7 +50,7 @@ export function useVisibleHeight(ref) {
         animT = setTimeout(() => ref.current?.removeAttribute('data-kb-anim'), 600)
       }
       lastH = vh
-      css('--v-vh', `${vh}px`)
+      css('--s-vh', `${vh}px`)
     }
     // iOS 26：收起键盘后 visualViewport.offsetTop 有时回不到 0（外框跟着它整个往下偏）。社区的办法是等一下再上下推 1px 让它归位，
     // 见 Apple 论坛 thread 800125 / WebKit 254861。2026-10-24 真机（iOS 26.5.2）没遇到，推之前之后的值记进调试读数（kbDebug）
@@ -67,7 +67,7 @@ export function useVisibleHeight(ref) {
       nudgeT.forEach(clearTimeout)
       nudgeT.splice(0, 2, setTimeout(nudge, 100), setTimeout(nudge, 600))
     }
-    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) css('--v-kb', `${kb}px`) } catch {}
+    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) css('--s-kb', `${kb}px`) } catch {}
     on()
     vv.addEventListener('resize', on)
     vv.addEventListener('scroll', on)
