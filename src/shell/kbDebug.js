@@ -77,7 +77,8 @@ function record(e) {
 function loop() {
   if (!live) return
   const vv = window.visualViewport
-  live.textContent = `vv ${r(vv.height)} top ${r(vv.offsetTop)} · inner ${window.innerHeight} · html ${r(document.documentElement.getBoundingClientRect().height)} · --s-vh ${frameVh()} · bar ${r(bar() ?? -1)} · scrollY ${r(window.scrollY)}`
+  live.textContent = `vv ${r(vv.height)} top ${r(vv.offsetTop)} · inner ${window.innerHeight} · html ${r(document.documentElement.getBoundingClientRect().height)} · --s-vh ${frameVh()} · bar ${r(bar() ?? -1)} · scrollY ${r(window.scrollY)}\n` +
+    `sys ${matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : '?'} · mode ${(() => { try { return localStorage.getItem('mu_vesper_mode') } catch { return '-' } })()} · look ${document.querySelector('[data-look]')?.dataset.look ?? '-'} · html cs ${getComputedStyle(document.documentElement).colorScheme} · body cs ${getComputedStyle(document.body).colorScheme} · meta cs ${document.querySelector('meta[name=color-scheme]')?.content ?? '-'}`
   raf = requestAnimationFrame(loop)
 }
 
