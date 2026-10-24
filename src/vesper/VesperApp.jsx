@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LockScreen, getPasscode, apiFetch } from '../App.jsx'
+import { LockScreen } from '../App.jsx'
+import { getPasscode, apiFetch } from '../shell/data.js'
 import { usePageChrome } from '../shell/viewport.js'
 import { useTabShell, TabShell } from '../shell/TabShell.jsx'
 import { useCached, preload } from './data.js'

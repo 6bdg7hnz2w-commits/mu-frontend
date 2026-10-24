@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getMcpUrl, setMcpUrlStorage, mcpRequest } from '../App.jsx'
+import { getMcpUrl, setMcpUrlStorage, mcpRequest } from '../shell/data.js'
 import { SubPage } from './ui.jsx'
 
 // ─── MCP ────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
+import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../shell/data.js'
 import { V, MONS, MONF, useToast } from './ui.jsx'
 import { ActionSheet, BottomSheet } from '../shell/sheets.jsx'
 import { keepAboveKeyboard } from '../shell/viewport.js'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache, getMcpUrl, mcpRequest } from '../App.jsx'
+import { apiFetch, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache, getMcpUrl, mcpRequest } from '../shell/data.js'
 
 // ─── 首页、More、Usage 用到的数据：开场时一起取，取到的存一份在本地 ────────────────
 // 下次打开先拿上次存的直接画（数字不从 0 跳上来），后台取到新的、真的变了才更新。

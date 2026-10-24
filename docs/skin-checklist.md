@@ -29,14 +29,20 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - `PendingRow.jsx`：输入框上面待发的图和文件那一排（长按拖动排序）。
   - `useStickToBottom.js`：消息列表贴底（第 8 条），返回 `stickBottom`。
   - `voice.jsx`：语音气泡和播放。`markdown.jsx`：markdown 和复制。
-  - 用到的接口（`apiFetch`）、图标 `I`、草稿、左滑返回还在 App.jsx，从那里 import。这是循环 import：只能在函数里用，模块顶层不要碰这些名字，不然加载时是 undefined。
+  - 接口、草稿从 `../data.js` 拿；图标 `I`、左滑返回还在 App.jsx，从那里 import。这是循环 import：只能在函数里用，模块顶层不要碰这些名字，不然加载时是 undefined。
   - 界面文字靠 `CcLang`：Vesper 外面包 `CcLang.Provider value="en"`，整套换英文。
 - `ImageLightbox.jsx` + `lightbox.css`：点开的大图（第 18 条），两个皮肤共用。`<ImageLightbox items index onClose>`，取图走聊天的 `fetchCcImage`（又是循环 import，规矩同上）。样式黑底全屏，不分皮肤，所以 CSS 也放在 shell 里。
 - `sheets.jsx`：底部面板，逻辑在这里，样式在皮肤 CSS 里，类名按 `prefix` 拼（默认 `v`）。
   - `<ActionSheet title actions onClose>`：iOS 那种操作菜单（`{prefix}-sheet` / `-sheet-card` / `-sheet-title` / `-sheet-cancel`），带 `data-back`，左滑能关。
   - `<BottomSheet title left right onClose>`：New Event 那种表单面板（`{prefix}-modal {prefix}-bsheet` 和 `-bsheet-*`）。跟着 visualViewport 贴在键盘上方、不让 iOS 滚页面、聚焦时只滚面板自己（第 9 条），新皮肤直接用，别再抄一份。
+- `data.js`：皮肤共用的数据和工具（以前在 App.jsx 顶上）。
+  - 接口：`API`、`getPasscode`、`lockApp`、`apiFetch`（统一带口令，401 回锁屏）、`apiJson`（非 2xx 抛错）、MCP（`getMcpUrl` / `setMcpUrlStorage` / `mcpRequest`）。
+  - 本地缓存：草稿 `getDraft` / `setDraftStorage`、每日一句 `getWhisperCache` / `setWhisperCache`、重要日期（`ensureImportantMigrated`、`fetchUpcomingImportant`、`getUpcomingImportantCache`、`importantFromEvent`）。
+  - 日期：一律按北京时间（`SH_TZ`）。`shDateOf` / `shTimeOf`、`addDaysStr` / `daysBetweenStr`、`eventFirstDay` / `eventLastDay`、`beijingDateStr`、`predictNextPeriod`、聊天时间 `fmtMsgTime`。
+  - 只依赖 `chat/CcChat.jsx` 的 `CC_CACHE_KEY`（`lockApp` 里清聊天缓存），不碰 App.jsx。组件（`LockScreen`、`ChatPage`、`DrawGuessGame`）、图标 `I`、左滑返回还在 App.jsx。
 
 新皮肤要做的：
+- 接口、缓存、日期工具从 `shell/data.js` 拿，别自己再写一份 fetch 或时区换算；
 - 外框用 `TabShell`（不用的话：外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`）；
 - 按自己的路由算 `subPage` 传给 `TabShell`；
 - 自己的 CSS 里写外框 `height: var(--v-vh, 100%)`、`top: var(--v-vtop)`；

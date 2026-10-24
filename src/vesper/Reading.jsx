@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '../App.jsx'
+import { apiFetch } from '../shell/data.js'
 
 // ─── Reading ────────────────────────────────────────
 // 书架（壁纸 + 平面封面 + 搜索 + 上次打开的那本）和羊皮纸阅读器（划线、楼层回复、目录、进度）。

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '../../App.jsx'
+import { apiFetch } from '../data.js'
 import { MdBubble, MdFlat } from './markdown.jsx'
 
 // ─── Voice audio duration resolution ────────────────
