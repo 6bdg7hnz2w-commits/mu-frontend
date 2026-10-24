@@ -15,13 +15,17 @@
   --v-her:#d4aebd;--v-gold:#c4a06a;--v-danger:#c0605e;
   --v-sans:-apple-system,system-ui,sans-serif;--v-sc:'V Dots','Noto Serif SC',serif;--v-scIn:var(--v-sc);--v-serif:'Cormorant Garamond','V Dots','Noto Serif SC',serif;
   --v-top:env(safe-area-inset-top,0px);--v-bottom:env(safe-area-inset-bottom,0px);
-  position:relative;height:100%;height:var(--v-vh,100%);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
+  position:relative;top:var(--v-vtop,0px);height:100%;height:var(--v-vh,100%);max-width:600px;width:100%;margin:0 auto;overflow:hidden;overflow:clip;
   background:var(--v-bg);color:var(--v-ink);font-family:var(--v-serif);font-variant-numeric:lining-nums;line-height:normal;-webkit-font-smoothing:antialiased;
   color-scheme:light;
 }
 /* 聊天的面板开着时外框不跟键盘缩：从键盘切到面板，面板一开始就在键盘后面那块，键盘退下去正好露出来，输入框不动；
    切回键盘时键盘盖住面板升上来，升好了才收面板（App.jsx 的 onInputFocus） */
 .vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel){height:100%}
+/* 文档本身不让滚：body 钉在顶上、高度定死（--v-doc = html 的高度，useVisibleHeight 量的）。
+   iOS 弹键盘会去滚文档露出输入框，这里滚不动；visualViewport 自己偏开的那点由外框的 top 跟上 */
+html.v-lock,html.v-lock body{overflow:hidden;overscroll-behavior:none}
+html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--v-doc,100%)}
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
   --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;
@@ -517,6 +521,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-voice-text,.v-chat .cc-voice-tone,.v-chat .voice-transcript{color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
 .v-chat .msg .bubble.cc-file{background:var(--v-card);border:1px solid var(--v-line);border-radius:16px;box-shadow:var(--v-shadow)}
 .v-chat .cc-thumb{border-radius:14px;box-shadow:0 4px 14px rgba(40,55,90,.16)}
+.v-chat .cc-up{border-radius:14px}.v-chat .cc-files .cc-up{border-radius:16px}
 .v-chat .cc-typing-dot{background:var(--vc-meta)}
 .v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);background:var(--vc-head);backdrop-filter:blur(20px) saturate(1.3);-webkit-backdrop-filter:blur(20px) saturate(1.3);border-top:1px solid var(--v-line)}
 .v-chat .cc-composer-row{gap:4px}

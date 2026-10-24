@@ -2941,8 +2941,8 @@ function CcEditBox({ text, onSave, onCancel }) {
 }
 const CC_PAGE = 30
 // 图片 + 文件一次最多几个、文件能选哪些类型、单个多大：都以 /api/cc/file-types 为准
-// （白名单唯一来源是 VPS 上的 /opt/mu-bridge/file_types.json，前端不写死）。拿不到时图片照常能发，按 9 个算
-const CC_MAX_ITEMS_FALLBACK = 9
+// （白名单唯一来源是 VPS 上的 /opt/mu-bridge/file_types.json，前端不写死）。拿不到时图片照常能发，按 20 个算
+const CC_MAX_ITEMS_FALLBACK = 20
 const ccExt = (name) => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : '' }
 const fmtFileSize = (n) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
 // 带口令取回 bridge 上的图或文件（<img>/<a> 带不了 Authorization），blob 地址按 path 缓存在内存里。
@@ -2979,24 +2979,52 @@ async function fetchCcImage(path, { thumb = false } = {}) {
   ccImageCache.set(memKey, url)
   return url
 }
-// 上传失败时把后端的提示（"不支持 .docx 文件"、"文件不能超过 20MB"）带出来
-async function ccUploadForm(form) {
-  const res = await apiFetch(`/api/cc/upload`, { method: 'POST', body: form })
-  if (res.status === 401) throw new Error('unauthorized')
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-  return data
+// 上传失败时把后端的提示（"不支持 .docx 文件"、"文件不能超过 20MB"）带出来。
+// 用 XHR 不用 fetch：fetch 拿不到上传进度，聊天里每张图上要画传了多少（onProgress 给 0~1）
+function ccUploadForm(form, onProgress) {
+  const passcode = getPasscode()
+  if (!passcode) { lockApp(); return Promise.reject(new Error('unauthorized')) }
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API}/api/cc/upload`)
+    xhr.setRequestHeader('Authorization', `Bearer ${passcode}`)
+    xhr.upload.onprogress = e => { if (e.lengthComputable && e.total) onProgress?.(e.loaded / e.total) }
+    xhr.onload = () => {
+      if (xhr.status === 401) { lockApp(); return reject(new Error('unauthorized')) }
+      let data = {}
+      try { data = JSON.parse(xhr.responseText) } catch {}
+      if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(data.error || `HTTP ${xhr.status}`))
+      resolve(data)
+    }
+    xhr.onerror = xhr.onabort = () => reject(new Error('HTTP 0')) // 断网：不弹提示，那张图上会显示重试
+    xhr.send(form)
+  })
 }
-async function uploadCcImage(blob) {
+async function uploadCcImage(blob, onProgress) {
   const form = new FormData()
   form.append('image', blob, blob.type === 'image/webp' ? 'image.webp' : 'image.jpg')
-  return (await ccUploadForm(form)).path
+  return (await ccUploadForm(form, onProgress)).path
 }
-async function uploadCcFile(file) {
+async function uploadCcFile(file, onProgress) {
   const form = new FormData()
   form.append('name', file.name) // 原文件名单独放一个字段：multipart 的 filename 遇到中文各家浏览器编码不一
   form.append('file', file, file.name)
-  return (await ccUploadForm(form)).path
+  return (await ccUploadForm(form, onProgress)).path
+}
+// 刚发出去还在传的图 / 文件上盖一层：一圈进度；这张传失败了换成重试按钮，点了只重传这一张
+function CcUpMark({ st, onRetry }) {
+  if (!st) return null
+  if (st.failed) return (
+    <button className="cc-up failed" onClick={e => { e.stopPropagation(); onRetry() }} aria-label="Retry">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>
+    </button>
+  )
+  const r = 13, c = 2 * Math.PI * r
+  return (
+    <div className="cc-up" aria-label={`${Math.round(st.pct * 100)}%`}>
+      <svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r={r} className="track" /><circle cx="17" cy="17" r={r} className="bar" strokeDasharray={c} strokeDashoffset={c * (1 - st.pct)} /></svg>
+    </div>
+  )
 }
 // 打开/下载文件。手机上用 <a download>（iOS 会直接预览，能分享/存储）；电脑上新开标签页看，看不了的浏览器会自己下载
 function saveBlobUrl(url, name) {
@@ -3899,6 +3927,16 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     }
     stickBottom()
   }
+  // Vesper 里文档钉死了（html.v-lock）：点输入框不让 iOS 自己去滚页面露出输入框，自己 focus({ preventScroll })，
+  // 键盘升起来后外框按 visualViewport 缩、消息列表贴着底跟上，顶栏一直不动。已经在打字时的点按照常（挪光标、长按选字）
+  const onInputTouch = (e) => {
+    const ta = textareaRef.current
+    if (!ta || ta.disabled || document.activeElement === ta || !document.documentElement.classList.contains('v-lock')) return
+    e.preventDefault()
+    ta.focus({ preventScroll: true })
+    const n = ta.value.length
+    ta.setSelectionRange(n, n)
+  }
   // 在消息列表上手指往下拖（像 iOS 原生的拖动收键盘）：和点空白处一样，收起键盘和面板。
   // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
   const listSwipe = useRef(null)
@@ -4100,14 +4138,20 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     setPending([])
     deliver(msg)
   }
-  const deliver = async (msg) => {
+  // only：点了某一张图上的重试，只重传这一张，别的失败的不动（全传上去了才真的发出去）
+  const deliver = async (msg, only) => {
     setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: false } : m))
     startWaiting()
+    // 每张图 / 每个文件的上传状态记在临时消息的 up 上：{ pct } 正在传，{ failed } 这张没传上，null 传完了
+    const setUp = (key, st) => setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, up: { ...m.up, [key]: st } } : m))
     try {
-      // 一个一个排队传，不并发：后端是整份读进内存再转给 VPS，一起传会把 Render 的内存顶满
+      // 一个一个排队传，不并发：后端是整份读进内存再转给 VPS，一起传会把 Render 的内存顶满。
+      // 一张失败了接着传后面的，最后再一起算：有没传上的就停在这儿，等点那一张重试
       const sent = []
+      let firstErr = null, waiting = false
       for (const p of msg.items) {
         let path = uploadedRef.current.get(p.key)
+        if (!path && only && p.key !== only && msg.up?.[p.key]?.failed) { waiting = true; continue }
         if (!path && p.kind === 'voice') {
           // 先交给 ears 听：转出来的字、语气记在附件上（重发时不用再听一遍），临时消息上马上显示
           p.heard = await listenCcVoice(p.blob, p.duration)
@@ -4117,13 +4161,26 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           ccImageCache.set(path, p.localUrl)
         }
         if (!path) {
-          path = p.kind === 'image' ? await uploadCcImage(p.blob) : await uploadCcFile(p.file)
+          setUp(p.key, { pct: 0 })
+          let last = 0
+          const onProgress = f => { if (f - last >= 0.05 || f === 1) { last = f; setUp(p.key, { pct: Math.min(f, 0.95) }) } } // 到 100% 还要等后端转给 VPS，留一点等回话
+          try {
+            path = p.kind === 'image' ? await uploadCcImage(p.blob, onProgress) : await uploadCcFile(p.file, onProgress)
+          } catch (err) {
+            if (err.message === 'unauthorized') throw err
+            setUp(p.key, { failed: true })
+            firstErr = firstErr || err
+            continue
+          }
+          setUp(p.key, null)
           uploadedRef.current.set(p.key, path)
           ccImageCache.set(path, p.previewUrl || p.localUrl) // 刚发的直接用本地预览，不用再向服务器取
           if (p.kind === 'image') ccImgCachePut(path, false, p.blob) // 下次打开 App 也不用下载自己发的图
         }
         sent.push({ p, path })
       }
+      if (firstErr) throw firstErr
+      if (waiting) { stopWaiting(); setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m)); return }
       const paths = sent.filter(s => s.p.kind === 'image').map(s => s.path)
       const files = sent.filter(s => s.p.kind === 'file')
       const voices = sent.filter(s => s.p.kind === 'voice')
@@ -4347,8 +4404,12 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           const editing = editingKey === m.key
           return (
           <div key={m.key} className={`msg ${m.role}${m.key === flashKey ? ' cc-flash' : ''}`} data-mids={m.key}>
-            {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={openChatImage} />)}</div>}
-            {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
+            {m.images?.length > 0 && <div className={`cc-images${m.images.length > 4 ? ' many' : ''}`}>{m.images.map((im, i) => m.up?.[im.key]
+              ? <div key={im.key} className="cc-up-wrap"><CcImage img={im} onOpen={openChatImage} /><CcUpMark st={m.up[im.key]} onRetry={() => deliver(m, im.key)} /></div>
+              : <CcImage key={im.path || im.key || i} img={im} onOpen={openChatImage} />)}</div>}
+            {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => m.up?.[f.key]
+              ? <div key={f.key} className="cc-up-wrap"><CcFile file={f} /><CcUpMark st={m.up[f.key]} onRetry={() => deliver(m, f.key)} /></div>
+              : <CcFile key={f.path || f.key || i} file={f} />)}</div>}
             {m.voices?.length > 0 && m.voices.map((v, i) => <CcVoice key={v.path || v.key || i} v={v} />)}
             {m.text && (editing
               ? <CcEditBox text={m.text} onSave={t => saveEdit(m, t)} onCancel={() => setEditingKey(null)} />
@@ -4407,7 +4468,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
               onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onTouchEnd={onInputTouch} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
           <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label={say('表情包', 'Stickers')} aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>

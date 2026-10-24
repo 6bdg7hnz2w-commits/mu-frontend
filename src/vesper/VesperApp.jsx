@@ -75,24 +75,36 @@ function useVisibleHeight(ref) {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
+    // 文档本身钉死不滚（vesper.css 的 html.v-lock）：iOS 弹键盘时会去滚整个文档露出输入框，
+    // 再叠上我们按 visualViewport 改高度，就是顶栏先被挤到屏幕中间再回来、收起时列表先掉下去再弹回
+    const root = document.documentElement
+    root.classList.add('v-lock')
     const on = () => {
+      // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
+      // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
+      if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
+      ref.current?.style.setProperty('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
       // 没弹键盘时跟着 html 走（主屏幕模式下 html 比 visualViewport 高出状态栏那截，见 index.css）
       // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
       // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
-      const full = document.documentElement.getBoundingClientRect().height
+      const full = root.getBoundingClientRect().height
       ref.current?.style.setProperty('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
+      root.style.setProperty('--v-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
       if (vv.height < full - 150) {
         ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
         ref.current?.style.setProperty('--v-kb', `${Math.round(full - vv.height)}px`)
         try { localStorage.setItem('v_kb_h', String(Math.round(full - vv.height))) } catch {}
       } else ref.current?.style.removeProperty('--v-vh')
-      if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0)
     }
     try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) ref.current?.style.setProperty('--v-kb', `${kb}px`) } catch {}
     on()
     vv.addEventListener('resize', on)
     vv.addEventListener('scroll', on)
-    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on) }
+    window.addEventListener('scroll', on)
+    return () => {
+      vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('scroll', on)
+      root.classList.remove('v-lock')
+    }
   }, [ref])
 }
 
