@@ -386,7 +386,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-switch.on i{transform:translateX(20px)}
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
-.v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+.v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;overflow:clip;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 /* --v-tbSpace 注册成长度才能过渡：收键盘时 tab 栏从下面滑上来，输入栏底下让出的空间同一个节奏慢慢长出来，不是最后一下顶上去 */
 @property --v-tbSpace{syntax:'<length>';inherits:true;initial-value:0px}
 .v-chat{transition:--v-tbSpace var(--v-kbDur) var(--v-kbEase)}
