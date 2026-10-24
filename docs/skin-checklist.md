@@ -97,6 +97,16 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 
   结果卡片 Clawd 只有底下一条线，Vesper 是四边框：写成 `border:var(--s-cardLine);border-bottom:var(--s-cardLine,1px solid var(--border))`，不设时四边清掉、底边兜回原来那条线。`.cc-search-hit:active` 原来被 Vesper 的卡片底色压着（同特异性、vesper.css 在后），所以单独给了 `--s-press`。"没找到 / 搜索中"用的是公共的 `.empty-state`，还留在 vesper.css 里。
 
+  回复方式页（App.css 里 `.cc-brain-*`）：提示、选项副标题、开关上的字用 `--s-mute`，选中的那边用 `--s-ink`；字体用 `--s-body` / `--s-ui` / `--s-title`；选项之间的线用 `--s-rule`；测试键和卡片一样（`--s-card` / `--s-cardLine` / `--s-cardShadow` / `--s-ink`）；勾用 `--s-accent`。另外加了：
+
+  | 变量 | 管什么 | Clawd 不设时 | Vesper |
+  |---|---|---|---|
+  | `--s-track` / `--s-knob` / `--s-knobShadow` | CC / API 开关的底、滑块、滑块阴影 | `--cc-switch-track` / `--cc-switch-thumb` / 原来的阴影 | `--v-card2` / `--v-card` / 淡阴影 |
+  | `--s-faint` | 选项下面那行模型名（`.cc-brain-row-model`） | `--text-dim` | `--v-faint` |
+  | `--s-ok` | 测试成功那行字 | `--green` | #5d9b7a |
+
+  这一页的选项、开关上的字、测试键都是 `<button>`，读变量的那几条都挂在 `.cc-brain-page` 下（同 `.vesper button` 那条坑）。带模型名的选项（`:has(.cc-brain-row-model)`）Vesper 换了字体和字号，那三条是排法，还留在 vesper.css。
+
   Vesper 以前的预览字色（`.v-chat .chatlist-page .session-preview`）把 `.draft` 的高亮也压住了，所以草稿在 Vesper 下和普通预览同色。改变量时单独给了 `--s-draft`，保持原样；想让草稿高亮，改 Vesper 的 `--s-draft` 就行。
 
   按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
@@ -114,7 +124,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
     - **现象**：Vesper 下查找页输入框的字从衬线体变回系统字体，高度矮了 4px。
     - **原因**：Vesper 还有一条 `.vesper input,.vesper textarea,.vesper select{font:inherit;color:var(--v-ink)}`，特异性 (0,1,1)，和 `.cc-search-box input` 一样高，vesper.css 又在后面，所以共用规则读的 `--s-input` 被它盖掉了。以前 Vesper 自己写 `.v-chat .cc-search-box input` (0,2,1) 压回来。
     - **正确做法**：共用规则写成 `.cc-search-page .cc-search-box input` (0,2,1)。以后共用组件里读变量的 input / textarea 也要多挂一层类名。
-  - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。 mock 里没有的状态（语音条、发送失败、补上的、打字中、加号键选中、回到底部键等）往 `.cc-room` 里塞一块静态 DOM 一起抓，动画关掉，免得 opacity 每次不同。
+  - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。 mock 里没有的状态（语音条、发送失败、补上的、打字中、加号键选中、回到底部键等）往 `.cc-room` 里塞一块静态 DOM 一起抓，动画关掉，免得 opacity 每次不同。 刚切到 Vesper 的第一次抓，网页字体可能还没加载完，标题宽度会差几像素（字体属性不差）：先 `await document.fonts.ready` 再抓，或者重抓一次。
 - `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。
 
 ## 一、高度和安全区
