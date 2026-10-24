@@ -466,6 +466,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-search-time{color:var(--v-mute)}
 .v-chat .cc-search-snippet{font-family:var(--v-sc);font-size:14px;line-height:1.75;color:var(--v-ink2)}
 .v-chat .cc-search-snippet mark{background:rgba(212,174,189,.55);color:var(--v-ink);font-weight:400;border-radius:3px}
+.v-chat .cc-older{font-family:var(--v-sc);color:var(--v-mute)}
 .v-chat .cc-search-end,.v-chat .cc-search-results .empty-state{padding:14px 0;text-align:center;font-family:var(--v-sc);font-size:13px;color:var(--v-mute)}
 .v-chat .cc-brain-scroll{padding:22px 20px;display:flex;flex-direction:column;gap:14px}
 .v-chat .cc-brain-switch{height:46px;margin:0;padding:4px;border-radius:15px;background:var(--v-card2)}
