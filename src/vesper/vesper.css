@@ -499,7 +499,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 @keyframes v-dot-breathe{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes v-dot-out{to{opacity:0}}
 @media(prefers-reduced-motion:reduce){.v-chat .cc-head-dot.connecting{animation:none}}
-.v-chat .messages{padding:18px 16px 14px}
+.v-chat .messages{padding:18px 16px 0} /* 底部不再留白：最后一条自己的 14px 下边距就是它和输入栏的距离（真机对过，见 skin-checklist 第 8 条） */
 /* 消息之间、一轮里的各段、时间行，按画布的间距：行距 14，一轮内 7（上下各留 4），时间行 11px、图标之间 10 */
 .v-chat .cc-room .msg.user .bubble{box-sizing:content-box}
 .v-chat .cc-room .msg.user .msg-meta{margin-top:5px;gap:10px;padding:0 4px}
