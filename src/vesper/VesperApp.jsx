@@ -77,10 +77,16 @@ function useVisibleHeight(ref) {
     const on = () => {
       // 没弹键盘时跟着 html 走（主屏幕模式下 html 比 visualViewport 高出状态栏那截，见 index.css）
       // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
-      if (vv.height < document.documentElement.getBoundingClientRect().height - 150) ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
-      else ref.current?.style.removeProperty('--v-vh')
+      // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
+      const full = document.documentElement.getBoundingClientRect().height
+      if (vv.height < full - 150) {
+        ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
+        ref.current?.style.setProperty('--v-kb', `${Math.round(full - vv.height)}px`)
+        try { localStorage.setItem('v_kb_h', String(Math.round(full - vv.height))) } catch {}
+      } else ref.current?.style.removeProperty('--v-vh')
       if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0)
     }
+    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) ref.current?.style.setProperty('--v-kb', `${kb}px`) } catch {}
     on()
     vv.addEventListener('resize', on)
     vv.addEventListener('scroll', on)
@@ -149,7 +155,6 @@ function MorePage({ onOpen, onOpenSetting }) {
         <span className="v-row-chev">{V.chevron}</span>
       </div>
     </div>
-    <div className="v-page-fade" />
     </>
   )
 }
@@ -233,10 +238,16 @@ export default function VesperApp() {
   const [chatUsage, setChatUsage] = useState(false) // 聊天里点开的 Usage：叠在聊天上面，返回回到聊天
   const [immersive, setImmersive] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false) // 聊天的表情 / 加号面板开着：和键盘一样收起 tab 栏
+  useEffect(() => {
+    const on = (e) => setPanelOpen(!!e.detail)
+    window.addEventListener('cc-panel', on)
+    return () => window.removeEventListener('cc-panel', on)
+  }, [])
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   const frame = useRef(null)
-  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' ? CHROME.home : CHROME.day)
+  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day) // 日记、读书这些从 Home 打开的浅色页也是浅底
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])
@@ -255,7 +266,7 @@ export default function VesperApp() {
 
   const goTab = (k) => { setTab(k); setChatUsage(false); if (k !== 'more') setMoreView(null) }
   // 键盘弹出来时底下的 tab 栏都收起来（聊天、日历的待办输入……）
-  const tabHidden = immersive || keyboardOpen
+  const tabHidden = immersive || keyboardOpen || (tab === 'chat' && panelOpen)
 
   return (
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
@@ -272,7 +283,6 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
-      {/* 白天除了 Home（壁纸顶上自己有黑到透明那层），其余页面都是浅色，垫一层暗色让状态栏白字看得清 */}
       <Splash />
       {/* 浮在底下的圆玻璃；选中那格垫一块会滑动的小玻璃 */}
       <nav className="v-tabbar">

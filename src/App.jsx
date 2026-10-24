@@ -3044,27 +3044,17 @@ function CcFile({ file }) {
 // 点开的大图：右上角三个点 → 苹果原生分享面板（里面有"存储图像"），原图原画质
 // 分享必须在点击的那一下同步调用（iOS 会拦掉异步之后的调用），所以一打开就先把图读成 File
 const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif' }
-// path：bridge 上的图。先用传进来的缩略图垫着，原图取到了再换上（分享的也是原图）
-function ImageLightbox({ src, path, onClose }) {
+// 一组图左右滑着看（聊天里她发过的所有图、草稿里待发的图），从点开的那张开始；横向 scroll-snap，手指滑就是系统原生的手感
+// items：[{ path?, localUrl? }]。path 是 bridge 上的图：先用缩略图垫着，滑到附近了再取原图（分享的也是原图）
+function ImageLightbox({ items, index = 0, onClose }) {
   const say = useCcSay()
-  const [shown, setShown] = useState(src)
-  const [full, setFull] = useState(!path)
-  const [file, setFile] = useState(null)
-  useEffect(() => {
-    if (!path) return
-    let alive = true
-    fetchCcImage(path).then(u => { if (alive) { setShown(u); setFull(true) } }).catch(() => { if (alive) setFull(true) })
-    return () => { alive = false }
-  }, [path])
-  useEffect(() => {
-    if (!full) return
-    let alive = true
-    fetch(shown).then(r => r.blob()).then(b => {
-      const f = new File([b], `mu-${Date.now()}.${LIGHTBOX_EXT[b.type] || 'jpg'}`, { type: b.type || 'image/jpeg' })
-      if (alive && navigator.canShare?.({ files: [f] })) setFile(f)
-    }).catch(() => {})
-    return () => { alive = false }
-  }, [shown, full])
+  const [at, setAt] = useState(index)
+  const [files, setFiles] = useState({}) // 第几张 → 读好的 File（分享要在点的那一下同步调用）
+  const track = useRef(null)
+  useLayoutEffect(() => { const el = track.current; if (el) el.scrollLeft = index * el.clientWidth }, [index])
+  const onScroll = (e) => { const el = e.currentTarget; setAt(Math.round(el.scrollLeft / Math.max(el.clientWidth, 1))) }
+  const onFile = useCallback((i, f) => setFiles(prev => ({ ...prev, [i]: f })), [])
+  const file = files[at]
   const share = (e) => {
     e.stopPropagation()
     navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
@@ -3073,10 +3063,35 @@ function ImageLightbox({ src, path, onClose }) {
   return createPortal(
     <div className="image-lightbox-overlay" onClick={onClose}>
       {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
-      <img src={shown} alt="" />
+      <div className="image-lightbox-track" ref={track} onScroll={onScroll}>
+        {items.map((img, i) => <LightboxSlide key={img.path || img.localUrl || i} img={img} near={Math.abs(i - at) <= 1} onFile={f => onFile(i, f)} />)}
+      </div>
+      {items.length > 1 && <div className="image-lightbox-count">{at + 1} / {items.length}</div>}
     </div>,
     document.body,
   )
+}
+function LightboxSlide({ img, near, onFile }) {
+  const [shown, setShown] = useState(img.localUrl || (img.path && (ccImageCache.get(img.path) || ccImageCache.get(`${img.path}#thumb`))) || null)
+  const [full, setFull] = useState(!img.path || !!ccImageCache.get(img.path))
+  useEffect(() => {
+    if (full || !near) return
+    let alive = true
+    fetchCcImage(img.path).then(u => { if (alive) { setShown(u); setFull(true) } }).catch(() => { if (alive) setFull(true) })
+    return () => { alive = false }
+  }, [img.path, near, full])
+  const fileRef = useRef(onFile)
+  useEffect(() => { fileRef.current = onFile })
+  useEffect(() => {
+    if (!full || !shown) return
+    let alive = true
+    fetch(shown).then(r => r.blob()).then(b => {
+      const f = new File([b], `mu-${Date.now()}.${LIGHTBOX_EXT[b.type] || 'jpg'}`, { type: b.type || 'image/jpeg' })
+      if (alive && navigator.canShare?.({ files: [f] })) fileRef.current(f)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [shown, full])
+  return <div className="image-lightbox-slide">{shown && <img src={shown} alt="" />}</div>
 }
 
 // 聊天里显示缩略图；点开交给 ImageLightbox 去取原图（刚发的图本地就有原图，直接用）
@@ -3092,7 +3107,7 @@ function CcImage({ img, onOpen }) {
   }, [img.path, url])
   if (failed) return <div className="cc-thumb cc-thumb-gone">{say('图片已过期', 'Image expired')}</div>
   if (!url) return <div className="cc-thumb cc-thumb-loading" />
-  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen({ src: url, path: img.localUrl ? null : img.path })} />
+  return <img src={url} alt="" className="cc-thumb" onClick={() => onOpen(img)} />
 }
 // 按住说话：录音交给后端 /api/cc/listen（→ bridge → VPS 本机的 ears 转写 + 听语气），回 { path, text, emotion, … }
 // 声纹锁认不出是她（422）、太短（400）：这段不发，err.drop 让发送那边直接撤掉临时消息
@@ -3263,7 +3278,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const [pending, setPending] = useState([]) // 待发送的图 { key, kind: 'image', blob, previewUrl } 和文件 { key, kind: 'file', file }
   const [fileTypes, setFileTypes] = useState(null) // /api/cc/file-types：{ max_bytes, max_items, types: [{ ext }] }
   const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
-  const [lightboxImage, setLightboxImage] = useState(null)
+  const [lightbox, setLightbox] = useState(null) // { items, index }：点开的那组图和从第几张开始
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
   const [emojiOpen, setEmojiOpen] = useState(false) // 表情面板
   const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
@@ -3584,6 +3599,53 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   }
 
   // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
+  // 键盘、表情面板、加号面板三选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
+  // 点输入框弹键盘时，面板等键盘真的升上来那一下再收，输入框一直在同一个高度，不会先掉下去再被顶上来
+  const panelOpen = emojiOpen || attachOpen
+  const closePanels = () => { setEmojiOpen(false); setAttachOpen(false) }
+  const togglePanel = (which) => {
+    textareaRef.current?.blur()
+    setEmojiOpen(which === 'emoji' ? o => !o : false)
+    setAttachOpen(which === 'attach' ? o => !o : false)
+  }
+  const onInputFocus = () => {
+    if (panelOpen) {
+      const vv = window.visualViewport
+      const h0 = vv?.height ?? 0
+      let done = false
+      const finish = () => { if (done) return; done = true; vv?.removeEventListener('resize', onVv); closePanels() }
+      const onVv = () => { if (vv.height < h0 - 100) finish() }
+      vv?.addEventListener('resize', onVv)
+      setTimeout(finish, 600) // 外接键盘、电脑上不会有这一下
+    }
+    stickBottom()
+  }
+  // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
+  useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
+  useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
+  // 输入栏变高变矮（面板开合、键盘起落、草稿图那一排）时消息列表贴着底：最后一条跟着输入栏走，不跳
+  // 面板开合、草稿图那一排是渲染引起的：每次渲染完、画出来之前对一下；键盘起落不经过渲染，交给 ResizeObserver。
+  // 列表是后来才渲染出来的（先有加载中那一屏），换了元素就重新挂
+  const anchorRef = useRef(null)
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (anchorRef.current?.el !== el) {
+      anchorRef.current?.ro?.disconnect()
+      anchorRef.current = null
+      if (!el) return
+      const a = { el, h: el.clientHeight }
+      a.adjust = () => {
+        const d = a.h - el.clientHeight
+        a.h = el.clientHeight
+        if (d && !detachedRef.current && el.scrollHeight - el.scrollTop - el.clientHeight - Math.max(d, 0) < 80) el.scrollTop += d
+      }
+      if (typeof ResizeObserver !== 'undefined') { a.ro = new ResizeObserver(a.adjust); a.ro.observe(el) }
+      anchorRef.current = a
+      return
+    }
+    anchorRef.current?.adjust()
+  })
+  useEffect(() => () => anchorRef.current?.ro?.disconnect(), [])
   const stickBottom = () => {
     if (say(true, false) || detachedRef.current) return
     const go = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
@@ -3616,6 +3678,16 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     return [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
   }, [history, temp])
   const rows = useMemo(() => ccRows(messages), [messages])
+  // 点开聊天里的一张图：聊天里所有的图按顺序排成一组，左右滑着看
+  const openChatImage = (img) => {
+    const items = rows.flatMap(r => r.m?.images || []).map(im => ({ path: im.localUrl ? null : im.path, localUrl: im.localUrl }))
+    const all = rows.flatMap(r => r.m?.images || [])
+    setLightbox({ items, index: Math.max(all.indexOf(img), 0) })
+  }
+  const openPendingImage = (p) => {
+    const imgs = pending.filter(x => x.kind === 'image')
+    setLightbox({ items: imgs.map(x => ({ localUrl: x.previewUrl })), index: Math.max(imgs.indexOf(p), 0) })
+  }
   // 正在说的那一块：还亮着"正在输入"，而且列表最后一行就是他的一块（她发完还没回时最后一行是她的，三个点单独一行）
   // 再加一道保险：这块的第一段得是"正在输入"亮起之后才到的，免得把上一轮已经说完的那块当成正在说
   const lastRow = rows[rows.length - 1]
@@ -3929,7 +4001,8 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
-          <div className="chatroom-name">{say('沐 (CC)', 'Soren')}</div>
+          {/* 英文版（Vesper）连接状态是名字右边一个小圆点，绝对定位挂着，名字还在正中、顶栏不变高 */}
+          <div className="chatroom-name">{say('沐 (CC)', <span className="cc-name-wrap">Soren<span key={passcode ? status : 'locked'} className={`cc-head-dot ${passcode ? status : 'offline'}`} role="status" aria-label={passcode ? statusLabel : 'Locked'} /></span>)}</div>
           {say(<div className="chatroom-model">{passcode ? statusLabel : 'Locked'}</div>, null)}
         </div>
         <div className="chatroom-header-right">
@@ -3941,7 +4014,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
@@ -3980,7 +4053,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           const editing = editingKey === m.key
           return (
           <div key={m.key} className={`msg ${m.role}${m.key === flashKey ? ' cc-flash' : ''}`} data-mids={m.key}>
-            {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={setLightboxImage} />)}</div>}
+            {m.images?.length > 0 && <div className="cc-images">{m.images.map((im, i) => <CcImage key={im.path || im.key || i} img={im} onOpen={openChatImage} />)}</div>}
             {m.files?.length > 0 && <div className="cc-files">{m.files.map((f, i) => <CcFile key={f.path || f.key || i} file={f} />)}</div>}
             {m.voices?.length > 0 && m.voices.map((v, i) => <CcVoice key={v.path || v.key || i} v={v} />)}
             {m.text && (editing
@@ -4022,8 +4095,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         </div>
       )}
 
-      {/* 英文版（Vesper）顶栏只留名字；连不上的时候才在输入框上面露一行小字，不带底色 */}
-      {say(null, (!passcode || status !== 'live') && <div className="cc-conn"><span className={`cc-status-dot ${passcode ? status : 'offline'}`} />{passcode ? statusLabel : 'Locked'}</div>)}
       <div className="composer">
         {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
         {pending.length > 0 && (
@@ -4039,7 +4110,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               </div>
             ) : (
               <div key={p.key} className="composer-image-preview">
-                <img src={p.previewUrl} alt="" onClick={() => setLightboxImage({ src: p.previewUrl })} />
+                <img src={p.previewUrl} alt="" onClick={() => openPendingImage(p)} />
                 <button onClick={() => removePending(p.key)} aria-label="Remove image">{I.close}</button>
               </div>
             ))}
@@ -4052,13 +4123,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             <span>{!recording.start ? 'Opening mic…' : recording.cancel ? 'Release to cancel' : 'Release to send · slide up to cancel'}</span>
           </div>
         )}
-        {attachOpen && (
-          <div className="cc-attach-menu">
-            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
-            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
-            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
-          </div>
-        )}
         {/* 左边切语音 / 键盘；语音模式下输入框换成整条"按住 说话"；右边 ⊕ 是照片和文件，有东西要发时多一个发送 */}
         <div className="composer-input-row cc-composer-row">
           <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? say('切换到键盘', 'Keyboard') : say('切换到语音', 'Voice')}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
@@ -4067,15 +4131,22 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
               onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={stickBottom} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
-          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => { setAttachOpen(false); setEmojiOpen(o => !o); textareaRef.current?.blur() }} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
-          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => { setEmojiOpen(false); setAttachOpen(o => !o) }} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
+          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
+          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
           {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
         </div>
+        {attachOpen && (
+          <div className="cc-attach-menu">
+            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
+            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
+            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
+          </div>
+        )}
         {emojiOpen && (
           <div className="cc-emoji-panel">
             <div className="cc-emoji-grid">{CC_EMOJI_LIST.map(em => <button key={em} onClick={() => insertEmoji(em)}>{em}</button>)}</div>
@@ -4084,7 +4155,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
         )}
       </div>
 
-      {lightboxImage && <ImageLightbox src={lightboxImage.src} path={lightboxImage.path} onClose={() => setLightboxImage(null)} />}
+      {lightbox && <ImageLightbox items={lightbox.items} index={lightbox.index} onClose={() => setLightbox(null)} />}
 
     </div>
     </>
