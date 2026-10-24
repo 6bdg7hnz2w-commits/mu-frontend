@@ -184,6 +184,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-rule{margin:26px 0 28px;height:1px;background:var(--v-line)}
 
 /* ─── Home ─── */
+/* 一级页顶上的渐进模糊：两层，上面那层更糊、先淡掉；只模糊不加色。高度只到状态栏下 18px，页面在顶上时标题不被糊到 */
+.v-top-blur{position:absolute;top:0;left:0;right:0;height:calc(var(--v-top) + 18px);z-index:2;pointer-events:none}
+.v-top-blur::before,.v-top-blur::after{content:'';position:absolute;left:0;right:0;top:0}
+.v-top-blur::before{bottom:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 18px),transparent)}
+.v-top-blur::after{height:var(--v-top);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);-webkit-mask-image:linear-gradient(180deg,#000 40%,transparent);mask-image:linear-gradient(180deg,#000 40%,transparent)}
 .v-home{position:absolute;inset:0;background:var(--v-wpBase)}
 .v-wall{position:absolute;inset:0;overflow:hidden;background:#445475}
 .vesper[data-look="night"] .v-wall{background:#262e3f}
