@@ -49,9 +49,24 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - 自己的 CSS 里给 `ActionSheet` / `BottomSheet` 的类名写样式（照 `vesper.css` 的 `.v-sheet*` / `.v-bsheet*`）；
 - `[data-kb-anim]` 时的 height 过渡、面板开着时外框不跟键盘缩，也写在自己的 CSS 里（Vesper 的写法见 `vesper.css` 开头）。
 
-变量分两种：
-- `--s-*`：shell 给的，皮肤只读不写。安全区 `--s-top` / `--s-bottom`、键盘节奏 `--s-kbDur` / `--s-kbEase`（`viewport.css` 里挂在 `[data-shell-frame]` 上），高度 `--s-vh` / `--s-vtop` / `--s-full` / `--s-kb` / `--s-doc`（`useVisibleHeight` 写）。
-- `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。聊天这些共用组件改成只读 `--s-*` 主题变量，是第 6 步后面几个 PR 的事。
+变量分三种：
+- `--s-*` 布局变量：shell 给的，皮肤只读不写。安全区 `--s-top` / `--s-bottom`、键盘节奏 `--s-kbDur` / `--s-kbEase`（`viewport.css` 里挂在 `[data-shell-frame]` 上），高度 `--s-vh` / `--s-vtop` / `--s-full` / `--s-kb` / `--s-doc`（`useVisibleHeight` 写）。
+- `--s-*` 主题变量：反过来，皮肤写、共用组件读。皮肤挂在包聊天页的那层上（Vesper 是 `.v-chat`，夜间跟着 `--v-*` 变）。共用规则一律写成 `var(--s-xx, Clawd 原值)`，Clawd 不设，样子就和以前一样；没写原值的那几个，不设时整条声明作废，等于没写（字体、颜色会继承，底色、圆角、毛玻璃回到默认的无）。目前聊天室有这些（App.css 里 `.cc-room` 那几条）：
+
+  | 变量 | 管什么 | Clawd 不设时 | Vesper |
+  |---|---|---|---|
+  | `--s-meBg` / `--s-meInk` / `--s-meR` | 她的气泡底色、字色、圆角 | `--cc-user-bg` / `--text` / 18px | `--v-acc` / `--v-acc-ink` / 17 17 6 17 |
+  | `--s-himBg` / `--s-himInk` / `--s-himR` | 他的气泡 | 无底 / `--text` / 无 | `--vc-his` / `--vc-ink` / 17 17 17 6 |
+  | `--s-glass` | 他的气泡毛玻璃（backdrop-filter） | 无 | `blur(12px)` |
+  | `--s-body` / `--s-title` | 气泡字体、顶栏名字字体 | 继承 | `--v-sc` / `--v-serif` |
+  | `--s-bar` / `--s-barGlass` | 输入栏底色、毛玻璃 | `--bg` / 无 | `--vc-head` / `blur(20px) saturate(1.3)` |
+  | `--s-field` | 输入框底色 | `--surface` | `--v-card` |
+  | `--s-accent` / `--s-accentInk` | 发送键底色、箭头色 | `--text` / #fff | `--v-acc` / `--v-acc-ink` |
+
+  间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里。往后一步一步把颜色类的覆盖换成变量。
+  - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。
+  - 每换一批，用计算样式比对：改前改后各抓一份聊天页所有元素的颜色、字体、圆角、位置（Clawd 浅 / 深、Vesper 白天 / 夜间四种），要求零差异。
+- `--v-*`：Vesper 自己的颜色、字体、阴影，只挂在 `.vesper` 上。
 
 ## 一、高度和安全区
 

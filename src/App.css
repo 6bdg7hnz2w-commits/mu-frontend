@@ -95,7 +95,10 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .session-card{display:flex;align-items:center;gap:12px;padding:14px 12px;background:var(--surface);border-radius:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .session-card:active{opacity:.7}
 /* CC 页下面有 tab 栏，安全区留给 tab 栏 */
-.cc-room .composer{padding-bottom:6px}
+.cc-room .composer{padding-bottom:6px;background:var(--s-bar,var(--bg));backdrop-filter:var(--s-barGlass);-webkit-backdrop-filter:var(--s-barGlass)}
+.cc-room .composer-input-row textarea{background:var(--s-field,var(--surface))}
+.cc-room .send-btn{background:var(--s-accent,var(--text))}
+.cc-room .send-btn svg path{stroke:var(--s-accentInk,#fff)}
 .session-card.pinned{background:var(--pinned-bg);margin-bottom:8px}
 .session-avatar{width:44px;height:44px;border-radius:12px;background:var(--card);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;flex-shrink:0;overflow:hidden}
 .session-avatar img{width:100%;height:100%;object-fit:cover}
@@ -686,9 +689,13 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 /* ─── 沐 (CC)：照 claude.ai 的样子。他的回复不要气泡，同一轮合成一块铺满宽度；她的消息右侧圆角浅底 ─── */
 .cc-room .msg{margin-bottom:14px}
-.cc-room .msg.user .bubble{background:var(--cc-user-bg);border-radius:18px;max-width:85%;padding:9px 14px}
+/* 聊天室的主题变量 --s-*：皮肤在外层设，Clawd 不设，走逗号后面的原值（没写原值的那几个，不设就等于没这条声明）
+   --s-meBg/meInk/meR 她的气泡  --s-himBg/himInk/himR 他的气泡  --s-glass 他的气泡毛玻璃  --s-body 气泡字体  --s-title 顶栏名字字体
+   --s-bar/barGlass 输入栏底色和毛玻璃  --s-field 输入框底色  --s-accent/accentInk 发送键  对照表见 docs/skin-checklist.md 第〇节 */
+.cc-room .msg.user .bubble{background:var(--s-meBg,var(--cc-user-bg));color:var(--s-meInk,var(--text));border-radius:var(--s-meR,18px);font-family:var(--s-body);max-width:85%;padding:9px 14px}
+.cc-room .chatroom-name{font-family:var(--s-title)}
 .cc-turn{align-items:stretch}
-.cc-turn-body{width:100%;min-width:0;font-size:15.5px;line-height:1.65;color:var(--text);padding:2px 2px 0}
+.cc-turn-body{width:100%;min-width:0;font-size:15.5px;line-height:1.65;color:var(--s-himInk,var(--text));padding:2px 2px 0;background:var(--s-himBg);border-radius:var(--s-himR);backdrop-filter:var(--s-glass);-webkit-backdrop-filter:var(--s-glass);font-family:var(--s-body)}
 .cc-turn-body,.cc-turn-body *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 .cc-turn-body .md-pre-head,.cc-turn-body .md-pre-head *,.cc-turn-body .voice-bar,.cc-turn-body .voice-bar *,.cc-turn-body button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .cc-piece+.cc-piece{margin-top:.8em}
