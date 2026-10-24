@@ -210,6 +210,8 @@ export default function VesperApp() {
 
   return (
     <TabShell shell={shell} prefix="v" className="vesper" data-look={look} tabs={TABS} tab={tab} onTab={goTab} subPage={subPage} panelTab="chat" frameProps={tab === 'chat' && !chatUsage ? null : swipe}>
+      {/* 一级页（Home / Calendar / More）顶上：滑上去的内容到状态栏这里渐进变糊，不和时间叠在一起。只有模糊、不带颜色（不要罩，见 docs/skin-checklist.md） */}
+      {!subPage && tab !== 'chat' && <div className="v-top-blur" />}
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
       {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} />}
       {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}
