@@ -22,6 +22,11 @@
 /* 聊天的面板开着时外框不跟键盘缩：从键盘切到面板，面板一开始就在键盘后面那块，键盘退下去正好露出来，输入框不动；
    切回键盘时键盘盖住面板升上来，升好了才收面板（App.jsx 的 onInputFocus） */
 .vesper:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel){height:100%}
+/* 键盘起落：iOS 主屏幕模式下 visualViewport 一下子跳到最终高度、不给中间值，外框高度改用过渡跟上键盘的节奏
+   （data-kb-anim 由 useVisibleHeight 在高度一下变 150px 以上时加，600ms 后去掉）。时长、曲线和 tab 栏滑出滑回同一套。
+   面板开着时不过渡（JS 那边也不加 data-kb-anim）：面板和键盘互换要在同一帧 */
+.vesper{--v-kbDur:.4s;--v-kbEase:cubic-bezier(.3,.7,.2,1)}
+.vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)){transition:height var(--v-kbDur) var(--v-kbEase)}
 /* 文档本身不让滚：body 钉在顶上、高度定死（--v-doc = html 的高度，useVisibleHeight 量的）。
    iOS 弹键盘会去滚文档露出输入框，这里滚不动；visualViewport 自己偏开的那点由外框的 top 跟上 */
 html.v-lock,html.v-lock body{overflow:hidden;overscroll-behavior:none}
@@ -96,7 +101,7 @@ html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--v-doc,100%)}
 .v-mode.on span{color:var(--v-ink)}
 
 /* 底部 tab */
-.v-tabbar{--tb-h:62px;--tb-b:max(calc(var(--v-bottom) - 8px),14px);position:absolute;left:16px;right:16px;bottom:var(--tb-b);z-index:30;height:var(--tb-h);padding:5px;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 12px 32px rgba(10,16,32,.22);transition:transform .4s cubic-bezier(.3,.7,.2,1)}
+.v-tabbar{--tb-h:62px;--tb-b:max(calc(var(--v-bottom) - 8px),14px);position:absolute;left:16px;right:16px;bottom:var(--tb-b);z-index:30;height:var(--tb-h);padding:5px;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 12px 32px rgba(10,16,32,.22);transition:transform var(--v-kbDur) var(--v-kbEase)}
 .v-tab-pill{position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 10px) / 4);border-radius:999px;background:var(--v-tbPill);box-shadow:inset 0 1px 0 var(--v-tbHi),inset 0 0 0 1px var(--v-tbLine);transition:transform .45s cubic-bezier(.3,.8,.25,1.05)}
 .v-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--v-mute)!important;transition:color .25s}
 .v-tab svg{width:21px;height:21px}
@@ -382,7 +387,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 /* --v-tbSpace 注册成长度才能过渡：收键盘时 tab 栏从下面滑上来，输入栏底下让出的空间同一个节奏慢慢长出来，不是最后一下顶上去 */
 @property --v-tbSpace{syntax:'<length>';inherits:true;initial-value:0px}
-.v-chat{transition:--v-tbSpace .4s cubic-bezier(.3,.7,.2,1)}
+.v-chat{transition:--v-tbSpace var(--v-kbDur) var(--v-kbEase)}
 .vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px}
 .v-chat:has(.cc-emoji-panel,.cc-attach-menu){transition:none} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
 .v-clawd{

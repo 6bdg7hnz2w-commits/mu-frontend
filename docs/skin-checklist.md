@@ -45,7 +45,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 不用 Telegram Web 那套：它现在在 iOS 上只锁 `html{position:fixed}`、高度按 `innerHeight`，以前的 visualViewport 改高度和"聚焦前把输入框挪到屏幕外"的办法都用 `&& false` 关掉了，键盘动画不跟。
   - 消息列表贴底沿用第 8 条的 ResizeObserver：列表高度一变，在画出来之前就把 `scrollTop` 补上差值，不用 smooth。没改成 `column-reverse`：现有的贴底已经够用，改了还会影响往上加载更早消息时的位置保持。
 - 代码在 `VesperApp.jsx` 的 `useVisibleHeight`、`vesper.css` 的 `html.v-lock`、`vesper/preventScroll.js`。
-- **iOS 26 新坑**：收起键盘后 `visualViewport.offsetTop` 有时回不到 0，或者 `height` 一直偏小（[Apple 论坛 800125](https://developer.apple.com/forums/thread/800125)、[WebKit 254861](https://bugs.webkit.org/show_bug.cgi?id=254861)，iOS 27 beta 又有）。我们的外框跟着 `offsetTop` 走，卡住就整体往下偏。现在的处理：失焦 100ms 后、和逐帧读数停稳后各查一次，`offsetTop` 还大于 0 就 `scrollBy(0,-1)` 再 `scrollBy(0,1)` 推一下。文档是钉死的，这一推管不管用要看真机读数。
+- **iOS 26 新坑**：收起键盘后 `visualViewport.offsetTop` 有时回不到 0，或者 `height` 一直偏小（[Apple 论坛 800125](https://developer.apple.com/forums/thread/800125)、[WebKit 254861](https://bugs.webkit.org/show_bug.cgi?id=254861)，iOS 27 beta 又有）。我们的外框跟着 `offsetTop` 走，卡住就整体往下偏。现在的处理：失焦后 100ms、600ms 各查一次，`offsetTop` 还大于 0 就 `scrollBy(0,-1)` 再 `scrollBy(0,1)` 推一下。2026-10-24 真机（iOS 26.5.2）上 offsetTop 一直是 0，没遇到，这段先留着。
 
 ### 2c. 下拖收键盘要顺
 - **现象**：
@@ -58,10 +58,15 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 列表还在动的时候，焦点会被弄回输入框。
 - **正确做法**：
   - 列表上往下拖超过 10px 就 `blur`。不 `preventDefault`，列表滚动和松手后的惯性照常；一次拖动只收一次。
-  - 输入框得到或失去焦点时，用 `requestAnimationFrame` 每帧读一次 `visualViewport`，连续 8 帧不变（或者满 1 秒）算停下。
-    - **待真机确认**：[WebKit 265578](https://bugs.webkit.org/show_bug.cgi?id=265578) 说主屏幕模式下 visualViewport 是聚焦后一下子跳到最终高度的，动画途中没有中间值；Safari 地址栏在底部时又是等动画结束才变。真是这样，逐帧读只能读到两头，输入栏会先跳到位、比键盘快。用调试读数量：聊天顶栏名字 2 秒内连点 5 下打开（`src/vesper/kbDebug.js`），每次起落出一行 `N mid values`，0 就是没有中间值。量完再定是留着逐帧跟随，还是改成高度一次到位、用 CSS 过渡按键盘的节奏补动画。
-    - 动画途中，外框高度在“键盘全开时的高度”和“html 高度”之间按键盘露出的比例走，输入栏一直贴着键盘顶。
-    - 键盘高度 `--v-kb` 只在停稳后才记：途中的高度是一半，记下来面板会画错。
+  - **不要逐帧读 visualViewport 去跟键盘**（这处改过 2 次）。
+    - 以前的做法：输入框得到或失去焦点后，用 `requestAnimationFrame` 每帧读 `visualViewport`，按键盘露出的比例算外框高度。
+    - 为什么不对：2026-10-24 真机（iOS 26.5.2，主屏幕模式）录了 6 次起落，动画途中一个中间值都没有。聚焦后约 70–80ms，`visualViewport.height` 在一帧里从 852 跳到 448；失焦后约 30–50ms 跳回 852，每次只发一次 `resize`（和 [WebKit 265578](https://bugs.webkit.org/show_bug.cgi?id=265578) 说的一样）。逐帧读只读得到两头，输入栏比键盘先到：弹出时先跳上去、底下露背景，收起时先掉下去、被键盘盖住。
+    - 现在的做法：`useVisibleHeight` 发现外框高度一下变了 150px 以上，就给 `.vesper` 加 `data-kb-anim`，让 `height` 用过渡走过去，600ms 后去掉。时长、曲线是 `--v-kbDur` / `--v-kbEase`（.4s、`cubic-bezier(.3,.7,.2,1)`），tab 栏滑出滑回、`--v-tbSpace` 用的也是这一套，要调只改这两个变量。
+    - 标记用 data 属性，不用 class：React 每次改 `kb-open`、`tab-hidden` 都会把整串 className 重写，同一时刻加上的 class 会被冲掉。
+    - 没键盘时 `--v-vh` 写成整屏的 px，不要删掉回到 `100%`：过渡是 px 到 px，不跨单位。
+    - 表情、加号面板开着时不过渡（JS 不加标记，CSS 用 `:not(:has(面板))` 再保险一层）：面板和键盘互换要在同一帧，输入框不动。
+    - 键盘高度 `--v-kb` 照旧只在键盘停稳（高度比整屏少 150px 以上）时才记。
+  - 顺带：这台机器上主屏幕模式的 `innerHeight` 一直是 852，不随键盘变；以前有的版本会跟着变小。所以判断有没有键盘一律拿 html 的高度比，不要用 `innerHeight`。
   - `--v-tbSpace` 用 `@property` 注册成长度，才能 `transition`，和 tab 栏滑上来用同一条曲线（.4s）。面板开着时不过渡，同一帧贴底。
   - 下拖收键盘之后 600ms 内冒出来的 focus 直接再 `blur`（`swipeBlurAt`）：在 focus 事件里同步 `blur` 有的浏览器不认，下一帧再补一次。她自己点输入框（`touchend`）会清掉这个标记。
 - 网页里键盘做不到原生那样跟着手指拖，能做的是一滑就收、输入栏贴着键盘、列表不断。
@@ -282,3 +287,4 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - [ ] 下拖收键盘：输入栏贴着键盘往下走，tab 栏同时滑上来，键盘不弹回。
 - [ ] 键盘开着时，手指在顶栏、输入栏、气泡上下拖：整页一点不动；消息列表照常滚，滚到头不带着页面走。
 - [ ] 下拖收起键盘后马上再点输入框：键盘正常弹出，不会被收回去。
+- [ ] 量键盘：`src/vesper/kbDebug.js` 的读数（聊天顶栏名字 2 秒内连点 5 下）看新机型、新 iOS 版本键盘起落有没有中间值（`N mid values`），有的话可以考虑改回逐帧跟。

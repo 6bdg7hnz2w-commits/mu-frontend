@@ -81,71 +81,63 @@ function useVisibleHeight(ref) {
     const root = document.documentElement
     root.classList.add('v-lock')
     const css = (k, v) => v == null ? ref.current?.style.removeProperty(k) : ref.current?.style.setProperty(k, v)
-    // gap：没键盘时 html 比 visualViewport 高出的那截（主屏幕模式下是状态栏那么高，见 index.css）；
-    // kbMax：键盘整个升起来时的高度（不含 gap）。键盘起落途中外框高度在这两头之间按比例走，输入栏一直贴着键盘顶
-    let gap = null, kbMax = 0, raf = 0
-    // settled：不是在键盘动画途中逐帧读的。只有这时才记 gap、键盘高度（动画途中的高度是一半，存了面板会画错）
-    const on = (settled) => {
+    // gap：没键盘时 html 比 visualViewport 高出的那截（主屏幕模式下是状态栏那么高，见 index.css）
+    let gap = null, lastH = null, animT = 0
+    const on = () => {
       // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
       // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
       if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
       css('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
-      // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
+      // 拿 html 的高度比较有没有键盘：它不随键盘变（innerHeight 在有的 iOS 版本上会跟着变小，有的不会，不可靠）
       const full = root.getBoundingClientRect().height, h = vv.height
       css('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
       root.style.setProperty('--v-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
-      if (settled && h >= full - 150) gap = full - h
+      if (h >= full - 150) gap = full - h
       const kb = full - (gap ?? 0) - h // 现在露出来的键盘有多高
-      if (kb > 8) {
-        if (settled && h < full - 150) {
-          kbMax = kb
-          // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
-          css('--v-kb', `${Math.round(full - h)}px`)
-          try { localStorage.setItem('v_kb_h', String(Math.round(full - h))) } catch {}
-        }
-        css('--v-vh', `${Math.round(h + (gap ?? 0) * (1 - Math.min(1, kb / Math.max(kbMax, kb))))}px`)
-      } else css('--v-vh', null)
+      if (kb > 8 && h < full - 150) {
+        // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
+        css('--v-kb', `${Math.round(full - h)}px`)
+        try { localStorage.setItem('v_kb_h', String(Math.round(full - h))) } catch {}
+      }
+      // 没键盘时写成整屏的 px（不是删掉回到 100%）：键盘起落的过渡是 px 到 px，不跨单位
+      const vh = Math.round(kb > 8 ? h : full)
+      // 主屏幕模式下 iOS 不给键盘动画途中的值：聚焦后 70ms 左右 visualViewport 一下子跳到最终高度（真机读数，WebKit 265578）。
+      // 照着跳，输入栏会比键盘先到。所以一下变了 150px 以上（键盘起落）就让外框高度用 CSS 过渡走过去，节奏照键盘
+      // （vesper.css 的 .vesper[data-kb-anim]）。表情、加号面板开着时不过渡：面板和键盘互换要在同一帧，输入框不动
+      const panel = ref.current?.querySelector('.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel')
+      if (lastH != null && Math.abs(vh - lastH) > 150 && !panel) {
+        ref.current?.setAttribute('data-kb-anim', '') // 不用 className：React 改 kb-open 时会把整串 className 覆盖掉
+        clearTimeout(animT)
+        animT = setTimeout(() => ref.current?.removeAttribute('data-kb-anim'), 600)
+      }
+      lastH = vh
+      css('--v-vh', `${vh}px`)
     }
-    // 键盘起落时 iOS 不是每帧都发 resize，常常只在开头结尾各发一下，中间输入栏就卡着不动、底下空一大块。
-    // 输入框一得到 / 失去焦点就每帧读一次 visualViewport，连着 8 帧没变（或者 1 秒）算停了，最后按停稳的记一次
     // iOS 26：收起键盘后 visualViewport.offsetTop 有时回不到 0（外框跟着它整个往下偏）。社区的办法是等一下再上下推 1px 让它归位，
-    // 见 Apple 论坛 thread 800125 / WebKit 254861。推之前之后的值记进调试读数（kbDebug），看真机上管不管用
+    // 见 Apple 论坛 thread 800125 / WebKit 254861。2026-10-24 真机（iOS 26.5.2）没遇到，推之前之后的值记进调试读数（kbDebug）
     const nudge = () => {
       if (vv.offsetTop < 1 || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return
       const before = Math.round(vv.offsetTop)
       window.scrollBy(0, -1); window.scrollBy(0, 1)
-      on(true)
+      on()
       kbNote(`nudge top ${before}→${Math.round(vv.offsetTop)}`)
     }
-    const follow = (e) => {
+    const nudgeT = []
+    const onBlur = (e) => {
       if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
-      cancelAnimationFrame(raf)
-      const closing = e.type === 'focusout'
-      if (closing) setTimeout(nudge, 100)
-      let last = -1, still = 0
-      const t0 = performance.now()
-      const tick = (now) => {
-        on(false)
-        still = vv.height === last ? still + 1 : 0
-        last = vv.height
-        if (still >= 8 || now - t0 > 1000) { raf = 0; on(true); if (closing) nudge(); return }
-        raf = requestAnimationFrame(tick)
-      }
-      raf = requestAnimationFrame(tick)
+      nudgeT.forEach(clearTimeout)
+      nudgeT.splice(0, 2, setTimeout(nudge, 100), setTimeout(nudge, 600))
     }
-    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) { css('--v-kb', `${kb}px`); kbMax = kb } } catch {}
-    on(true)
-    if (gap != null) kbMax = Math.max(0, kbMax - gap)
-    const ev = () => on(!raf)
-    vv.addEventListener('resize', ev)
-    vv.addEventListener('scroll', ev)
-    window.addEventListener('scroll', ev)
-    document.addEventListener('focusin', follow)
-    document.addEventListener('focusout', follow)
+    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) css('--v-kb', `${kb}px`) } catch {}
+    on()
+    vv.addEventListener('resize', on)
+    vv.addEventListener('scroll', on)
+    window.addEventListener('scroll', on)
+    document.addEventListener('focusout', onBlur)
     return () => {
-      cancelAnimationFrame(raf)
-      vv.removeEventListener('resize', ev); vv.removeEventListener('scroll', ev); window.removeEventListener('scroll', ev)
-      document.removeEventListener('focusin', follow); document.removeEventListener('focusout', follow)
+      clearTimeout(animT); nudgeT.forEach(clearTimeout)
+      vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('scroll', on)
+      document.removeEventListener('focusout', onBlur)
       root.classList.remove('v-lock')
     }
   }, [ref])
@@ -293,7 +285,7 @@ export default function VesperApp() {
   usePageChrome(look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day) // 日记、读书这些从 Home 打开的浅色页也是浅底
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
-  useEffect(() => installKbDebug(), []) // 临时：键盘调试读数，平时不显示
+  useEffect(() => installKbDebug(), []) // 键盘调试读数，平时不显示（kbDebug.js）
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
