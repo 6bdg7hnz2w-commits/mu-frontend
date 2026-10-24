@@ -860,6 +860,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const [lightbox, setLightbox] = useState(null) // { items, index }：点开的那组图和从第几张开始
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
   const [emojiOpen, setEmojiOpen] = useState(false) // 表情包面板：表情包还在做，先是个空面板
+  const [panelFrom, setPanelFrom] = useState(null) // 面板打开前底下那块有多高（键盘 / 另一个面板 / 0）：皮肤让面板从这个高度变到自己的高度
+  const panelCloseT = useRef(0)
   const textareaRef = useRef(null)
   // 按住说话、语音 / 键盘模式（Composer.jsx）；sendVoice 在下面，用的时候才取
   const rec = useVoiceRecorder({ passcode, textareaRef, onVoice: (blob, duration) => sendVoice(blob, duration), onNotice: setNotice })
@@ -1169,14 +1171,29 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   }
 
   // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
-  // 键盘、表情包面板、加号面板三选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
-  // 点输入框弹键盘时，面板等键盘真的升上来那一下再收，输入框一直在同一个高度，不会先掉下去再被顶上来
+  // 键盘、表情包面板、加号面板三选一。点开面板先收起键盘。面板高度皮肤自己定（Vesper 照微信：加号面板比键盘矮、表情面板和键盘差不多），
+  // 切换时面板从原来那块的高度（panelFrom）变到自己的高度，输入栏跟着走；关面板时皮肤加 data-close 让它缩下去，缩完才拿掉。
+  // 点输入框弹键盘时，键盘真的升上来那一下给面板加 data-to-kb（长回键盘的高度），长完再收，输入框不会被键盘盖住。
+  // 等多久照面板自己的 transition-duration：皮肤没写过渡（Clawd）就是 0，立刻收
   const panelOpen = emojiOpen || attachOpen
-  const closePanels = () => { setEmojiOpen(false); setAttachOpen(false) }
+  const panelEl = () => roomRef.current?.querySelector('.cc-attach-menu,.cc-emoji-panel')
+  const panelDur = (el) => el ? parseFloat(getComputedStyle(el).transitionDuration) * 1000 || 0 : 0
+  const closePanels = (animate = true) => {
+    clearTimeout(panelCloseT.current)
+    const el = animate && panelEl(), ms = panelDur(el)
+    if (!ms) { setEmojiOpen(false); setAttachOpen(false); return }
+    el.setAttribute('data-close', '')
+    panelCloseT.current = setTimeout(() => { setEmojiOpen(false); setAttachOpen(false) }, ms)
+  }
   const togglePanel = (which) => {
+    if ((which === 'emoji' ? emojiOpen : attachOpen) && !panelEl()?.hasAttribute('data-close')) { closePanels(); return }
+    clearTimeout(panelCloseT.current)
+    const vv = window.visualViewport, full = document.documentElement.getBoundingClientRect().height
+    const kb = vv && vv.height < full - 150 ? full - vv.height : 0
+    setPanelFrom(Math.round(kb || panelEl()?.offsetHeight || 0))
     textareaRef.current?.blur()
-    setEmojiOpen(which === 'emoji' ? o => !o : false)
-    setAttachOpen(which === 'attach' ? o => !o : false)
+    setEmojiOpen(which === 'emoji')
+    setAttachOpen(which === 'attach')
   }
   const onInputFocus = () => {
     if (Date.now() - swipeBlurAt.current < 600) { // 在 focus 事件里同步 blur 有的浏览器不认，下一帧再补一次
@@ -1188,10 +1205,16 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
       const vv = window.visualViewport
       const h0 = vv?.height ?? 0
       let done = false
-      const finish = () => { if (done) return; done = true; vv?.removeEventListener('resize', onVv); closePanels() }
-      const onVv = () => { if (vv.height < h0 - 100) finish() }
+      const finish = (grow) => {
+        if (done) return; done = true; vv?.removeEventListener('resize', onVv)
+        const el = panelEl()
+        if (!grow || !panelDur(el)) { closePanels(false); return }
+        el.setAttribute('data-to-kb', '')
+        panelCloseT.current = setTimeout(() => closePanels(false), panelDur(el)) // 等面板长到键盘的高度
+      }
+      const onVv = () => { if (vv.height < h0 - 100) finish(true) }
       vv?.addEventListener('resize', onVv)
-      setTimeout(finish, 600) // 外接键盘、电脑上不会有这一下
+      setTimeout(() => finish(false), 600) // 外接键盘、电脑上不会有这一下
     }
     stickBottom()
   }
@@ -1219,7 +1242,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   useChatSwipeBack(roomRef, {
     onBack,
     blocked: () => !!lightbox || !!rec.recording || !!editingKey || !!document.querySelector('.modal-overlay,.v-modal,.v-bsheet,.image-lightbox-overlay'),
-    beforeBack: () => { textareaRef.current?.blur(); closePanels() },
+    beforeBack: () => { textareaRef.current?.blur(); closePanels(false) },
     onUnder, slideIn,
   })
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
@@ -1562,7 +1585,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove} onTouchEnd={onListTouchEnd} onTouchCancel={onListTouchEnd}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={() => closePanels()} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove} onTouchEnd={onListTouchEnd} onTouchCancel={onListTouchEnd}>
         {/* 还有更早的就一直占着这一格（高度固定），加载时只换里面的字，出现、消失都不推动下面的消息 */}
         {hasMore && messages.length > 0 && <div className="cc-older">{loadingMore ? 'Loading…' : ''}</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
@@ -1593,7 +1616,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
       <Composer passcode={passcode} rec={rec} notice={notice} onClearNotice={() => setNotice('')}
         pending={pending} onReorderPending={setPending} onOpenPending={openPendingImage} onRemovePending={removePending}
         textareaRef={textareaRef} input={input} onInput={setInput} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} onTextTouchStart={() => { swipeBlurAt.current = 0 }}
-        emojiOpen={emojiOpen} attachOpen={attachOpen} onTogglePanel={togglePanel} onCloseAttach={() => setAttachOpen(false)}
+        emojiOpen={emojiOpen} attachOpen={attachOpen} panelFrom={panelFrom} onTogglePanel={togglePanel} onCloseAttach={() => setAttachOpen(false)}
         full={full} fileAccept={fileAccept} filesReady={!!fileTypes} onPickFiles={handleFileSelect} onPickImages={handleImageSelect} onSend={sendMessage} />
 
       {lightbox && <ImageLightbox items={lightbox.items} index={lightbox.index} onClose={() => setLightbox(null)} />}

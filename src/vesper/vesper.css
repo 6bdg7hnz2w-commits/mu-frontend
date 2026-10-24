@@ -553,9 +553,20 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
 .v-chat .cc-attach-menu button:disabled{opacity:.4}
 .v-chat .cc-attach-menu button svg{width:28px;height:28px}
-/* 表情包、加号面板都占键盘的位置：高度 = 上次键盘的实际高度（VesperApp 用 visualViewport 记的 --s-kb，没记过先用 300px），
-   键盘和面板互换时输入框不动。加号面板照微信排成一格一格的大按钮，一行 4 个 */
-.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--s-kb,300px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line)}
+/* 表情包、加号面板照微信量的（393pt 宽的 iPhone）：加号面板 241 + 底部安全区（约 275），表情面板 353 + 安全区（约 387），
+   都不超过键盘（网页的键盘带一条系统工具栏，约 404，比微信的 345 高）。
+   打开时从原来那块的高度（--s-panelFrom：键盘 / 另一个面板 / 0）变到自己的高度，输入栏跟着走；
+   关掉时 CcChat 加 data-close 缩到 0，缩完才拿掉；切回键盘时加 data-to-kb，长回键盘的高度再收，输入栏不会被键盘盖住。
+   CcChat 等多久照这里的 transition-duration。加号面板排成一格一格的大按钮，一行 4 个 */
+.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{box-sizing:border-box;overflow:hidden;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);border-top:1px solid var(--v-line);transition:height var(--s-kbDur) var(--s-kbEase),padding var(--s-kbDur) var(--s-kbEase)}
+.v-chat .cc-attach-menu{height:min(var(--s-kb,300px),calc(241px + var(--s-bottom)))}
+.v-chat .cc-emoji-panel{height:min(var(--s-kb,300px),calc(353px + var(--s-bottom)))}
+.v-chat [data-from]:is(.cc-attach-menu,.cc-emoji-panel){animation:v-panel-in var(--s-kbDur) var(--s-kbEase)}
+.v-chat [data-from="0"]:is(.cc-attach-menu,.cc-emoji-panel){animation-name:v-panel-up}
+.v-chat [data-to-kb]:is(.cc-attach-menu,.cc-emoji-panel){height:var(--s-kb,300px)}
+.v-chat [data-close]:is(.cc-attach-menu,.cc-emoji-panel){height:0;padding-top:0;padding-bottom:0;border-top-width:0}
+@keyframes v-panel-in{from{height:var(--s-panelFrom)}}
+@keyframes v-panel-up{from{height:0;padding-top:0;padding-bottom:0}}
 .v-chat .cc-emoji-panel{display:flex;align-items:center;justify-content:center;padding:12px 10px var(--s-bottom)}
 .v-chat .cc-emoji-soon{font-family:var(--v-sans);font-size:14px;color:var(--v-mute)}
 .v-chat .cc-attach-menu{display:grid;grid-template-columns:repeat(4,1fr);align-content:start;row-gap:20px;padding:26px 12px var(--s-bottom)}
