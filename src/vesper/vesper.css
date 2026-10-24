@@ -3,6 +3,7 @@
 /* Noto Serif SC 的省略号是竖直居中的中文写法；所有用它的地方（气泡、输入框、正文）… 都换成西文字形，落在基线上 */
 @font-face{font-family:'V Dots';src:local('Georgia'),local('Times New Roman'),local('Times');unicode-range:U+2026}
 .vesper{
+  --s-scrim:rgba(10,14,24,.4);--s-scrimSheet:rgba(10,14,24,.34); /* 弹窗蒙版（shell/sheets.css） */
   --v-bg:#f1f3f7;--v-card:#fafbfc;--v-card2:#e7ebf1;--v-line:rgba(28,38,66,.08);--v-line2:#e3e7ee;
   --v-ink:#1c2232;--v-ink2:#3d4556;--v-mute:#7f879a;--v-faint:#a9b0bf;
   --v-acc:#4f638c;--v-acc-ink:#ffffff;--v-acc-soft:rgba(95,115,156,.12);
@@ -129,14 +130,14 @@
 .v-spark.big{transform:scale(1.36)}
 .v-toast{position:fixed;left:50%;bottom:calc(var(--s-bottom) + 96px);z-index:90;transform:translate(-50%,12px);opacity:0;pointer-events:none;max-width:calc(100% - 48px);padding:10px 16px;border-radius:14px;background:rgba(28,34,50,.92);color:#fff;font-family:var(--v-sans);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .25s,transform .25s}
 .v-toast.on{opacity:1;transform:translate(-50%,0)}
-.v-sheet{position:fixed;inset:0;z-index:76;background:rgba(10,14,24,.34);display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:0 12px calc(var(--s-bottom) + 20px);animation:vFade .2s ease}
+.v-sheet{position:fixed;inset:0;z-index:76;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:0 12px calc(var(--s-bottom) + 20px);animation:vFade .2s ease}
 .v-sheet-card{border-radius:18px;overflow:hidden;background:var(--v-card);font-family:var(--v-sans);text-align:center;display:flex;flex-direction:column}
 .v-sheet-title{padding:12px 16px;font-size:12.5px;color:var(--v-mute);border-bottom:1px solid var(--v-line)}
 .v-sheet-card button{height:54px;font-family:var(--v-sans)!important;font-size:17px;color:var(--v-acc)!important;border-bottom:1px solid var(--v-line)!important}
 .v-sheet-card button:last-child{border-bottom:0!important}
 .v-sheet-card button.danger{color:var(--v-danger)!important}
 .v-sheet-cancel{height:54px;border-radius:18px;background:var(--v-card)!important;font-family:var(--v-sans)!important;font-size:17px;font-weight:600}
-.v-modal{position:fixed;left:0;right:0;top:0;height:var(--s-vh,100%);z-index:70;background:rgba(10,14,24,.4);display:flex;align-items:center;justify-content:center;padding:calc(var(--s-top) + 16px) 20px 16px;animation:vFade .2s ease}
+.v-modal{position:fixed;left:0;right:0;top:0;height:var(--s-vh,100%);z-index:70;display:flex;align-items:center;justify-content:center;padding:calc(var(--s-top) + 16px) 20px 16px;animation:vFade .2s ease}
 .v-modal-card{width:330px;max-width:100%;max-height:100%;overflow-y:auto;scrollbar-width:none;padding:22px 20px 18px;border-radius:24px;background:var(--v-card);box-shadow:0 24px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:12px;animation:vPop .28s cubic-bezier(.2,.7,.2,1)}
 .v-modal-title{text-align:center;font-size:24px;font-weight:600}
 .v-modal .v-field{background:var(--v-bg);height:44px;border-radius:12px}
@@ -412,6 +413,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --vc-meta-shadow:0 0 6px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9);--vc-text-shadow:0 0 12px rgba(255,255,255,.75);
   --vc-veil:rgba(255,255,255,.42);--vc-his:rgba(255,255,255,.45);
   --vc-f:none;--vc-base:#c9c3d6;
+  --s-wallBase:var(--vc-base);--s-wallF:var(--vc-f);--s-wallVeil:var(--vc-veil); /* 壁纸（shell/chat/wall.css） */
   /* 聊天室共用组件读的主题变量（App.css 里 .cc-room 那几条），夜间跟着上面的 --vc-* / --v-* 变 */
   --s-meBg:var(--v-acc);--s-meInk:var(--v-acc-ink);--s-meR:17px 17px 6px 17px;
   --s-himBg:var(--vc-his);--s-himInk:var(--vc-ink);--s-himR:17px 17px 17px 6px;--s-glass:blur(12px);
@@ -439,13 +441,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
   --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.45);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
-/* 背景按整个屏幕的高度铺（--s-full，html 的高度不随键盘变），键盘、面板起落时只有消息区在变，背景不缩放 */
-.v-chat-wall{position:absolute;top:0;left:0;right:0;height:var(--s-full,100lvh);background:var(--vc-base);z-index:1}
 /* 滑入、右滑返回时底下垫着的对话列表；壁纸（data-swipe-follow）和聊天页一起移，盖在列表上面 */
 .v-chat>.cc-under{position:absolute;inset:0;z-index:0}
 /* .v-chat 用 overflow:clip 而不是 hidden：hidden 的盒子还能被滚。滑入时聊天页先在右边，进来就 scrollIntoView 到最后一条，iOS 会把 .v-chat 横着滚过去，整页停在往左偏的位置 */
-.v-chat-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--vc-f)}
-.v-chat-wall i{position:absolute;inset:0;background:var(--vc-veil)}
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
 .v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--s-top);padding-bottom:var(--v-tbSpace)}
 /* 对话列表照画布：大标题 + 一条线，沐那张卡片（雾蓝方块里一颗星） */

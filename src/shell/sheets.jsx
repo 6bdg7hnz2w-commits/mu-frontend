@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { usePreventPageScroll } from './preventScroll.js'
+import './sheets.css'
 
 // ─── 底部面板 ─────────────────────
-// 和皮肤无关的部分：从底边弹出、贴着键盘、不让 iOS 滚页面。样式在皮肤 CSS 里，类名按 prefix 拼（Vesper 是 v-sheet / v-bsheet / v-modal）
+// 和皮肤无关的部分：从底边弹出、贴着键盘、不让 iOS 滚页面。样式在皮肤 CSS 里，类名按 prefix 拼（Vesper 是 v-sheet / v-bsheet / v-modal）；蒙版颜色走 data-scrim（sheets.css）
 
 // iOS 那种从底部弹出的操作菜单；actions 里的 false 会被跳过
 export function ActionSheet({ title, actions, onClose, prefix = 'v' }) {
   return (
-    <div className={`${prefix}-sheet`} data-back onClick={onClose}>
+    <div className={`${prefix}-sheet`} data-scrim="sheet" data-back onClick={onClose}>
       <div className={`${prefix}-sheet-card`} onClick={e => e.stopPropagation()}>
         {title && <div className={`${prefix}-sheet-title`}>{title}</div>}
         {actions.filter(Boolean).map(a => (
@@ -46,7 +47,7 @@ export function BottomSheet({ title, left, right, onClose, children, prefix = 'v
     setTimeout(go, 350); setTimeout(go, 700)
   }
   return (
-    <div ref={wrap} className={`${prefix}-modal ${prefix}-bsheet`} onClick={onClose}>
+    <div ref={wrap} className={`${prefix}-modal ${prefix}-bsheet`} data-scrim onClick={onClose}>
       <div className={`${prefix}-bsheet-card`} onClick={e => e.stopPropagation()}>
         <div className={`${prefix}-bsheet-head`}>
           <i className={`${prefix}-bsheet-grab`} />

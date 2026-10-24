@@ -19,7 +19,7 @@ const errText = (e) => e?.message === 'locked' || e?.status === 401 ? 'Passcode 
 // 画布上的样子：居中的卡片，标题居中，底下一行 Delete … Cancel [Save]
 function Modal({ title, onClose, children }) {
   return (
-    <div className="v-modal" onClick={onClose}>
+    <div className="v-modal" data-scrim onClick={onClose}>
       <div className="v-modal-card" onClick={e => e.stopPropagation()}>
         <div className="v-modal-title">{title}</div>
         {children}

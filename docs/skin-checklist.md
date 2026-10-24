@@ -109,6 +109,16 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 
   Vesper 以前的预览字色（`.v-chat .chatlist-page .session-preview`）把 `.draft` 的高亮也压住了，所以草稿在 Vesper 下和普通预览同色。改变量时单独给了 `--s-draft`，保持原样；想让草稿高亮，改 Vesper 的 `--s-draft` 就行。
 
+  聊天壁纸和弹窗蒙版（6h）：壁纸是 `src/shell/chat/ChatWall.jsx`（`<ChatWall src=... />`，一张照片 + 一层纯色蒙版，带 `data-swipe-follow`，右滑返回时跟着走），铺法在 `shell/chat/wall.css`；弹窗蒙版在 `shell/sheets.css`，`ActionSheet` / `BottomSheet` 的外层带 `data-scrim`，皮肤自己写的居中弹窗（Vesper 日历的 `.v-modal`）也加上 `data-scrim` 就行。皮肤的 CSS 里不要再给这几层写 `background`。
+
+  | 变量 | 管什么 | 不设时 | Vesper |
+  |---|---|---|---|
+  | `--s-wallBase` / `--s-wallF` / `--s-wallVeil` | 壁纸底色（图没出来时）、照片滤镜、照片上那层纯色蒙版 | 透明 / 无 / 透明 | `--vc-base` / `--vc-f` / `--vc-veil`（白天、夜间不同） |
+  | `--s-scrim` | 弹窗、底部面板底下那层 | `rgba(0,0,0,.4)` | `rgba(10,14,24,.4)` |
+  | `--s-scrimSheet` | 操作菜单（`ActionSheet`）底下那层 | `--s-scrim` | `rgba(10,14,24,.34)` |
+
+  Clawd 的聊天没有壁纸，弹窗还是 App.css 里自己的 `.modal-overlay` / `.nook-sheet-overlay`，没换。
+
   按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
 
   间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里（比如展开的思考 / 工具的内边距 10px 12px）。加号面板、表情面板 Vesper 是另一种排法（一格一格的大按钮、占键盘的位置），整块布局都在 `vesper.css`，不走变量。
@@ -198,7 +208,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 
 ### 3. 背景图跟着键盘、面板缩放
 - **现象**：聊天背景是按外框高度铺的，键盘起落、面板开合时背景跟着变。
-- **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--s-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。
+- **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--s-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。现在这层是 shell 的 `ChatWall`（`shell/chat/wall.css`），新皮肤直接用。
 
 ---
 
