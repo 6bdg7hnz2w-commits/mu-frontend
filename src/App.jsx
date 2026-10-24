@@ -3271,7 +3271,7 @@ function ImageLightbox({ items, index = 0, onClose }) {
     st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (st.mode === 'pinch' && st.pts.size >= 2) {
       const [a, b] = [...st.pts.values()]
-      const s = Math.min(5, Math.max(0.7, st.base.s * Math.hypot(a.x - b.x, a.y - b.y) / st.d0))
+      const s = Math.min(5, Math.max(0.5, st.base.s * Math.hypot(a.x - b.x, a.y - b.y) / st.d0)) // 捏的时候能缩到 1 倍以下，松手弹回
       zoomAt({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, s, st.base, st.c0)
       apply()
       return
@@ -3322,6 +3322,17 @@ function ImageLightbox({ items, index = 0, onClose }) {
     tapTimer.current = setTimeout(() => { lastTap.current = null; close() }, 250)
   }
   useEffect(() => () => clearTimeout(tapTimer.current), [])
+  // iOS 不认 user-scalable=no：双指的时候、放大以后自己拦住浏览器的缩放和滚动，手势全归这里
+  useEffect(() => {
+    const el = overlay.current
+    if (!el) return
+    const stop = (e) => { if (e.touches?.length > 1 || z.current.s !== 1 || g.current.mode === 'drag') e.preventDefault() }
+    const noGesture = (e) => e.preventDefault()
+    el.addEventListener('touchmove', stop, { passive: false })
+    el.addEventListener('gesturestart', noGesture)
+    el.addEventListener('gesturechange', noGesture)
+    return () => { el.removeEventListener('touchmove', stop); el.removeEventListener('gesturestart', noGesture); el.removeEventListener('gesturechange', noGesture) }
+  }, [])
   // 图一直没出来（取不到）：背景也照样变黑，不卡在透明
   useEffect(() => { const t = setTimeout(() => { if (!opened.current) setBg(1, 200) }, 600); return () => clearTimeout(t) }, [])
 
@@ -3888,6 +3899,21 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     }
     stickBottom()
   }
+  // 在消息列表上手指往下拖（像 iOS 原生的拖动收键盘）：和点空白处一样，收起键盘和面板。
+  // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
+  const listSwipe = useRef(null)
+  const onListTouchStart = (e) => { const t = e.touches[0]; listSwipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, done: false } : null }
+  const onListTouchMove = (e) => {
+    const sw = listSwipe.current, t = e.touches[0]
+    if (!sw || sw.done || !t) return
+    const dx = t.clientX - sw.x, dy = t.clientY - sw.y
+    if (dy < -10 || e.touches.length > 1) { sw.done = true; return }
+    if (dy > 24 && dy > Math.abs(dx) * 1.5) {
+      sw.done = true
+      if (document.activeElement === textareaRef.current) textareaRef.current.blur()
+      if (panelOpen) closePanels()
+    }
+  }
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
   useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
   useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
@@ -4282,7 +4308,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch } from '../App.jsx'
+import { useCached, peek } from './data.js'
 import { fmtWhenEn } from '../Usage.jsx'
 import { SubPage } from './ui.jsx'
 
@@ -81,18 +81,15 @@ function Chart({ rows, weights, sel, onSel, hours }) {
 }
 
 export default function UsagePage({ onBack }) {
-  const [data, setData] = useState(null)
+  const data = useCached('usage', null) // 开场时已经取过、存在本地：进来直接是数，不从空白跳出来
   const [error, setError] = useState('')
   const [range, setRange] = useState('hours')
   const [sel, setSel] = useState(null)
   const [table, setTable] = useState(false)
   useEffect(() => {
     let alive = true
-    apiFetch('/api/cc/usage?days=30&hours=48')
-      .then(async r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(d => { if (alive) setData(d) })
-      .catch(() => { if (alive) setError("Couldn't load usage — try again later") })
-    return () => { alive = false }
+    const t = setTimeout(() => { if (alive && !peek('usage')) setError("Couldn't load usage — try again later") }, 8000)
+    return () => { alive = false; clearTimeout(t) }
   }, [])
 
   const rows = data ? (range === 'hours' ? data.hours || [] : data.days || []) : []

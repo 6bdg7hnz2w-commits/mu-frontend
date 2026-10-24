@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { START_DATE, apiFetch, beijingDateStr, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache } from '../App.jsx'
+import { START_DATE, apiFetch, beijingDateStr } from '../App.jsx'
+import { useCached, setCached, refresh } from './data.js'
 import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, keepAboveKeyboard } from './ui.jsx'
 
 // ─── Home / Diary / Read ────────────────────────────
@@ -30,10 +31,13 @@ const getSeen = () => { try { return localStorage.getItem(SEEN_KEY) || '' } catc
 const setSeen = (t) => { try { localStorage.setItem(SEEN_KEY, t) } catch {} }
 
 function useDiaries() {
-  const [diaries, setDiaries] = useState([])
-  const load = () => apiFetch('/api/diaries').then(r => r.json()).then(d => { if (Array.isArray(d)) setDiaries(d) }).catch(() => {})
+  // 先用上次存的那份画（开场时已经在取新的），取到新的、变了才换；回到前台再刷一次
+  const cached = useCached('diaries', [])
+  const [diaries, setLocal] = useState(cached)
+  useEffect(() => { setLocal(cached) }, [cached])
+  const setDiaries = (f) => setLocal(prev => { const next = typeof f === 'function' ? f(prev) : f; setCached('diaries', next); return next })
+  const load = () => refresh('diaries')
   useEffect(() => {
-    load()
     const onVis = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
@@ -43,15 +47,9 @@ function useDiaries() {
 }
 
 function HomeScreen({ diaries, opening, onOpenNotebook }) {
-  const [whisper, setWhisper] = useState(getWhisperCache)
+  const whisper = useCached('whisper', null)
   const [fallback] = useState(() => WHISPERS[Math.floor(Math.random() * WHISPERS.length)])
-  const [important, setImportant] = useState(() => getUpcomingImportantCache() ?? [])
-  useEffect(() => {
-    apiFetch('/api/whispers/today').then(r => r.json()).then(w => { if (w?.content) { setWhisper(w); setWhisperCache(w) } }).catch(() => {})
-    let alive = true
-    ensureImportantMigrated().then(fetchUpcomingImportant).then(list => { if (alive) setImportant(list) }).catch(() => {})
-    return () => { alive = false }
-  }, [])
+  const important = useCached('important', [])
 
   const now = new Date()
   const hour = now.getHours()
