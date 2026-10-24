@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { LockScreen, getPasscode, apiFetch } from '../App.jsx'
-import { useVisibleHeight, useKeyboardOpen, usePageChrome } from '../shell/viewport.js'
+import { usePageChrome } from '../shell/viewport.js'
+import { useTabShell, TabShell } from '../shell/TabShell.jsx'
 import { useCached, preload } from './data.js'
 import { getSkin, setSkin } from '../skin.js'
 import { V, SubPage, useEdgeSwipe } from './ui.jsx'
@@ -13,7 +14,6 @@ import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
 import MemoryPage from './Memory.jsx'
 import AlbumPage from './Album.jsx'
-import { installKbDebug } from '../shell/kbDebug.js'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -183,22 +183,12 @@ export default function VesperApp() {
   const [chatUsage, setChatUsage] = useState(false) // 聊天里点开的 Usage：叠在聊天上面，返回回到聊天
   const [immersive, setImmersive] = useState(false)
   const [chatSub, setChatSub] = useState(false) // 聊天里进了 menu / 查找 / 回复方式
-  const [keyboardOpen, setKeyboardOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(false) // 聊天的表情 / 加号面板开着：和键盘一样收起 tab 栏
-  useEffect(() => {
-    const on = (e) => setPanelOpen(!!e.detail)
-    window.addEventListener('cc-panel', on)
-    return () => window.removeEventListener('cc-panel', on)
-  }, [])
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
-  const frame = useRef(null)
+  const shell = useTabShell() // 外框、键盘、tab 栏收起（shell/TabShell.jsx）
   useVesperFonts()
   const chrome = look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day
   usePageChrome(chrome, chrome === CHROME.day ? 'light' : 'dark') // 日记、读书这些从 Home 打开的浅色页也是浅底
-  useVisibleHeight(frame)
-  useKeyboardOpen(setKeyboardOpen)
-  useEffect(() => installKbDebug(), []) // 键盘调试读数，平时不显示（kbDebug.js）
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
@@ -215,15 +205,11 @@ export default function VesperApp() {
   if (!unlocked) return <LockScreen expired={lockExpired} onUnlock={() => setUnlocked(true)} />
 
   const goTab = (k) => { setTab(k); setChatUsage(false); if (k !== 'more') setMoreView(null) }
-  // 底部 tab 只在一级页（Home、Chats、Calendar、More）显示；带返回键的二级页一律收起，在这里统一判断，页面自己不管：
-  // Home 里打开的日记、信这些（immersive）、More 里的每一页、聊天里的 menu / 查找 / 回复方式 / Usage。
-  // 另外键盘弹出、聊天面板打开时也收起。收起 / 回来都是 tab 栏自己往下滑出、滑回
+  // 二级页（tab 栏收起，TabShell 统一处理）：Home 里打开的日记、信这些（immersive）、More 里的每一页、聊天里的 menu / 查找 / 回复方式 / Usage
   const subPage = immersive || (tab === 'more' && !!moreView) || (tab === 'chat' && (chatUsage || chatSub))
-  const tabHidden = subPage || keyboardOpen || (tab === 'chat' && panelOpen)
 
   return (
-    // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
-    <div ref={frame} data-shell-frame className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' && !chatUsage ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
+    <TabShell shell={shell} prefix="v" className="vesper" data-look={look} tabs={TABS} tab={tab} onTab={goTab} subPage={subPage} panelTab="chat" frameProps={tab === 'chat' && !chatUsage ? null : swipe}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
       {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} />}
       {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}
@@ -237,15 +223,6 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
       <Splash />
-      {/* 浮在底下的圆玻璃；选中那格垫一块会滑动的小玻璃 */}
-      <nav className="v-tabbar">
-        <i className="v-tab-pill" style={{ transform: `translateX(${TABS.findIndex(t => t.key === tab) * 100}%)` }} />
-        {TABS.map(t => (
-          <button key={t.key} className={`v-tab ${tab === t.key ? 'on' : ''}`} onClick={() => goTab(t.key)}>
-            {t.icon}<span>{t.label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
+    </TabShell>
   )
 }

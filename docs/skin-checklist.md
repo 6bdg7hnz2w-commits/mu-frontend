@@ -17,9 +17,13 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - `viewport.css`：`html.v-lock` 文档钉死。
 - `preventScroll.js`：`usePreventPageScroll(ref)`，不让 iOS 滚页面。
 - `kbDebug.js`：键盘调试读数。
+- `TabShell.jsx`：外框 + 底部 tab 栏。
+  - `useTabShell()`：在皮肤组件最上面、锁屏判断之前调用。里面已经接好 `useVisibleHeight`、`useKeyboardOpen`、聊天面板的 `cc-panel` 广播、kbDebug。
+  - `<TabShell shell prefix className tabs tab onTab subPage panelTab frameProps>`：画外框（带 `data-shell-frame`、钉在顶上）和 tab 栏，算 `tab-hidden` / `kb-open`。tab 栏类名按 `prefix` 拼（`v-tabbar` / `v-tab` / `v-tab-pill`）。
 
 新皮肤要做的：
-- 外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`；
+- 外框用 `TabShell`（不用的话：外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`）；
+- 按自己的路由算 `subPage` 传给 `TabShell`；
 - 自己的 CSS 里写外框 `height: var(--v-vh, 100%)`、`top: var(--v-vtop)`；
 - `[data-kb-anim]` 时的 height 过渡、面板开着时外框不跟键盘缩，也写在自己的 CSS 里（Vesper 的写法见 `vesper.css` 开头）。
 
@@ -177,7 +181,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 ## 五、路由和导航
 
 ### 10. 二级页面隐藏底部 tab
-- **正确做法**（9380f20）：在 VesperApp 一个地方算 `subPage`，页面自己不管：
+- **正确做法**（9380f20）：在皮肤的根组件一个地方算 `subPage`，页面自己不管。收不收起由 `src/shell/TabShell.jsx` 统一算（`subPage`、键盘开着、聊天面板开着三选一），Vesper 的 `subPage` 是：
   - Home 里打开的日记、读书（immersive）；
   - More 里的每一页；
   - 聊天里的 menu / 查找 / 回复方式 / Usage（ChatPage 通过 `onSubPage` 报上来）。
