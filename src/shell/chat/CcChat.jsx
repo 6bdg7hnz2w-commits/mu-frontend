@@ -892,7 +892,17 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     return () => { alive = false }
   }, [])
   useEffect(() => { if (draftLoadedRef.current) saveDraftFiles(CC_SESSION.id, pending) }, [pending])
-  useLayoutEffect(() => { const ta = textareaRef.current; if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px' } }, [input, passcode, rec.voiceMode])
+  // 输入框高度：先回到 CSS 给的一行高；字放不下才撑高（scrollHeight 不含边框，要加上，不然内容总比框多 2px、能上下滑），
+  // 到 120px 封顶后才让它自己滚。一行的时候 overflow 关掉，空着不能滑
+  useLayoutEffect(() => {
+    const ta = textareaRef.current; if (!ta) return
+    ta.style.height = ''; ta.style.overflowY = 'hidden'
+    if (ta.scrollHeight > ta.clientHeight) {
+      const h = ta.scrollHeight + ta.offsetHeight - ta.clientHeight
+      ta.style.height = Math.min(h, 120) + 'px'
+      if (h > 120) ta.style.overflowY = 'auto'
+    }
+  }, [input, passcode, rec.voiceMode])
 
   // 按 id 合并进历史（SSE 推来的、轮询拉到的、翻页拉到的可能重复）；没有新消息就什么都不动，轮询才不会每次都触发滚动
   // 同一个 id 更正过（edited_at 更新）的新版本要盖掉旧的；只是更正旧消息时不滚动

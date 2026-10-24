@@ -545,9 +545,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .composer{padding:8px 10px calc(var(--v-tbSpace) + 9px);border-top:1px solid var(--v-line)}
 .v-chat .cc-composer-row{gap:4px}
 .v-chat .cc-composer-row .attach-btn{width:36px;height:36px}
-.v-chat .composer-input-row textarea{height:38px;padding:8px 14px;border-radius:20px;border:1px solid var(--v-line);font-family:var(--v-scIn);font-size:15px}
-/* Noto Serif SC 的上沿留得高，西文的提示字会偏下；没字的时候整体往上挪 2px，视觉居中 */
-.v-chat .composer-input-row textarea:placeholder-shown{padding-top:6px;padding-bottom:10px}
+.v-chat .composer-input-row textarea{height:38px;padding:7px 14px 9px;line-height:20px;border-radius:20px;border:1px solid var(--v-line);font-family:var(--v-scIn);font-size:15px}
+/* 一行 = 1 边框 + 7 + 20 行高 + 9 + 1 边框 = 38。行高写死，不用 normal（各设备算出来不一样，内容会比框高、能滑）。
+   Noto Serif SC 上沿留得高，上 7 下 9 时西文提示字（大写字母那一截的中线）和中文字面的中线都正好落在框的正中，有字没字同一套内边距，打第一个字不跳 */
 .v-chat .send-btn{width:36px;height:36px}
 .v-chat .cc-attach-menu button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--v-ink2);font-family:var(--v-sans);font-size:12.5px}
 .v-chat .cc-attach-menu button i{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:18px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow);color:var(--v-ink)}
