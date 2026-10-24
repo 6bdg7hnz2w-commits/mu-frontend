@@ -79,30 +79,61 @@ function useVisibleHeight(ref) {
     // 再叠上我们按 visualViewport 改高度，就是顶栏先被挤到屏幕中间再回来、收起时列表先掉下去再弹回
     const root = document.documentElement
     root.classList.add('v-lock')
-    const on = () => {
+    const css = (k, v) => v == null ? ref.current?.style.removeProperty(k) : ref.current?.style.setProperty(k, v)
+    // gap：没键盘时 html 比 visualViewport 高出的那截（主屏幕模式下是状态栏那么高，见 index.css）；
+    // kbMax：键盘整个升起来时的高度（不含 gap）。键盘起落途中外框高度在这两头之间按比例走，输入栏一直贴着键盘顶
+    let gap = null, kbMax = 0, raf = 0
+    // settled：不是在键盘动画途中逐帧读的。只有这时才记 gap、键盘高度（动画途中的高度是一半，存了面板会画错）
+    const on = (settled) => {
       // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
       // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
       if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
-      ref.current?.style.setProperty('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
-      // 没弹键盘时跟着 html 走（主屏幕模式下 html 比 visualViewport 高出状态栏那截，见 index.css）
+      css('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
       // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
-      // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
-      const full = root.getBoundingClientRect().height
-      ref.current?.style.setProperty('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
+      const full = root.getBoundingClientRect().height, h = vv.height
+      css('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
       root.style.setProperty('--v-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
-      if (vv.height < full - 150) {
-        ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
-        ref.current?.style.setProperty('--v-kb', `${Math.round(full - vv.height)}px`)
-        try { localStorage.setItem('v_kb_h', String(Math.round(full - vv.height))) } catch {}
-      } else ref.current?.style.removeProperty('--v-vh')
+      if (settled && h >= full - 150) gap = full - h
+      const kb = full - (gap ?? 0) - h // 现在露出来的键盘有多高
+      if (kb > 8) {
+        if (settled && h < full - 150) {
+          kbMax = kb
+          // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
+          css('--v-kb', `${Math.round(full - h)}px`)
+          try { localStorage.setItem('v_kb_h', String(Math.round(full - h))) } catch {}
+        }
+        css('--v-vh', `${Math.round(h + (gap ?? 0) * (1 - Math.min(1, kb / Math.max(kbMax, kb))))}px`)
+      } else css('--v-vh', null)
     }
-    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) ref.current?.style.setProperty('--v-kb', `${kb}px`) } catch {}
-    on()
-    vv.addEventListener('resize', on)
-    vv.addEventListener('scroll', on)
-    window.addEventListener('scroll', on)
+    // 键盘起落时 iOS 不是每帧都发 resize，常常只在开头结尾各发一下，中间输入栏就卡着不动、底下空一大块。
+    // 输入框一得到 / 失去焦点就每帧读一次 visualViewport，连着 8 帧没变（或者 1 秒）算停了，最后按停稳的记一次
+    const follow = (e) => {
+      if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
+      cancelAnimationFrame(raf)
+      let last = -1, still = 0
+      const t0 = performance.now()
+      const tick = (now) => {
+        on(false)
+        still = vv.height === last ? still + 1 : 0
+        last = vv.height
+        if (still >= 8 || now - t0 > 1000) { raf = 0; on(true); return }
+        raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) { css('--v-kb', `${kb}px`); kbMax = kb } } catch {}
+    on(true)
+    if (gap != null) kbMax = Math.max(0, kbMax - gap)
+    const ev = () => on(!raf)
+    vv.addEventListener('resize', ev)
+    vv.addEventListener('scroll', ev)
+    window.addEventListener('scroll', ev)
+    document.addEventListener('focusin', follow)
+    document.addEventListener('focusout', follow)
     return () => {
-      vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('scroll', on)
+      cancelAnimationFrame(raf)
+      vv.removeEventListener('resize', ev); vv.removeEventListener('scroll', ev); window.removeEventListener('scroll', ev)
+      document.removeEventListener('focusin', follow); document.removeEventListener('focusout', follow)
       root.classList.remove('v-lock')
     }
   }, [ref])
