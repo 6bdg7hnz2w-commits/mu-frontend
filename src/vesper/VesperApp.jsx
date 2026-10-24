@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LockScreen, getPasscode, useKeyboardOpen, apiFetch, getMcpUrl, mcpRequest } from '../App.jsx'
+import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
+import { useCached, preload } from './data.js'
 import { getSkin, setSkin } from '../skin.js'
 import { V, SubPage, useEdgeSwipe } from './ui.jsx'
 import HomeTab from './Home.jsx'
@@ -79,6 +80,7 @@ function useVisibleHeight(ref) {
       // 主屏幕模式下 innerHeight 也会跟着键盘变小，拿它比较不出键盘；html 的高度不随键盘变，用它
       // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
       const full = document.documentElement.getBoundingClientRect().height
+      ref.current?.style.setProperty('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
       if (vv.height < full - 150) {
         ref.current?.style.setProperty('--v-vh', `${Math.round(vv.height)}px`)
         ref.current?.style.setProperty('--v-kb', `${Math.round(full - vv.height)}px`)
@@ -111,25 +113,9 @@ const MORE_TILES = [
   { key: 'usage', name: 'Usage', icon: V.usage },
 ]
 
-// 格子上的小字用真数据：几个记忆文件、几张照片、MCP 连没连上（拉不到就用默认那句）；Game / Reading / Usage 不写小字
+// 格子上的小字用真数据：几个记忆文件、几张照片、MCP 连没连上（开场时已经取好、存在本地，切过来不跳）；Game / Reading / Usage 不写小字
 function useTileSubs() {
-  const [subs, setSubs] = useState({})
-  useEffect(() => {
-    let alive = true
-    const put = (k, v) => { if (alive) setSubs(s => ({ ...s, [k]: v })) }
-    const get = (path) => apiFetch(path).then(r => r.ok ? r.json() : null)
-    get('/api/cc/memory').then(d => { if (Array.isArray(d?.files)) put('memory', `${d.files.length} memory files`) }).catch(() => {})
-    get('/api/cc/album').then(d => { if (Array.isArray(d?.photos)) put('album', `${d.photos.length} photos kept by Soren`) }).catch(() => {})
-    // MCP：存过地址就试着连一下数工具，连不上就写 Not connected（和画布一样）
-    const mcpUrl = getMcpUrl()
-    if (!mcpUrl) put('mcp', 'Not connected')
-    else mcpRequest(mcpUrl, 'initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'mu', version: '1.0' } })
-      .then(() => mcpRequest(mcpUrl, 'tools/list', {}))
-      .then(r => { const n = Array.isArray(r?.tools) ? r.tools.length : 0; put('mcp', `Connected · ${n} tool${n === 1 ? '' : 's'}`) })
-      .catch(() => put('mcp', 'Not connected'))
-    return () => { alive = false }
-  }, [])
-  return subs
+  return { memory: useCached('memory'), album: useCached('album'), mcp: useCached('mcp') }
 }
 
 function MorePage({ onOpen, onOpenSetting }) {
@@ -203,7 +189,8 @@ function SettingPage({ mode, setMode, onBack }) {
   )
 }
 
-// 字体（样式表 + 首页用到的几种字重）和首页壁纸都到了才算好；最多等 4 秒，网不好也不一直盖着
+// 字体（样式表 + 首页用到的几种字重）、首页壁纸、首页和 More 要用的数据（最多等 3 秒）都到了才算好；
+// 总共最多等 4 秒，网不好也不一直盖着
 function vesperReady() {
   const link = document.getElementById('vesper-fonts')
   const sheet = link && !link.sheet ? new Promise(r => { link.addEventListener('load', r); link.addEventListener('error', r) }) : Promise.resolve()
@@ -211,7 +198,7 @@ function vesperReady() {
     "500 31px 'Cormorant Garamond'", "600 19px 'Cormorant Garamond'", "italic 17px 'Cormorant Garamond'", "400 15px 'Noto Serif SC'",
   ].map(f => document.fonts.load(f, 'Aa你好').catch(() => {}))).then(() => document.fonts.ready) : null)
   const wall = new Promise(r => { const i = new Image(); i.onload = i.onerror = r; i.src = '/vesper/home-bg.webp' })
-  return Promise.race([Promise.all([fonts, wall]), new Promise(r => setTimeout(r, 4000))])
+  return Promise.race([Promise.all([fonts, wall, preload(3000)]), new Promise(r => setTimeout(r, 4000))])
 }
 
 // 打开时和画布一样先亮一下星光：至少 1.25 秒，字体和壁纸都到了再整页淡入，淡完撤掉

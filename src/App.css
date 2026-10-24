@@ -630,7 +630,9 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-edit-actions .cc-edit-save{color:var(--text);font-weight:600}
 .cc-edit-actions button:disabled{opacity:.45;cursor:default}
 .image-lightbox-overlay{position:fixed;inset:0;z-index:300;touch-action:pan-x;-webkit-user-select:none;user-select:none}
-.image-lightbox-overlay.zoomed,.image-lightbox-overlay.closing{touch-action:none}
+/* touch-action 只往上算到最近的滚动容器（track），所以图那一层也要写，不然双指捏合会被浏览器接走 */
+.image-lightbox-slide,.image-lightbox-slide img{touch-action:pan-x}
+.image-lightbox-overlay.zoomed,.image-lightbox-overlay.closing,.image-lightbox-overlay.zoomed .image-lightbox-slide,.image-lightbox-overlay.zoomed .image-lightbox-slide img{touch-action:none}
 .image-lightbox-bg{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
 .image-lightbox-track{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior:contain;scrollbar-width:none}
 .image-lightbox-overlay.zoomed .image-lightbox-track{overflow-x:hidden}
