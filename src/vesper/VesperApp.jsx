@@ -33,9 +33,19 @@ function useMode() {
   useEffect(() => {
     const mq = window.matchMedia?.(DARK_MQ)
     if (!mq) return
-    const on = (e) => setSysDark(e.matches)
+    // 主屏幕 App 在后台时系统换了深浅色，回来 iOS 不一定补发 change：回到前台再读一次
+    const on = () => setSysDark(mq.matches)
+    const onShow = () => { if (document.visibilityState === 'visible') on() }
     mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
+    document.addEventListener('visibilitychange', onShow)
+    window.addEventListener('pageshow', on)
+    window.addEventListener('focus', on)
+    return () => {
+      mq.removeEventListener('change', on)
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('pageshow', on)
+      window.removeEventListener('focus', on)
+    }
   }, [])
   const setMode = (m) => {
     setModeState(m)

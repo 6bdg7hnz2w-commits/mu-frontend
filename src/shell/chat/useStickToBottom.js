@@ -49,24 +49,27 @@ export function useStickToBottom(listRef, detachedRef, kick) {
         let toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
         // 变矮（弹键盘、开面板）先把垫的退掉
         if (d > 0 && a.pad) { const t = Math.min(a.pad, d); a.setPad(a.pad - t); toBottom -= t }
+        // 手指按着时只垫、不写 scrollTop：写了就和手指拖动抢，向下滑收键盘手没松开时画面一闪一闪（第 8 条第 6 次）。松手 settle 时再钉
         if (d) {
           if ((d > 0 ? toBottom - d : toBottom) < 80) {
             if (toBottom < 0) a.setPad(a.pad - toBottom)
+            else if (a.touching) a.owed = true
             else pin(el)
           }
         }
-        else if (a.stuck && toBottom > 0) pin(el)
+        else if (a.stuck && toBottom > 0) { if (a.touching) a.owed = true; else pin(el) }
         a.settle()
       }
       a.touching = false
       a.settle = () => {
         clearTimeout(a.timer)
-        if (a.pad) a.timer = setTimeout(() => {
+        if (a.pad || a.owed) a.timer = setTimeout(() => {
           if (a.touching) return
+          a.owed = false
           const p = a.pad
-          a.setPad(0)
+          if (p) a.setPad(0)
           if (a.stuck) pin(el)
-          else el.scrollTop -= p
+          else if (p) el.scrollTop -= p
         }, 350)
       }
       a.onTouch = (e) => { a.touching = e.type === 'touchstart'; a.settle() }
