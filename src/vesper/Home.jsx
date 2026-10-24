@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { START_DATE, apiFetch, beijingDateStr, getWhisperCache, setWhisperCache, ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache } from '../App.jsx'
-import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet } from './ui.jsx'
+import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, keepAboveKeyboard } from './ui.jsx'
 
 // ─── Home / Diary / Read ────────────────────────────
 // 首页（壁纸 + 每日一句 + Day N + 重要日期 + 日记本），点日记本翻开进 Diary，点一页进 Read。
@@ -329,7 +329,8 @@ function DiaryScreen({ diaries, setDiaries, fresh, onBack, onRead }) {
         {write && (
           <div className="v-card v-write">
             <div className="v-write-title">{write.id ? 'Edit page' : 'New page'}</div>
-            <textarea autoFocus value={write.text} onChange={e => setWrite(w => ({ ...w, text: e.target.value }))} placeholder="Write something..." rows={4} />
+            <textarea autoFocus value={write.text} onChange={e => setWrite(w => ({ ...w, text: e.target.value }))} placeholder="Write something..." rows={4}
+              onFocus={e => keepAboveKeyboard(e.currentTarget.closest('.v-write'))} />
             <div className="v-write-actions">
               <button className="v-text-btn" onClick={() => setWrite(null)}>Cancel</button>
               <button className="v-pill" style={{ opacity: write.text.trim() && !busy ? 1 : 0.45 }} onClick={post}>{busy ? '…' : write.id ? 'Save' : 'Post'}</button>

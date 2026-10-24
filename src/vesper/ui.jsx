@@ -90,6 +90,24 @@ export function useToast() {
   return [<div key="toast" className={`v-toast ${on ? 'on' : ''}`}>{text}</div>, show]
 }
 
+// 输入框点开键盘后，把整张卡片（底边留 24px）滚到键盘上方：滚的是离它最近的那个能滚的父元素。
+// 键盘升起要一会儿，跟着 visualViewport 的变化对齐，最多 1 秒；再补两次兜底
+export function keepAboveKeyboard(card) {
+  let page = card?.parentElement
+  while (page && !/(auto|scroll)/.test(getComputedStyle(page).overflowY)) page = page.parentElement
+  const vv = window.visualViewport
+  if (!page || !vv) return
+  const align = () => {
+    const gap = card.getBoundingClientRect().bottom - (vv.offsetTop + vv.height - 24)
+    if (Math.abs(gap) > 2) page.scrollTo({ top: page.scrollTop + gap, behavior: 'smooth' })
+  }
+  let t = 0
+  const onVv = () => { clearTimeout(t); t = setTimeout(align, 60) }
+  vv.addEventListener('resize', onVv)
+  setTimeout(() => vv.removeEventListener('resize', onVv), 1000)
+  setTimeout(align, 350); setTimeout(align, 700)
+}
+
 // iOS 那种从底部弹出的操作菜单；actions 里的 false 会被跳过
 export function ActionSheet({ title, actions, onClose }) {
   return (

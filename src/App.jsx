@@ -1023,7 +1023,7 @@ function ChatListPage({ onOpenCC }) {
 
 const CC_SESSION = { id: 'cc' }
 
-function ChatPage({ onEnterRoom, lang = 'zh', onUsage }) {
+function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage }) {
   // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。都保留 tab 栏
   // 沐右上角 ⋮ 离开聊天页进 menu，里面三个入口各是一整页：search 查找聊天记录 / brain 回复方式 / usage
   const [view, setView] = useState('cc') // cc / list / menu / search / brain / usage
@@ -1032,6 +1032,9 @@ function ChatPage({ onEnterRoom, lang = 'zh', onUsage }) {
   const go = (v) => { if (v === 'usage' && onUsage) { onUsage(); return } setJumpTo(null); setView(v) }
   const swipeUsage = useSwipeBack(() => go('menu'))
   useEffect(() => { onEnterRoom(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Vesper 要知道是不是进了二级页（menu / 查找 / 回复方式 / Usage）：二级页收起底部 tab
+  useEffect(() => { onSubPage?.(view !== 'cc' && view !== 'list') }, [view, onSubPage])
+  useEffect(() => () => onSubPage?.(false), [onSubPage])
   const page = view === 'cc' ? <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} />
     : view === 'menu' ? <CcMenuPage onBack={() => go('cc')} onOpen={go} />
     : view === 'search' ? <CcSearchPage saved={searchSaved} onBack={() => go('menu')} onPick={r => { setJumpTo({ id: r.id, n: Date.now() }); setView('cc') }} />
@@ -2521,23 +2524,32 @@ function ccRows(messages) {
   return rows
 }
 
-// 他边写边到的新段落：整段从透明渐变到完全显示，不遮罩、不位移、不逐字。字是一到就完整写进页面的（能复制、能长按选字），
-// 动画只改透明度。时长固定 CC_REVEAL_MS，想快想慢改这个数
-const CC_REVEAL_MS = 400
+// 他边写边到的新段落：整段从透明渐变到完全显示、往上浮 6px，不遮罩、不逐字。字是一到就完整写进页面的（能复制、能长按选字）。
+// 时长固定 CC_REVEAL_MS，想快想慢改这个数
+const CC_REVEAL_MS = 350
 const ccRevealed = new Set() // 已经浮现过的：块重新挂载（前面插进来补上的话）时不再播一遍
 const ccReduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-function CcPiece({ m, player, showTranscript }) {
-  const say = useCcSay()
-  const [anim, setAnim] = useState(() => !!m.live && !ccRevealed.has(m.key) && !ccReduceMotion())
-  const ms = CC_REVEAL_MS
+// 新到的东西播一次淡入：key 记进 ccRevealed，之后重新挂载不再播
+function useCcReveal(key, live) {
+  const [anim, setAnim] = useState(() => !!live && !ccRevealed.has(key) && !ccReduceMotion())
   useEffect(() => {
-    ccRevealed.add(m.key)
+    ccRevealed.add(key)
     if (!anim) return
-    const t = setTimeout(() => setAnim(false), ms + 300) // 动画事件没来（切走页面之类）也一定去掉遮罩
+    const t = setTimeout(() => setAnim(false), CC_REVEAL_MS + 300) // 动画事件没来（切走页面之类）也一定去掉
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return [anim ? ' cc-reveal' : '', e => { if (e.target === e.currentTarget) setAnim(false) }]
+}
+// 他的一轮的气泡：新的一轮整个气泡（底色带字）一起淡入；第一段跟着气泡出现，自己不再播
+function CcTurnBody({ rowKey, live, children }) {
+  const [cls, onEnd] = useCcReveal(`turn:${rowKey}`, live)
+  return <div className={`cc-turn-body${cls}`} onAnimationEnd={onEnd}>{children}</div>
+}
+function CcPiece({ m, player, showTranscript, first }) {
+  const say = useCcSay()
+  const [cls, onEnd] = useCcReveal(m.key, m.live && !first)
   return (
-    <div className={`cc-piece${anim ? ' cc-reveal' : ''}`} style={anim ? { '--cc-reveal-ms': `${ms}ms` } : undefined} onAnimationEnd={e => { if (e.target === e.currentTarget) setAnim(false) }}>
+    <div className={`cc-piece${cls}`} onAnimationEnd={onEnd}>
       {m.thinking && <CcThinking text={m.thinking} />}
       <VoiceAwareContent raw={m.text} msgKey={m.key} player={player} showTranscript={showTranscript} flat />
       {m.late && <div className="cc-late">{say('补上的', 'Late')}</div>}
@@ -3040,6 +3052,108 @@ function CcFile({ file }) {
   )
 }
 
+// 输入框上面待发的图和文件那一排：左右滑着看；长按一张（不动 300ms）拿起来，左右拖换位置，松手放下。
+// 发送、存草稿都按这一排的顺序。拿起来以后挡住浏览器的横向滚动，别的几张让位时滑过去
+const CC_LIFT_MS = 300
+function CcPendingRow({ items, onReorder, onOpen, onRemove }) {
+  const rowRef = useRef(null)
+  const els = useRef(new Map())
+  const drag = useRef(null) // { key, id, x0, y0, timer, on, grab, x }
+  const [dragKey, setDragKey] = useState(null)
+  const before = useRef(null) // 换位置前各张的位置，换完从旧位置滑到新位置
+  const follow = () => { // 被拖的那张跟着手指走（offsetLeft 不受 transform 影响，是它在排里的位置）
+    const d = drag.current, row = rowRef.current, el = d && els.current.get(d.key)
+    if (!d?.on || !row || !el) return
+    const left = d.x - row.getBoundingClientRect().left + row.scrollLeft - d.grab
+    el.style.transform = `translateX(${left - el.offsetLeft}px) scale(1.06)`
+    return left + el.offsetWidth / 2
+  }
+  const move = (e) => {
+    const d = drag.current
+    if (!d || e.pointerId !== d.id) return
+    if (!d.on) { if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) { clearTimeout(d.timer); drag.current = null } return }
+    d.x = e.clientX
+    const row = rowRef.current, r = row.getBoundingClientRect()
+    if (e.clientX < r.left + 28) row.scrollLeft -= 8; else if (e.clientX > r.right - 28) row.scrollLeft += 8
+    const mid = follow()
+    const rest = items.filter(p => p.key !== d.key)
+    const at = rest.filter(p => { const el = els.current.get(p.key); return el && el.offsetLeft + el.offsetWidth / 2 < mid }).length
+    if (items[at]?.key !== d.key) {
+      before.current = new Map([...els.current].map(([k, el]) => [k, el.offsetLeft]))
+      const it = items.find(p => p.key === d.key)
+      onReorder([...rest.slice(0, at), it, ...rest.slice(at)])
+    }
+  }
+  const drop = (e) => {
+    const d = drag.current
+    if (!d || e.pointerId !== d.id) return
+    clearTimeout(d.timer); drag.current = null
+    if (!d.on) return
+    const el = els.current.get(d.key)
+    if (el) { el.style.transition = 'transform .18s ease'; el.style.transform = '' }
+    setDragKey(null)
+    drag.current = { dropped: true }; setTimeout(() => { if (drag.current?.dropped) drag.current = null }, 50) // 松手那下的 click 不当成点开大图
+  }
+  const down = (e) => {
+    const item = e.target.closest('[data-pk]')
+    if (!item || e.target.closest('button') || drag.current) return
+    const key = item.dataset.pk, id = e.pointerId
+    drag.current = { key, id, x0: e.clientX, y0: e.clientY, x: e.clientX }
+    drag.current.timer = setTimeout(() => {
+      const d = drag.current, row = rowRef.current, el = els.current.get(key)
+      if (!d || d.key !== key || !row || !el) return
+      d.on = true
+      d.grab = d.x - row.getBoundingClientRect().left + row.scrollLeft - el.offsetLeft
+      el.style.transition = 'none'
+      try { row.setPointerCapture(id) } catch {}
+      navigator.vibrate?.(10)
+      setDragKey(key); follow()
+    }, CC_LIFT_MS)
+  }
+  // 拿起来以后手指再动，iOS 会当成横向滚动接走（随后 pointercancel）；touchmove 要非被动监听才拦得住
+  useEffect(() => {
+    const row = rowRef.current
+    if (!row) return
+    const stop = (e) => { if (drag.current?.on) e.preventDefault() }
+    row.addEventListener('touchmove', stop, { passive: false })
+    return () => row.removeEventListener('touchmove', stop)
+  }, [])
+  useLayoutEffect(() => {
+    const old = before.current
+    before.current = null
+    if (old) els.current.forEach((el, k) => {
+      if (k === drag.current?.key || !old.has(k) || old.get(k) === el.offsetLeft) return
+      el.style.transition = 'none'
+      el.style.transform = `translateX(${old.get(k) - el.offsetLeft}px)`
+      void el.offsetWidth
+      el.style.transition = 'transform .2s ease'
+      el.style.transform = ''
+    })
+    follow()
+  }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
+  const keep = (key) => (el) => { if (el) els.current.set(key, el); else els.current.delete(key) }
+  return (
+    <div className="cc-pending" ref={rowRef} onPointerDown={down} onPointerMove={move} onPointerUp={drop} onPointerCancel={drop}
+      onClickCapture={e => { if (drag.current?.dropped) { e.stopPropagation(); e.preventDefault() } }} onContextMenu={e => e.preventDefault()}>
+      {items.map(p => p.kind === 'file' ? (
+        <div key={p.key} ref={keep(p.key)} data-pk={p.key} className={`composer-image-preview cc-pending-file${dragKey === p.key ? ' dragging' : ''}`} title={p.file.name}>
+          <CcFileIcon name={p.file.name} />
+          <span className="cc-file-info">
+            <span className="cc-file-name">{p.file.name}</span>
+            <span className="cc-file-size">{fmtFileSize(p.file.size)}</span>
+          </span>
+          <button onClick={() => onRemove(p.key)} aria-label="Remove file">{I.close}</button>
+        </div>
+      ) : (
+        <div key={p.key} ref={keep(p.key)} data-pk={p.key} className={`composer-image-preview${dragKey === p.key ? ' dragging' : ''}`}>
+          <img src={p.previewUrl} alt="" draggable={false} onClick={() => onOpen(p)} />
+          <button onClick={() => onRemove(p.key)} aria-label="Remove image">{I.close}</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // 聊天里自己发的图：刚发的用本地预览，刷新后的历史按 path 向后端取；bridge 只留 7 天，过期了显示占位
 // 点开的大图：右上角三个点 → 苹果原生分享面板（里面有"存储图像"），原图原画质
 // 分享必须在点击的那一下同步调用（iOS 会拦掉异步之后的调用），所以一打开就先把图读成 File
@@ -3131,11 +3245,7 @@ const CC_VOICE_MIN_S = 0.8
 // 输入框两边的圆圈按钮：语音（声波）/ 键盘、⊕
 const CC_VOICE_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.3 10.6a2 2 0 0 1 0 2.8" strokeWidth="1.8"/><path d="M11.8 8.6a5 5 0 0 1 0 6.8" strokeWidth="1.8"/><path d="M14.3 6.6a8 8 0 0 1 0 10.8" strokeWidth="1.8"/></svg>
 const CC_KEYBOARD_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 9h.01M10.5 9h.01M13.5 9h.01M16.5 9h.01M7.5 12h.01M10.5 12h.01M13.5 12h.01M16.5 12h.01" strokeWidth="2.2"/><path d="M9 15.5h6" strokeWidth="1.8"/></svg>
-const CC_EMOJI_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><circle cx="15" cy="10" r=".6" fill="currentColor" strokeWidth="1.4"/><path d="M7.8 13.5h8.4a4.2 4.2 0 0 1-8.4 0z" strokeWidth="1.6"/></svg>
-const CC_BACKSPACE_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 5H8.5L3 12l5.5 7H21z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/></svg>
 // 表情面板：常用的这些，点一下插进输入框光标处
-const CC_EMOJIS = [...'😀😁😂🤣😊😇🙂😉😌😍🥰😘😗😙😚😋😛😜🤪😝🤗🤭🫢🤫🤔🫡😐😑😶🙄😏😒😮‍💨😬😴🥱😪🤤😷🤒🥴😵‍💫🤯🥳🥺🥹😢😭😤😠😡🤬😳😱😨😰😥😓🫠🙃😈👻💀🤡🙈🙉🙊💋💌💘💝💖💗💓💞💕❤️🧡💛💚💙💜🤍🖤💔❣️🫶👍👎👌✌️🤞🫰🤟🤙👋👏🙌🙏💪🤝🫂👀✨🌙⭐️🔥🌸🌹🍀🎉🎁🍰☕️🧋🍜🐱🐶🐰🐻🐼🦊']
-const CC_EMOJI_LIST = (() => { try { return [...new Intl.Segmenter('zh', { granularity: 'grapheme' }).segment(CC_EMOJIS.join(''))].map(x => x.segment) } catch { return CC_EMOJIS } })()
 const CC_PLUS_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9" strokeWidth="1.7"/></svg>
 const CC_PLAY_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
 const CC_PAUSE_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>
@@ -3280,7 +3390,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const [notice, setNotice] = useState('') // 选文件时的提示（超数量、超大小、类型不支持）
   const [lightbox, setLightbox] = useState(null) // { items, index }：点开的那组图和从第几张开始
   const [attachOpen, setAttachOpen] = useState(false) // "+" 展开：照片 / 文件
-  const [emojiOpen, setEmojiOpen] = useState(false) // 表情面板
   const [recording, setRecording] = useState(null) // 按住说话中：{ start, cancel }；start 是麦克风开好的时刻（还在要权限时是 null）
   const [recNow, setRecNow] = useState(0)
   const recRef = useRef(null)
@@ -3290,18 +3399,9 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     const next = !voiceMode
     setVoiceMode(next)
     try { localStorage.setItem('cc_voice_mode', next ? '1' : '0') } catch {}
-    if (next) setEmojiOpen(false)
     // 切到语音前先让输入框失焦：直接卸掉的话浏览器不发 focusout，底部 tab 会一直藏着；切回键盘也不自动聚焦，点了输入框才藏 tab
     if (next) textareaRef.current?.blur()
   }
-  // 插在光标处（没聚焦过就接在最后），不弹键盘；语音模式下先切回键盘
-  const insertEmoji = (em) => {
-    const ta = textareaRef.current
-    const sel = ta && document.activeElement === ta ? [ta.selectionStart, ta.selectionEnd] : null
-    setInput(v => sel ? v.slice(0, sel[0]) + em + v.slice(sel[1]) : v + em)
-    if (voiceMode) { setVoiceMode(false); try { localStorage.setItem('cc_voice_mode', '0') } catch {} }
-  }
-  const deleteBack = () => setInput(v => { const parts = [...new Intl.Segmenter('zh', { granularity: 'grapheme' }).segment(v)]; return parts.slice(0, -1).map(x => x.segment).join('') })
   const photoInputRef = useRef(null)
   const cameraInputRef = useRef(null) // Vesper 的 Camera 按钮用
   const fileInputRef = useRef(null)
@@ -3599,13 +3699,13 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   }
 
   // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
-  // 键盘、表情面板、加号面板三选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
+  // 键盘和面板二选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
   // 点输入框弹键盘时，面板等键盘真的升上来那一下再收，输入框一直在同一个高度，不会先掉下去再被顶上来
-  const panelOpen = emojiOpen || attachOpen
-  const closePanels = () => { setEmojiOpen(false); setAttachOpen(false) }
+  // 表情面板先撤了（等自己的表情包），现在只有加号面板；以后加面板接在这里
+  const panelOpen = attachOpen
+  const closePanels = () => setAttachOpen(false)
   const togglePanel = (which) => {
     textareaRef.current?.blur()
-    setEmojiOpen(which === 'emoji' ? o => !o : false)
     setAttachOpen(which === 'attach' ? o => !o : false)
   }
   const onInputFocus = () => {
@@ -4030,12 +4130,12 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             const open = !!transcripts[row.key]
             return (
               <div key={row.key} className={`msg assistant cc-turn${items.some(it => it.key === flashKey) ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')}>
-                <div className="cc-turn-body">
-                  {ccTurnParts(items).map(part => part.tools
+                <CcTurnBody rowKey={row.key} live={items[0].live}>
+                  {ccTurnParts(items).map((part, i) => part.tools
                     ? <CcTools key={part.key} tools={part.tools} />
-                    : <CcPiece key={part.key} m={part.m} player={voice} showTranscript={open} />)}
+                    : <CcPiece key={part.key} m={part.m} player={voice} showTranscript={open} first={i === 0} />)}
                   {live && <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
-                </div>
+                </CcTurnBody>
                 {!live && (
                   <div className="msg-meta">
                     <span className="msg-time">{fmtMsgTime(last.time, say(false, true))}</span>
@@ -4097,25 +4197,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
 
       <div className="composer">
         {notice && <div className="cc-notice" onClick={() => setNotice('')}>{notice}</div>}
-        {pending.length > 0 && (
-          <div className="cc-pending">
-            {pending.map(p => p.kind === 'file' ? (
-              <div key={p.key} className="composer-image-preview cc-pending-file" title={p.file.name}>
-                <CcFileIcon name={p.file.name} />
-                <span className="cc-file-info">
-                  <span className="cc-file-name">{p.file.name}</span>
-                  <span className="cc-file-size">{fmtFileSize(p.file.size)}</span>
-                </span>
-                <button onClick={() => removePending(p.key)} aria-label="Remove file">{I.close}</button>
-              </div>
-            ) : (
-              <div key={p.key} className="composer-image-preview">
-                <img src={p.previewUrl} alt="" onClick={() => openPendingImage(p)} />
-                <button onClick={() => removePending(p.key)} aria-label="Remove image">{I.close}</button>
-              </div>
-            ))}
-          </div>
-        )}
+        {pending.length > 0 && <CcPendingRow items={pending} onReorder={setPending} onOpen={openPendingImage} onRemove={removePending} />}
         {recording && (
           <div className={`cc-recording${recording.cancel ? ' cancel' : ''}`} role="status">
             <span className="cc-recording-dot" />
@@ -4133,7 +4215,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
           ) : (
             <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
-          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
@@ -4145,12 +4226,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
             <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
             <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
-          </div>
-        )}
-        {emojiOpen && (
-          <div className="cc-emoji-panel">
-            <div className="cc-emoji-grid">{CC_EMOJI_LIST.map(em => <button key={em} onClick={() => insertEmoji(em)}>{em}</button>)}</div>
-            <button className="cc-emoji-del" onClick={deleteBack} disabled={!input} aria-label="Delete">{CC_BACKSPACE_ICON}</button>
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
-import { V, MONS, MONF, ActionSheet, useToast } from './ui.jsx'
+import { V, MONS, MONF, ActionSheet, useToast, keepAboveKeyboard } from './ui.jsx'
 
 // ─── Calendar ───────────────────────────────────────
 // 和 Clawd 的 CalendarPage 同一套接口：/api/events（日程 + kind=important 的重要日期）、/api/todos、/api/periods。
@@ -14,17 +14,6 @@ const nextWholeHour = () => `${pad2((Number(new Intl.DateTimeFormat('en-GB', { t
 const errText = (e) => e?.message === 'locked' || e?.status === 401 ? 'Passcode expired — unlock and try again'
   : e?.status === 400 || e?.status === 403 ? `Not saved: ${e.message}` : 'Not saved — try again later'
 
-// 待办输入框点开键盘后：整张待办卡片的底边落在键盘上方 24px（键盘弹出要一会儿，等两次再对齐）
-function keepAboveKeyboard(card) {
-  const align = () => {
-    const page = card?.closest('.v-page'), vv = window.visualViewport
-    if (!page || !vv) return
-    const gap = card.getBoundingClientRect().bottom - (vv.height - 24)
-    if (Math.abs(gap) > 2) page.scrollTo({ top: page.scrollTop + gap, behavior: 'smooth' })
-  }
-  setTimeout(align, 300); setTimeout(align, 650)
-}
-
 // 画布上的样子：居中的卡片，标题居中，底下一行 Delete … Cancel [Save]
 function Modal({ title, onClose, children }) {
   return (
@@ -32,6 +21,26 @@ function Modal({ title, onClose, children }) {
       <div className="v-modal-card" onClick={e => e.stopPropagation()}>
         <div className="v-modal-title">{title}</div>
         {children}
+      </div>
+    </div>
+  )
+}
+
+// 新建日程用的底部面板（照 iOS 日历）：从底边滑上来，弹键盘时贴在键盘上方；
+// 标题和 Cancel / Save 钉在顶上，下面的表单在面板里滚，输入框不跟着键盘压扁
+function BottomSheet({ title, left, right, onClose, children }) {
+  // 点到下半截的输入框：键盘升上来以后把它滚进面板里看得见的地方
+  const reveal = (e) => { const el = e.target; if (el.matches?.('input, textarea')) setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 400) }
+  return (
+    <div className="v-modal v-bsheet" onClick={onClose}>
+      <div className="v-bsheet-card" onClick={e => e.stopPropagation()}>
+        <div className="v-bsheet-head">
+          <i className="v-bsheet-grab" />
+          <div className="v-bsheet-side">{left}</div>
+          <div className="v-bsheet-title">{title}</div>
+          <div className="v-bsheet-side end">{right}</div>
+        </div>
+        <div className="v-bsheet-body" onFocus={reveal}>{children}</div>
       </div>
     </div>
   )
@@ -71,7 +80,11 @@ function EventSheet({ event, defaultDate, onClose, onSaved }) {
     } catch (e) { setError(errText(e)); setBusy(false) }
   }
   return (
-    <Modal title={readOnly ? 'Event' : event ? 'Edit Event' : 'New Event'} onClose={onClose}>
+    <BottomSheet title={readOnly ? 'Event' : event ? 'Edit Event' : 'New Event'} onClose={onClose}
+      left={!readOnly && <button className="v-text-btn" data-back onClick={onClose}>Cancel</button>}
+      right={readOnly
+        ? <button className="v-text-btn acc" data-back onClick={onClose}>Close</button>
+        : <button className="v-text-btn acc strong" onClick={save} disabled={!title.trim() || busy}>{busy ? 'Saving…' : 'Save'}</button>}>
       <input className="v-field" placeholder="What's happening" value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} />
       <div className="v-seg small">
         <div className="v-seg-thumb" style={{ transform: `translateX(${allDay ? '0' : '100%'})` }} />
@@ -89,13 +102,8 @@ function EventSheet({ event, defaultDate, onClose, onSaved }) {
       <input className="v-field" placeholder="Location (optional)" value={location} onChange={e => setLocation(e.target.value)} disabled={readOnly} />
       <textarea className="v-field" rows={3} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} />
       {error && <div className="v-error">{error}</div>}
-      {readOnly
-        ? <div className="v-modal-actions"><span className="v-modal-note">From your phone calendar — edit it on your phone</span><button className="v-text-btn acc" data-back onClick={onClose}>Close</button></div>
-        : <div className="v-modal-actions">
-            <button className="v-text-btn" data-back onClick={onClose}>Cancel</button>
-            <button className="v-btn" onClick={save} disabled={!title.trim() || busy}>{busy ? 'Saving…' : 'Save'}</button>
-          </div>}
-    </Modal>
+      {readOnly && <div className="v-modal-note">From your phone calendar — edit it on your phone</div>}
+    </BottomSheet>
   )
 }
 
