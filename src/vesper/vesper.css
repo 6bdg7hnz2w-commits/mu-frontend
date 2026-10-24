@@ -380,7 +380,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
 .v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
-.vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
+/* --v-tbSpace 注册成长度才能过渡：收键盘时 tab 栏从下面滑上来，输入栏底下让出的空间同一个节奏慢慢长出来，不是最后一下顶上去 */
+@property --v-tbSpace{syntax:'<length>';inherits:true;initial-value:0px}
+.v-chat{transition:--v-tbSpace .4s cubic-bezier(.3,.7,.2,1)}
+.vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px}
+.v-chat:has(.cc-emoji-panel,.cc-attach-menu){transition:none} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
   --accent:#4f638c;--accent-soft:rgba(95,115,156,.16);--accent-light:rgba(95,115,156,.08);

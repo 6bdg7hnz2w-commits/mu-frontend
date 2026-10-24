@@ -272,6 +272,74 @@ function useSwipeBack(onBack) {
   return { onTouchStart, onTouchEnd }
 }
 
+// ─── useChatSwipeBack ───────────────────────────────
+// 聊天页的侧滑返回：只认从屏幕最左边 20px 以内起手、往右的横滑；跟手拖，松手时拖过 35% 宽（或者甩得快）才退，不够就弹回。
+// 原生监听而不是 React 的 onTouch*：看大图是 portal 挂在 body 上的，React 的触摸事件会顺着组件树冒泡回聊天页，误触返回；
+// 另外跟手拖要在 touchmove 里 preventDefault，React 的 touchmove 是被动的。
+// blocked()：这时不许起手（大图、弹窗、录音…）；beforeBack()：真的要退时先做的事（收键盘、收面板）
+const SWIPE_EDGE = 20
+function useChatSwipeBack(ref, { onBack, blocked, beforeBack }) {
+  const cb = useRef({})
+  cb.current = { onBack, blocked, beforeBack }
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let s = null
+    const set = (x, ms) => {
+      el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.8,.2,1)` : 'none'
+      el.style.transform = x ? `translateX(${x}px)` : ''
+      el.style.boxShadow = x ? '-8px 0 24px rgba(0,0,0,.18)' : ''
+    }
+    const start = (e) => {
+      s = null
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      if (t.clientX - el.getBoundingClientRect().left > SWIPE_EDGE || cb.current.blocked?.()) return // 量的是聊天页自己的左边（电脑上页面居中）
+      if (e.target.closest?.('.cc-pending,.image-lightbox-overlay')) return // 待发的图那一排自己横滑、拖动排序
+      if (String(window.getSelection?.() || '')) return // 正选着字：拖的是选区的把手
+      s = { x: t.clientX, y: t.clientY, on: false, dx: 0, lx: t.clientX, lt: e.timeStamp, v: 0 }
+      // 按住不动 400ms 是长按（选字、长按菜单），这一下不再当返回
+      s.timer = setTimeout(() => { if (s && !s.on) s = null }, 400)
+    }
+    const move = (e) => {
+      if (!s) return
+      const t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y
+      if (!s.on) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        clearTimeout(s.timer)
+        if (dx <= 0 || Math.abs(dy) > dx || e.touches.length > 1) { s = null; return } // 先往上下 / 往左走的不是返回
+        s.on = true
+      }
+      e.preventDefault()
+      s.dx = Math.max(0, dx)
+      if (e.timeStamp > s.lt) { s.v = (t.clientX - s.lx) / (e.timeStamp - s.lt); s.lx = t.clientX; s.lt = e.timeStamp }
+      set(s.dx, 0)
+    }
+    const end = (e) => {
+      const g = s
+      s = null
+      if (!g) return
+      clearTimeout(g.timer)
+      if (!g.on) return
+      const w = el.offsetWidth || window.innerWidth
+      if (e.type === 'touchend' && (g.dx > w * 0.35 || (g.v > 0.5 && g.dx > 40))) {
+        cb.current.beforeBack?.()
+        set(w, 200)
+        setTimeout(() => { cb.current.onBack?.(); set(0, 0) }, 200)
+      } else set(0, 220) // 不够远：弹回去
+    }
+    el.addEventListener('touchstart', start, { passive: true })
+    el.addEventListener('touchmove', move, { passive: false })
+    el.addEventListener('touchend', end)
+    el.addEventListener('touchcancel', end)
+    return () => {
+      clearTimeout(s?.timer)
+      el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move)
+      el.removeEventListener('touchend', end); el.removeEventListener('touchcancel', end)
+    }
+  }, [ref])
+}
+
 // ─── Global focus-based keyboard/tab-bar visibility ──
 function useKeyboardOpen(setKeyboardOpen) {
   useEffect(() => {
@@ -3621,7 +3689,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   const { fetchDurationEstimate } = voice
   const [transcripts, setTranscripts] = useState({})
 
-  const swipe = useSwipeBack(onBack)
+  const roomRef = useRef(null)
   const lockOut = lockApp
 
   useEffect(() => { setDraftStorage(CC_SESSION.id, input) }, [input])
@@ -3916,6 +3984,11 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     setAttachOpen(which === 'attach' ? o => !o : false)
   }
   const onInputFocus = () => {
+    if (Date.now() - swipeBlurAt.current < 600) { // 在 focus 事件里同步 blur 有的浏览器不认，下一帧再补一次
+      const ta = textareaRef.current
+      ta?.blur(); requestAnimationFrame(() => { if (document.activeElement === ta) ta.blur() })
+      return
+    }
     if (panelOpen) {
       const vv = window.visualViewport
       const h0 = vv?.height ?? 0
@@ -3930,6 +4003,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   // Vesper 里文档钉死了（html.v-lock）：点输入框不让 iOS 自己去滚页面露出输入框，自己 focus({ preventScroll })，
   // 键盘升起来后外框按 visualViewport 缩、消息列表贴着底跟上，顶栏一直不动。已经在打字时的点按照常（挪光标、长按选字）
   const onInputTouch = (e) => {
+    swipeBlurAt.current = 0 // 她真的点了输入框
     const ta = textareaRef.current
     if (!ta || ta.disabled || document.activeElement === ta || !document.documentElement.classList.contains('v-lock')) return
     e.preventDefault()
@@ -3940,18 +4014,26 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   // 在消息列表上手指往下拖（像 iOS 原生的拖动收键盘）：和点空白处一样，收起键盘和面板。
   // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
   const listSwipe = useRef(null)
+  const swipeBlurAt = useRef(0) // 下拖刚收了键盘：这之后一小会儿里冒出来的 focus 不是她点的（列表在动、iOS 自己聚焦回去），再收一次，键盘不弹回
   const onListTouchStart = (e) => { const t = e.touches[0]; listSwipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, done: false } : null }
   const onListTouchMove = (e) => {
     const sw = listSwipe.current, t = e.touches[0]
     if (!sw || sw.done || !t) return
     const dx = t.clientX - sw.x, dy = t.clientY - sw.y
     if (dy < -10 || e.touches.length > 1) { sw.done = true; return }
-    if (dy > 24 && dy > Math.abs(dx) * 1.5) {
+    // 往下 10px 就收：不 preventDefault，列表照常滚、松手后的惯性也不断；一次拖动只收一次
+    if (dy > 10 && dy > Math.abs(dx) * 1.5) {
       sw.done = true
-      if (document.activeElement === textareaRef.current) textareaRef.current.blur()
+      if (document.activeElement === textareaRef.current) { swipeBlurAt.current = Date.now(); textareaRef.current.blur() }
       if (panelOpen) closePanels()
     }
   }
+  // 侧滑返回：大图、录音、改消息、任何弹窗或底部面板开着时不许；键盘、表情面板、加号面板开着可以，退之前先收起
+  useChatSwipeBack(roomRef, {
+    onBack,
+    blocked: () => !!lightbox || !!recording || !!editingKey || !!document.querySelector('.modal-overlay,.v-modal,.v-bsheet,.image-lightbox-overlay'),
+    beforeBack: () => { textareaRef.current?.blur(); closePanels() },
+  })
   // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
   useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
   useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
@@ -4348,7 +4430,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
 
   return (
     <>
-    <div className="chatroom cc-room" {...swipe}>
+    <div className="chatroom cc-room" ref={roomRef}>
       <div className="chatroom-header">
         <button className="icon-btn" onClick={onBack}>{I.back}</button>
         <div className="chatroom-title">
