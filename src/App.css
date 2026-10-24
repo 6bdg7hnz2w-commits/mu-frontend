@@ -161,7 +161,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .spinner.tiny{width:12px;height:12px;border-width:1.5px;margin:0}
 
 .voice-msg{display:flex;flex-direction:column;align-items:flex-start;gap:4px;max-width:78%}
-.voice-bar{display:flex;align-items:center;gap:10px;background:var(--s-accent,var(--accent));color:var(--s-accentInk,#fff);border-radius:18px;border-bottom-left-radius:6px;padding:8px 12px;cursor:pointer;min-width:120px;max-width:100%;box-sizing:border-box;user-select:none;transition:width .2s ease}
+.voice-bar{display:flex;align-items:center;gap:10px;background:var(--s-accent,var(--accent));color:var(--s-accentInk,#fff);border-radius:18px;border-bottom-left-radius:6px;box-shadow:var(--s-voiceShadow);padding:8px 12px;cursor:pointer;min-width:120px;max-width:100%;box-sizing:border-box;user-select:none;transition:width .2s ease}
 .voice-bar:active{opacity:.85}
 .spinner.tiny.light{border-color:rgba(255,255,255,.4);border-top-color:#fff}
 .voice-wave{display:flex;align-items:center;justify-content:space-between;gap:0;flex:1;height:16px;min-width:0;overflow:hidden;cursor:pointer;touch-action:pan-y}
@@ -609,13 +609,14 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-older{flex:none;height:44px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px}
 .cc-images{display:flex;flex-wrap:wrap;gap:4px;max-width:78%;margin-bottom:4px}
 .msg.user .cc-images{justify-content:flex-end;margin-left:auto}
-.cc-thumb{width:120px;height:120px;object-fit:cover;border-radius:12px;cursor:pointer;display:block}
+.cc-thumb{width:120px;height:120px;object-fit:cover;border-radius:var(--s-thumbR,12px);box-shadow:var(--s-thumbShadow);cursor:pointer;display:block}
 .cc-thumb-loading{background:var(--surface);cursor:default}
 .cc-thumb-gone{background:var(--surface);color:var(--text-dim);font-size:12px;display:flex;align-items:center;justify-content:center;cursor:default}
 .cc-images.many .cc-thumb{width:84px;height:84px} /* 一次好多张：缩小一点，别一条消息占好几屏 */
 /* 刚发的还在传：盖一层进度圈；没传上的换成重试按钮 */
 .cc-up-wrap{position:relative}
-.cc-up{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.32);border-radius:12px;color:#fff;pointer-events:none}
+.cc-up{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.32);border-radius:var(--s-thumbR,12px);color:#fff;pointer-events:none}
+.cc-files .cc-up{border-radius:var(--s-fileR,12px)}
 .cc-up svg .track,.cc-up svg .bar{fill:none;stroke-width:3}
 .cc-up svg .track{stroke:rgba(255,255,255,.35)}
 .cc-up svg .bar{stroke:#fff;stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset .2s}
@@ -634,7 +635,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-file-dl:active{color:var(--text)}
 .cc-pending-file{display:flex;align-items:center;gap:6px;height:64px;padding:0 10px 0 6px;border-radius:10px;background:var(--surface);border:1px solid var(--border);max-width:200px}
 .cc-pending-file .cc-file-name{max-width:120px;font-size:13px}
-.cc-notice{margin:0 6px 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px;line-height:1.4}
+.cc-notice{margin:0 6px 8px;padding:8px 12px;border-radius:var(--s-noticeR,10px);background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px;line-height:1.4}
 /* 消息下面的小字："他这次没回上来 · 再叫他一下"、"他好像卡住了"、"发送失败 · 点一下重发" */
 .cc-msg-note{margin-top:2px;padding:0 4px;font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 .cc-note-btn{border:none;background:none;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
@@ -694,6 +695,8 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
    --s-meBg/meInk/meR 她的气泡  --s-himBg/himInk/himR 他的气泡  --s-glass 他的气泡毛玻璃  --s-body 气泡字体  --s-title 顶栏名字字体
    --s-bar/barGlass 输入栏底色和毛玻璃  --s-field 输入框底色  --s-accent/accentInk 发送键  对照表见 docs/skin-checklist.md 第〇节 */
 .cc-room .msg.user .bubble{background:var(--s-meBg,var(--cc-user-bg));color:var(--s-meInk,var(--text));border-radius:var(--s-meR,18px);font-family:var(--s-body);max-width:85%;padding:9px 14px}
+/* 她发的文件：默认和她的气泡一样，皮肤可以换成卡片（--s-fileBg/fileLine/fileR/fileShadow） */
+.cc-room .msg.user .bubble.cc-file{background:var(--s-fileBg,var(--s-meBg,var(--cc-user-bg)));border:var(--s-fileLine);border-radius:var(--s-fileR,var(--s-meR,18px));box-shadow:var(--s-fileShadow)}
 .cc-room .chatroom-name{font-family:var(--s-title)}
 .cc-turn{align-items:stretch}
 .cc-turn-body{width:100%;min-width:0;font-size:15.5px;line-height:1.65;color:var(--s-himInk,var(--text));padding:2px 2px 0;background:var(--s-himBg);border-radius:var(--s-himR);backdrop-filter:var(--s-glass);-webkit-backdrop-filter:var(--s-glass);font-family:var(--s-body)}
@@ -714,14 +717,14 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-thinking-head:active{opacity:.6}
 .cc-thinking-head svg{width:14px;height:14px;color:var(--text-dim);transition:transform .2s}
 .cc-thinking.open .cc-thinking-head svg{transform:rotate(90deg)}
-.cc-thinking-body{margin-top:4px;padding:2px 0 2px 12px;border-left:2px solid var(--border);font-size:13px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;overflow-wrap:break-word;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cc-thinking-body{margin-top:4px;padding:2px 0 2px 12px;border-left:var(--s-foldRule,2px solid var(--border));border-radius:var(--s-foldR);background:var(--s-foldBg);text-shadow:var(--s-foldShadow);font-size:13px;line-height:1.6;color:var(--s-foldInk,var(--text-secondary));white-space:pre-wrap;overflow-wrap:break-word;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 /* 他调过的工具：和"思考过程"一样的小灰字；一个直接一行，几个折叠成"用了 N 个工具" */
 .cc-tools{margin:2px 0;font-size:13px;line-height:1.5;color:var(--s-meta,var(--text-secondary));text-shadow:var(--s-metaShadow)}
 .cc-tools.open .cc-thinking-head svg{transform:rotate(90deg)}
-.cc-tools-body{margin-top:2px;padding:2px 0 2px 12px;border-left:2px solid var(--border)}
+.cc-tools-body{margin-top:2px;padding:2px 0 2px 12px;border-left:var(--s-foldRule,2px solid var(--border));border-radius:var(--s-foldR);background:var(--s-foldBg);color:var(--s-foldInk);text-shadow:var(--s-foldShadow)}
 .cc-tool-line{padding:2px 0;overflow-wrap:anywhere}
-.cc-tool-sum{margin-left:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-dim);word-break:break-all}
-.cc-tool-fail{margin-left:6px;color:var(--text-dim)}
+.cc-tool-sum{margin-left:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--s-toolInk,var(--text-dim));opacity:var(--s-toolAlpha);word-break:break-all}
+.cc-tool-fail{margin-left:6px;color:var(--s-toolInk,var(--text-dim));opacity:var(--s-toolAlpha)}
 /* 新到的一轮整块（底色和字一起）淡入、往上浮 6px；同一轮后面到的段落也这样；字早就在页面里 */
 .cc-reveal{animation:ccFade var(--cc-reveal-ms,350ms) ease-out both}
 @keyframes ccFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -859,7 +862,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-recording-time{font-variant-numeric:tabular-nums;color:var(--text);min-width:24px}
 @keyframes cc-rec-blink{50%{opacity:.25}}
 .cc-voice{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:78%;margin-bottom:4px}
-.cc-voice-bar{display:flex;align-items:center;gap:8px;background:var(--s-meBg,var(--cc-user-bg));color:var(--s-meInk,var(--text));border-radius:18px;padding:9px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box;min-width:110px;max-width:100%}
+.cc-voice-bar{display:flex;align-items:center;gap:8px;background:var(--s-meBg,var(--cc-user-bg));color:var(--s-meInk,var(--text));border-radius:var(--s-meVoiceR,18px);box-shadow:var(--s-voiceShadow);padding:9px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box;min-width:110px;max-width:100%}
 .cc-voice-bar:active{opacity:.8}
 .cc-voice-bar.loading{opacity:.6;cursor:default}
 .cc-voice-bar.gone{opacity:.5;cursor:default}

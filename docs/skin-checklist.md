@@ -68,10 +68,18 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   | `--s-card` / `--s-ink` | 回到底部键（`.cc-jump-btn`）的底色、图标色 | `--surface` / `--text-secondary` | `--v-card` / `--v-ink` |
   | `--s-recBg` / `--s-recInk` / `--s-recRing` | 按住说话键录音中（`.cc-hold-btn.recording`）的底、字色、描边 | `--cc-user-bg` / `--text` / 无（边框是 `--text-secondary`） | 主色淡底叠在 `--v-card` 上 / `--v-acc` / 1px 主色内描边 |
   | `--s-cancelBg` / `--s-cancelInk` / `--s-cancelRing` | 上滑取消（`.cc-hold-btn.cancel`） | 淡红 / #d94444 / 无（边框 #d94444） | `--v-danger` 淡底叠在 `--v-card` 上 / `--v-danger` / 1px 内描边 |
+  | `--s-fileBg` / `--s-fileLine` / `--s-fileR` / `--s-fileShadow` | 她发的文件（`.bubble.cc-file`）底色、边框、圆角、阴影；`--s-fileR` 也管文件上的上传罩（`.cc-files .cc-up`） | 和她的气泡一样（`--s-meBg` / 无 / `--s-meR`）/ 无；上传罩 12px | `--v-card` / 1px `--v-line` / 16px / `--v-shadow` |
+  | `--s-thumbR` / `--s-thumbShadow` | 图片缩略图（`.cc-thumb`）和上面的上传罩（`.cc-up`）圆角、缩略图阴影 | 12px / 无 | 14px / 淡阴影 |
+  | `--s-meVoiceR` / `--s-voiceShadow` | 她的语音条圆角；两边语音条的阴影（他那边圆角两个皮肤一样，18 18 18 6，没设变量） | 18px / 无 | 18 18 6 18 / 淡阴影 |
+  | `--s-foldBg` / `--s-foldInk` / `--s-foldRule` / `--s-foldR` / `--s-foldShadow` | 展开的思考过程、工具列表（`.cc-thinking-body` / `.cc-tools-body`）：底、字色、左边那条线、圆角、字的阴影 | 无 / 思考 `--text-secondary`、工具继承 / 2px `--border` / 无 / 继承 | `--vc-glass` / `--v-ink2` / 0 / 12px / none |
+  | `--s-toolInk` / `--s-toolAlpha` | 工具那行后面的文件名、失败（`.cc-tool-sum` / `.cc-tool-fail`） | `--text-dim` / 不透明 | `currentColor`（跟 Read 同色）/ .82 |
+  | `--s-noticeR` | 聊天里的提示条（`.cc-notice`）圆角 | 10px | 12px |
 
   按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
 
-  间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里。往后一步一步把颜色类的覆盖换成变量。
+  间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里（比如展开的思考 / 工具的内边距 10px 12px）。加号面板、表情面板 Vesper 是另一种排法（一格一格的大按钮、占键盘的位置），整块布局都在 `vesper.css`，不走变量。
+  - 想让某个属性"跟着父元素"（Vesper 的工具文件名跟 Read 同色），变量里写 `currentColor`，不能写 `inherit`：`--x:inherit` 是让这个变量自己去继承，不是把 inherit 这个值传下去。`color:currentColor` 算出来就是父元素的颜色。
+  - 没有原值兜底的变量，放进特异性更高的规则里要小心：不设时这条声明照样赢，等于把属性清回默认。所以她的文件气泡那条（`.cc-room .msg.user .bubble.cc-file`，比她的气泡那条高）底色、圆角要兜回 `--s-meBg` / `--s-meR`，只有原来就没有的边框、阴影才能不写兜底。
   - 换之前先看清楚原来的覆盖是不是在"压"别的状态：比如 `.v-chat .cc-hold-btn` 的底色同时压住了 `.cc-hold-btn.recording`，`.v-chat .cc-composer-row .attach-btn` 的颜色压住了 `.attach-btn.active`。这种直接删掉覆盖、改读变量，Vesper 在那个状态下的样子就变了，要么连那个状态一起换成变量，要么先别动。（6c 把加号键连 `.active` 一起换成了变量；按住说话键的录音 / 取消状态以前在 Vesper 下被压没了，后来按用户的意思补上了，见下面变量表。）
   - 共用组件里的按钮，读变量的那条要挂在 `.cc-room` 下面（`.cc-room .cc-thinking-head`），不能只写单个类名。
     - **现象**（6c 比对时抓到）：Vesper 下"思考过程"那行字变成正文色，回到底部键底色变透明。
