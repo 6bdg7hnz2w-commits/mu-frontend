@@ -4,6 +4,7 @@ import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 import { setSkin } from './skin.js'
 import { loadDraftFiles, saveDraftFiles, draftFileCount } from './draftFiles.js'
+import { usePreventPageScroll } from './vesper/preventScroll.js'
 
 // 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
 const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
@@ -4000,17 +4001,8 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
     }
     stickBottom()
   }
-  // Vesper 里文档钉死了（html.v-lock）：点输入框不让 iOS 自己去滚页面露出输入框，自己 focus({ preventScroll })，
-  // 键盘升起来后外框按 visualViewport 缩、消息列表贴着底跟上，顶栏一直不动。已经在打字时的点按照常（挪光标、长按选字）
-  const onInputTouch = (e) => {
-    swipeBlurAt.current = 0 // 她真的点了输入框
-    const ta = textareaRef.current
-    if (!ta || ta.disabled || document.activeElement === ta || !document.documentElement.classList.contains('v-lock')) return
-    e.preventDefault()
-    ta.focus({ preventScroll: true })
-    const n = ta.value.length
-    ta.setSelectionRange(n, n)
-  }
+  // 点输入框不让 iOS 去滚页面：Vesper 里由 usePreventPageScroll 统一接管（自己 focus({ preventScroll })、光标放到末尾）
+  usePreventPageScroll(roomRef)
   // 在消息列表上手指往下拖（像 iOS 原生的拖动收键盘）：和点空白处一样，收起键盘和面板。
   // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
   const listSwipe = useRef(null)
@@ -4550,7 +4542,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
               onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onTouchEnd={onInputTouch} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onTouchStart={() => { swipeBlurAt.current = 0 }} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
           <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label={say('表情包', 'Stickers')} aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
           <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>

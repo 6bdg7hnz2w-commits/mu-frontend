@@ -12,6 +12,7 @@ import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
 import MemoryPage from './Memory.jsx'
 import AlbumPage from './Album.jsx'
+import { installKbDebug, kbNote } from './kbDebug.js'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -107,16 +108,27 @@ function useVisibleHeight(ref) {
     }
     // 键盘起落时 iOS 不是每帧都发 resize，常常只在开头结尾各发一下，中间输入栏就卡着不动、底下空一大块。
     // 输入框一得到 / 失去焦点就每帧读一次 visualViewport，连着 8 帧没变（或者 1 秒）算停了，最后按停稳的记一次
+    // iOS 26：收起键盘后 visualViewport.offsetTop 有时回不到 0（外框跟着它整个往下偏）。社区的办法是等一下再上下推 1px 让它归位，
+    // 见 Apple 论坛 thread 800125 / WebKit 254861。推之前之后的值记进调试读数（kbDebug），看真机上管不管用
+    const nudge = () => {
+      if (vv.offsetTop < 1 || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return
+      const before = Math.round(vv.offsetTop)
+      window.scrollBy(0, -1); window.scrollBy(0, 1)
+      on(true)
+      kbNote(`nudge top ${before}→${Math.round(vv.offsetTop)}`)
+    }
     const follow = (e) => {
       if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
       cancelAnimationFrame(raf)
+      const closing = e.type === 'focusout'
+      if (closing) setTimeout(nudge, 100)
       let last = -1, still = 0
       const t0 = performance.now()
       const tick = (now) => {
         on(false)
         still = vv.height === last ? still + 1 : 0
         last = vv.height
-        if (still >= 8 || now - t0 > 1000) { raf = 0; on(true); return }
+        if (still >= 8 || now - t0 > 1000) { raf = 0; on(true); if (closing) nudge(); return }
         raf = requestAnimationFrame(tick)
       }
       raf = requestAnimationFrame(tick)
@@ -281,6 +293,7 @@ export default function VesperApp() {
   usePageChrome(look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day) // 日记、读书这些从 Home 打开的浅色页也是浅底
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
+  useEffect(() => installKbDebug(), []) // 临时：键盘调试读数，平时不显示
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层

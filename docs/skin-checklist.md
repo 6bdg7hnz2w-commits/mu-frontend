@@ -35,9 +35,17 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 文档钉死：挂上 Vesper 时给 html 加 `v-lock`，`body { position: fixed; top: 0; height: var(--v-doc) }`。
     - `--v-doc` 是量出来的 html 高度。不能写 `height: 100%`：fixed 的 100% 是视口高度，而 iOS 26 主屏幕模式下那个视口少算了状态栏，底下会又空一条黑（见第 1 条）。
   - `useVisibleHeight` 在同一个回调里做三件事：`scrollTo(0,0)`；外框 `top` 设为 `visualViewport.offsetTop`（`--v-vtop`）；高度设为 `visualViewport.height`。外框正好盖住看得见的那块，不留空白帧。这个回调同时挂在 `visualViewport` 的 `resize`、`scroll` 和 `window` 的 `scroll` 上。
-  - 点输入框：`touchend` 里先 `preventDefault`，再 `focus({ preventScroll: true })`，iOS 就不会自己滚页面。只在还没聚焦时这么做，已经在打字时照常挪光标、长按选字。
+  - 点输入框：`touchend` 里先 `preventDefault`，再 `focus({ preventScroll: true })`，iOS 就不会自己滚页面。只在还没聚焦时这么做，已经在打字时照常挪光标、长按选字。手指拖过（超过 10px）再松开的不算点，不聚焦。
+  - **拦在前面，不要事后拉回**：光有上面这些，手指在顶栏、输入栏这些不能滚的地方一拖，iOS 照样会拖动整页，`scrollTo(0,0)` 再拉回来，这一来一回就是跳。照 react-aria 的 `usePreventScroll` 做（`src/vesper/preventScroll.js` 的 `usePreventPageScroll`）：
+    - 插一条 `@layer{*{overscroll-behavior:contain}}`：列表滚到头不把滚动传给页面。iOS 26 起这条要在 touchstart 之前就生效，所以写成 `<style>`，不要等手指按下再加。
+    - `touchmove`（capture、`passive:false`）里，手指下面往上找不到真能滚的元素（overflow 是 auto/scroll，而且内容确实比框长）就 `preventDefault`。两指缩放、正在选字、在已经聚焦的输入框里拖都放行。侧滑返回、下拖收键盘是自己听 touchmove 的，`preventDefault` 不影响它们。
+    - 点输入框的处理从聊天 textarea 挪到这里，所有能弹键盘的输入框都管；`HTMLElement.prototype.focus` 改成一律带 `preventScroll`，代码里调的 focus 也不滚页面。
+    - 在 React 里要注意顺序：这里挂在 document 的 capture 上，比 React 的 `onTouchEnd` 先跑，focus 在 React 收到 touchend 之前就发生了。所以"她自己点了输入框、清掉 `swipeBlurAt`"要放在 textarea 的 `onTouchStart` 里，放在 `onTouchEnd` 里就晚了：下拖收键盘后 600ms 内她真点输入框，会被当成误聚焦再收掉。
+    - 先只在聊天页用（`CCChatPage` 里 `usePreventPageScroll(roomRef)`，只在 `.vesper` 里才生效），离开聊天页全部撤掉。New Event、日记输入稳了再挂。
+  - 不用 Telegram Web 那套：它现在在 iOS 上只锁 `html{position:fixed}`、高度按 `innerHeight`，以前的 visualViewport 改高度和"聚焦前把输入框挪到屏幕外"的办法都用 `&& false` 关掉了，键盘动画不跟。
   - 消息列表贴底沿用第 8 条的 ResizeObserver：列表高度一变，在画出来之前就把 `scrollTop` 补上差值，不用 smooth。没改成 `column-reverse`：现有的贴底已经够用，改了还会影响往上加载更早消息时的位置保持。
-- 代码在 `VesperApp.jsx` 的 `useVisibleHeight`、`vesper.css` 的 `html.v-lock`、`App.jsx` 的 `onInputTouch`。
+- 代码在 `VesperApp.jsx` 的 `useVisibleHeight`、`vesper.css` 的 `html.v-lock`、`vesper/preventScroll.js`。
+- **iOS 26 新坑**：收起键盘后 `visualViewport.offsetTop` 有时回不到 0，或者 `height` 一直偏小（[Apple 论坛 800125](https://developer.apple.com/forums/thread/800125)、[WebKit 254861](https://bugs.webkit.org/show_bug.cgi?id=254861)，iOS 27 beta 又有）。我们的外框跟着 `offsetTop` 走，卡住就整体往下偏。现在的处理：失焦 100ms 后、和逐帧读数停稳后各查一次，`offsetTop` 还大于 0 就 `scrollBy(0,-1)` 再 `scrollBy(0,1)` 推一下。文档是钉死的，这一推管不管用要看真机读数。
 
 ### 2c. 下拖收键盘要顺
 - **现象**：
@@ -51,6 +59,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **正确做法**：
   - 列表上往下拖超过 10px 就 `blur`。不 `preventDefault`，列表滚动和松手后的惯性照常；一次拖动只收一次。
   - 输入框得到或失去焦点时，用 `requestAnimationFrame` 每帧读一次 `visualViewport`，连续 8 帧不变（或者满 1 秒）算停下。
+    - **待真机确认**：[WebKit 265578](https://bugs.webkit.org/show_bug.cgi?id=265578) 说主屏幕模式下 visualViewport 是聚焦后一下子跳到最终高度的，动画途中没有中间值；Safari 地址栏在底部时又是等动画结束才变。真是这样，逐帧读只能读到两头，输入栏会先跳到位、比键盘快。用调试读数量：聊天顶栏名字 2 秒内连点 5 下打开（`src/vesper/kbDebug.js`），每次起落出一行 `N mid values`，0 就是没有中间值。量完再定是留着逐帧跟随，还是改成高度一次到位、用 CSS 过渡按键盘的节奏补动画。
     - 动画途中，外框高度在“键盘全开时的高度”和“html 高度”之间按键盘露出的比例走，输入栏一直贴着键盘顶。
     - 键盘高度 `--v-kb` 只在停稳后才记：途中的高度是一半，记下来面板会画错。
   - `--v-tbSpace` 用 `@property` 注册成长度，才能 `transition`，和 tab 栏滑上来用同一条曲线（.4s）。面板开着时不过渡，同一帧贴底。
@@ -271,3 +280,5 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - [ ] 一次发 20 张：逐张显示进度，断网让其中一张失败，点它能单独重传。
 - [ ] 聊天里只有从左边缘起手才能侧滑返回；长按选字、看大图、横滑待发的图都不会退。拖一半松手会弹回。
 - [ ] 下拖收键盘：输入栏贴着键盘往下走，tab 栏同时滑上来，键盘不弹回。
+- [ ] 键盘开着时，手指在顶栏、输入栏、气泡上下拖：整页一点不动；消息列表照常滚，滚到头不带着页面走。
+- [ ] 下拖收起键盘后马上再点输入框：键盘正常弹出，不会被收回去。
