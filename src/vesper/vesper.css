@@ -27,10 +27,7 @@
    面板开着时不过渡（JS 那边也不加 data-kb-anim）：面板和键盘互换要在同一帧 */
 .vesper{--v-kbDur:.4s;--v-kbEase:cubic-bezier(.3,.7,.2,1)}
 .vesper[data-kb-anim]:not(:has(.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel)){transition:height var(--v-kbDur) var(--v-kbEase)}
-/* 文档本身不让滚：body 钉在顶上、高度定死（--v-doc = html 的高度，useVisibleHeight 量的）。
-   iOS 弹键盘会去滚文档露出输入框，这里滚不动；visualViewport 自己偏开的那点由外框的 top 跟上 */
-html.v-lock,html.v-lock body{overflow:hidden;overscroll-behavior:none}
-html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--v-doc,100%)}
+/* 文档钉死（html.v-lock）在 shell/viewport.css */
 .vesper[data-look="night"]{
   --v-bg:#0a0c11;--v-card:#12161e;--v-card2:#181d27;--v-line:rgba(255,255,255,.07);--v-line2:#232a36;
   --v-ink:#e4e8ef;--v-ink2:#c0c7d3;--v-mute:#7b8497;--v-faint:#535b6c;

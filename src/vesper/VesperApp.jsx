@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LockScreen, getPasscode, useKeyboardOpen, apiFetch } from '../App.jsx'
+import { LockScreen, getPasscode, apiFetch } from '../App.jsx'
+import { useVisibleHeight, useKeyboardOpen, usePageChrome } from '../shell/viewport.js'
 import { useCached, preload } from './data.js'
 import { getSkin, setSkin } from '../skin.js'
 import { V, SubPage, useEdgeSwipe } from './ui.jsx'
@@ -12,7 +13,7 @@ import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
 import MemoryPage from './Memory.jsx'
 import AlbumPage from './Album.jsx'
-import { installKbDebug, kbNote } from './kbDebug.js'
+import { installKbDebug } from '../shell/kbDebug.js'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -42,105 +43,15 @@ function useMode() {
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
 
-// 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走：
-// 键盘上面那条工具栏是半透明的，透出来的就是 html 的底色，浅色页面得是浅的，深色（夜间、Home 壁纸）才用深的。换回 Clawd 时还原
+// 状态栏、html 底色跟着页面走（shell/viewport.js 的 usePageChrome）：浅色页面用浅的，夜间、Home 壁纸用深的。字体是 Vesper 自己的
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
 const CHROME = { night: '#0a0c11', home: '#000000', day: '#f1f3f7' }
-function usePageChrome(color) {
+function useVesperFonts() {
   useEffect(() => {
     if (document.getElementById('vesper-fonts')) return // index.html 已经加了（打开就是 Vesper 时）
     const link = Object.assign(document.createElement('link'), { id: 'vesper-fonts', rel: 'stylesheet', href: FONTS_HREF })
     document.head.appendChild(link)
   }, [])
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]')
-    const prevMeta = meta?.content
-    const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
-    document.getElementById('vesper-top')?.remove() // index.html 开屏前垫的黑，React 接手后交给这里
-    return () => {
-      if (meta && prevMeta != null) meta.content = prevMeta
-      els.forEach(el => { el.style.background = ''; el.style.colorScheme = '' })
-    }
-  }, [])
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.content = color
-    const scheme = color === CHROME.day ? 'light' : 'dark'
-    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
-  }, [color])
-}
-
-// 键盘弹出时 iOS 不缩页面、而是把整页往上推，顶栏被推出屏幕、输入框和键盘之间空一截。
-// 外框高度跟着可见区域走，再把页面滚回顶，输入框就贴着键盘
-function useVisibleHeight(ref) {
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    // 文档本身钉死不滚（vesper.css 的 html.v-lock）：iOS 弹键盘时会去滚整个文档露出输入框，
-    // 再叠上我们按 visualViewport 改高度，就是顶栏先被挤到屏幕中间再回来、收起时列表先掉下去再弹回
-    const root = document.documentElement
-    root.classList.add('v-lock')
-    const css = (k, v) => v == null ? ref.current?.style.removeProperty(k) : ref.current?.style.setProperty(k, v)
-    // gap：没键盘时 html 比 visualViewport 高出的那截（主屏幕模式下是状态栏那么高，见 index.css）
-    let gap = null, lastH = null, animT = 0
-    const on = () => {
-      // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
-      // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
-      if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
-      css('--v-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
-      // 拿 html 的高度比较有没有键盘：它不随键盘变（innerHeight 在有的 iOS 版本上会跟着变小，有的不会，不可靠）
-      const full = root.getBoundingClientRect().height, h = vv.height
-      css('--v-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
-      root.style.setProperty('--v-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
-      if (h >= full - 150) gap = full - h
-      const kb = full - (gap ?? 0) - h // 现在露出来的键盘有多高
-      if (kb > 8 && h < full - 150) {
-        // 键盘的高度留着（收起后也不清）：聊天的表情、加号面板照这个高度画，占键盘的位置，切换时输入框不动
-        css('--v-kb', `${Math.round(full - h)}px`)
-        try { localStorage.setItem('v_kb_h', String(Math.round(full - h))) } catch {}
-      }
-      // 没键盘时写成整屏的 px（不是删掉回到 100%）：键盘起落的过渡是 px 到 px，不跨单位
-      const vh = Math.round(kb > 8 ? h : full)
-      // 主屏幕模式下 iOS 不给键盘动画途中的值：聚焦后 70ms 左右 visualViewport 一下子跳到最终高度（真机读数，WebKit 265578）。
-      // 照着跳，输入栏会比键盘先到。所以一下变了 150px 以上（键盘起落）就让外框高度用 CSS 过渡走过去，节奏照键盘
-      // （vesper.css 的 .vesper[data-kb-anim]）。表情、加号面板开着时不过渡：面板和键盘互换要在同一帧，输入框不动
-      const panel = ref.current?.querySelector('.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel')
-      if (lastH != null && Math.abs(vh - lastH) > 150 && !panel) {
-        ref.current?.setAttribute('data-kb-anim', '') // 不用 className：React 改 kb-open 时会把整串 className 覆盖掉
-        clearTimeout(animT)
-        animT = setTimeout(() => ref.current?.removeAttribute('data-kb-anim'), 600)
-      }
-      lastH = vh
-      css('--v-vh', `${vh}px`)
-    }
-    // iOS 26：收起键盘后 visualViewport.offsetTop 有时回不到 0（外框跟着它整个往下偏）。社区的办法是等一下再上下推 1px 让它归位，
-    // 见 Apple 论坛 thread 800125 / WebKit 254861。2026-10-24 真机（iOS 26.5.2）没遇到，推之前之后的值记进调试读数（kbDebug）
-    const nudge = () => {
-      if (vv.offsetTop < 1 || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return
-      const before = Math.round(vv.offsetTop)
-      window.scrollBy(0, -1); window.scrollBy(0, 1)
-      on()
-      kbNote(`nudge top ${before}→${Math.round(vv.offsetTop)}`)
-    }
-    const nudgeT = []
-    const onBlur = (e) => {
-      if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
-      nudgeT.forEach(clearTimeout)
-      nudgeT.splice(0, 2, setTimeout(nudge, 100), setTimeout(nudge, 600))
-    }
-    try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) css('--v-kb', `${kb}px`) } catch {}
-    on()
-    vv.addEventListener('resize', on)
-    vv.addEventListener('scroll', on)
-    window.addEventListener('scroll', on)
-    document.addEventListener('focusout', onBlur)
-    return () => {
-      clearTimeout(animT); nudgeT.forEach(clearTimeout)
-      vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('scroll', on)
-      document.removeEventListener('focusout', onBlur)
-      root.classList.remove('v-lock')
-    }
-  }, [ref])
 }
 
 const TABS = [
@@ -282,7 +193,9 @@ export default function VesperApp() {
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   const frame = useRef(null)
-  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day) // 日记、读书这些从 Home 打开的浅色页也是浅底
+  useVesperFonts()
+  const chrome = look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day
+  usePageChrome(chrome, chrome === CHROME.day ? 'light' : 'dark') // 日记、读书这些从 Home 打开的浅色页也是浅底
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   useEffect(() => installKbDebug(), []) // 键盘调试读数，平时不显示（kbDebug.js）
@@ -310,7 +223,7 @@ export default function VesperApp() {
 
   return (
     // 输入框获得焦点时浏览器会把外框也滚上去（overflow:hidden 照样能被滚），外框永远钉在顶上
-    <div ref={frame} className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' && !chatUsage ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
+    <div ref={frame} data-shell-frame className={`vesper ${tabHidden ? 'tab-hidden' : ''} ${keyboardOpen ? 'kb-open' : ''}`} data-look={look} {...(tab === 'chat' && !chatUsage ? {} : swipe)} onScroll={e => { if (e.target === e.currentTarget) e.currentTarget.scrollTop = 0 }}>
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
       {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} />}
       {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}

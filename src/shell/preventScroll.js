@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 // 2. touchmove 时手指下面没有能滚的东西（顶栏、输入栏、内容不够长的列表）就 preventDefault：页面根本不动，
 //    不再是以前那样先被滚走、再 scrollTo(0,0) 拉回来（拉回来那一下就是跳）
 // 3. 点输入框：自己 focus({ preventScroll })，iOS 不再滚页面去露输入框；代码里调的 focus() 也一律不滚页面
-// 只在 Vesper 里用（文档已经被 html.v-lock 钉死），Clawd 不变
+// 只在带 data-shell-frame 的外框里用（文档已经被 html.v-lock 钉死，见 viewport.js），Clawd 不变
 
 const KEYBOARD_INPUT = /^(text|search|email|url|tel|number|password)$/
 
@@ -84,10 +84,10 @@ function install() {
   }
 }
 
-// ref 挂在页面根上：在 .vesper 里才生效。几个页面同时用只装一次
+// ref 挂在页面根上：在 data-shell-frame 外框里才生效。几个页面同时用只装一次
 export function usePreventPageScroll(ref) {
   useEffect(() => {
-    if (!ref.current?.closest('.vesper')) return
+    if (!ref.current?.closest('[data-shell-frame]')) return
     if (users++ === 0) undo = install()
     return () => { if (--users === 0) { undo(); undo = null } }
   }, [ref])

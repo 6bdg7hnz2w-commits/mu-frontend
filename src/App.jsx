@@ -4,7 +4,8 @@ import './App.css'
 import { UsagePage, CcLimitedNotice, useCcUsageBrief } from './Usage'
 import { setSkin } from './skin.js'
 import { loadDraftFiles, saveDraftFiles, draftFileCount } from './draftFiles.js'
-import { usePreventPageScroll } from './vesper/preventScroll.js'
+import { usePreventPageScroll } from './shell/preventScroll.js'
+import { useKeyboardOpen } from './shell/viewport.js'
 
 // 后端地址：构建时用 VITE_API_URL 覆盖；默认走自己的域名（旧的 mu-backend-l0uw.onrender.com 过渡期也还能用）
 const API = import.meta.env.VITE_API_URL || 'https://api.mu0727.com'
@@ -341,16 +342,6 @@ function useChatSwipeBack(ref, { onBack, blocked, beforeBack }) {
   }, [ref])
 }
 
-// ─── Global focus-based keyboard/tab-bar visibility ──
-function useKeyboardOpen(setKeyboardOpen) {
-  useEffect(() => {
-    const onFocusIn = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setKeyboardOpen(true) }
-    const onFocusOut = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setTimeout(() => setKeyboardOpen(false), 50) }
-    document.addEventListener('focusin', onFocusIn)
-    document.addEventListener('focusout', onFocusOut)
-    return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
-  }, [setKeyboardOpen])
-}
 
 // ─── AvatarUploadModal — for session list avatar ────
 // ─── AddDateModal ───────────────────────────────────
@@ -4685,7 +4676,7 @@ export default App
 
 // Vesper（src/vesper/）共用的接口、工具和组件：数据和 Clawd 是同一份，换皮肤不换逻辑
 export {
-  API, START_DATE, getPasscode, apiFetch, apiJson, LockScreen, useKeyboardOpen,
+  API, START_DATE, getPasscode, apiFetch, apiJson, LockScreen,
   beijingDateStr, getWhisperCache, setWhisperCache,
   ensureImportantMigrated, fetchUpcomingImportant, getUpcomingImportantCache, importantFromEvent,
   eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod,

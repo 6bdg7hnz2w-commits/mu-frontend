@@ -12,7 +12,7 @@ const traces = []
 
 const r = Math.round
 const bar = () => document.querySelector('.cc-room .composer')?.getBoundingClientRect().bottom
-const frameVh = () => { const f = document.querySelector('.vesper'); return f ? f.style.getPropertyValue('--v-vh') || '-' : '-' }
+const frameVh = () => { const f = document.querySelector('[data-shell-frame]'); return f ? f.style.getPropertyValue('--v-vh') || '-' : '-' }
 
 function sample(t0) {
   const vv = window.visualViewport
