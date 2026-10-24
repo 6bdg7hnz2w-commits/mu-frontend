@@ -21,6 +21,12 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - `useTabShell()`：在皮肤组件最上面、锁屏判断之前调用。里面已经接好 `useVisibleHeight`、`useKeyboardOpen`、聊天面板的 `cc-panel` 广播、kbDebug。
   - `<TabShell shell prefix className tabs tab onTab subPage panelTab frameProps>`：画外框（带 `data-shell-frame`、钉在顶上）和 tab 栏，算 `tab-hidden` / `kb-open`。tab 栏类名按 `prefix` 拼（`v-tabbar` / `v-tab` / `v-tab-pill`）。
 
+- `chat/`：聊天页，Clawd 和 Vesper 共用一份（以前在 App.jsx 里）。
+  - `CcChat.jsx`：`CCChatPage` 和它的菜单、查找、回复方式、待发的图、图片查看器（查看器第 4 步再单独拆）。
+  - `voice.jsx`：语音气泡和播放。`markdown.jsx`：markdown 和复制。
+  - 用到的接口（`apiFetch`）、图标 `I`、草稿、左滑返回还在 App.jsx，从那里 import。这是循环 import：只能在函数里用，模块顶层不要碰这些名字，不然加载时是 undefined。
+  - 界面文字靠 `CcLang`：Vesper 外面包 `CcLang.Provider value="en"`，整套换英文。
+
 新皮肤要做的：
 - 外框用 `TabShell`（不用的话：外框 `ref` 交给 `useVisibleHeight`，外框元素加上 `data-shell-frame`）；
 - 按自己的路由算 `subPage` 传给 `TabShell`；
