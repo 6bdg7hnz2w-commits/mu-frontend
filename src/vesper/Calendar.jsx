@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
 import { V, MONS, MONF, ActionSheet, useToast, keepAboveKeyboard } from './ui.jsx'
+import { usePreventPageScroll } from './preventScroll.js'
 
 // ─── Calendar ───────────────────────────────────────
 // 和 Clawd 的 CalendarPage 同一套接口：/api/events（日程 + kind=important 的重要日期）、/api/todos、/api/periods。
@@ -39,6 +40,7 @@ function BottomSheet({ title, left, right, onClose, children }) {
     vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit)
     return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit) }
   }, [])
+  usePreventPageScroll(wrap) // 点输入框、在面板头上拖都不让 iOS 滚页面（New Event、纪念日都用这个面板）
   // 输入框获得焦点：等键盘升好、面板缩好，把它滚到面板可见区域的中间
   const reveal = (e) => {
     const el = e.target
