@@ -4031,10 +4031,14 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
       anchorRef.current = null
       if (!el) return
       const a = { el, h: el.clientHeight }
+      // 本来就在底部附近（80px 内）就直接钉到真正的底，不按差值去补：列表变高时（收键盘）浏览器自己已经把 scrollTop 夹到底了，
+      // 再 += d 就多退一截，收完键盘最后一条离输入栏远出一块（skin-checklist 第 8 条）
       a.adjust = () => {
         const d = a.h - el.clientHeight
         a.h = el.clientHeight
-        if (d && !detachedRef.current && el.scrollHeight - el.scrollTop - el.clientHeight - Math.max(d, 0) < 80) el.scrollTop += d
+        if (!d || detachedRef.current) return
+        const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+        if ((d > 0 ? toBottom - d : toBottom) < 80) el.scrollTop = el.scrollHeight
       }
       if (typeof ResizeObserver !== 'undefined') { a.ro = new ResizeObserver(a.adjust); a.ro.observe(el) }
       anchorRef.current = a

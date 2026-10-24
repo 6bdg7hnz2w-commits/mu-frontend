@@ -86,7 +86,10 @@ export function useVisibleHeight(ref) {
 export function useKeyboardOpen(setKeyboardOpen) {
   useEffect(() => {
     const onFocusIn = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setKeyboardOpen(true) }
-    const onFocusOut = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setTimeout(() => setKeyboardOpen(false), 50) }
+    // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
+    // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
+    const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
+    const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) setKeyboardOpen(false) }, 50) }
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
     return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
