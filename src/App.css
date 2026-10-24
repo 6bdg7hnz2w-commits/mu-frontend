@@ -40,6 +40,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 
 .page-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px}
 .page-header h1{font-size:28px;font-weight:700;letter-spacing:-0.5px}
+.chatlist-page .page-header{border-bottom:var(--s-rule)}
 .page-subtitle{font-size:13px;color:var(--text-secondary);margin-top:2px}
 .card{background:var(--surface);border-radius:var(--radius);margin:0 16px 12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .card-title{font-size:15px;font-weight:600;margin-bottom:12px}
@@ -84,7 +85,7 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .swipe-delete{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;cursor:pointer}
 .swipe-content{position:relative;background:var(--bg);z-index:1}
 
-.chatlist-page{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.chatlist-page{font-family:var(--s-title);height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .new-chat-card{margin-top:4px}
 .new-chat-option{padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}
 .new-chat-option:last-child{border-bottom:none}
@@ -92,25 +93,25 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .new-chat-name{font-size:15px;font-weight:600}
 .new-chat-desc{font-size:13px;color:var(--text-secondary);margin-top:2px}
 .session-list{padding:0 16px}
-.session-card{display:flex;align-items:center;gap:12px;padding:14px 12px;background:var(--surface);border-radius:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.session-card{display:flex;align-items:center;gap:12px;padding:14px 12px;background:var(--s-card,var(--surface));border:var(--s-cardLine);border-radius:var(--s-cardR,14px);cursor:pointer;box-shadow:var(--s-cardShadow,0 1px 3px rgba(0,0,0,.04))}
 .session-card:active{opacity:.7}
 /* CC 页下面有 tab 栏，安全区留给 tab 栏 */
 .cc-room .composer{padding-bottom:6px;background:var(--s-bar,var(--bg));backdrop-filter:var(--s-barGlass);-webkit-backdrop-filter:var(--s-barGlass)}
 .cc-room .composer-input-row textarea{background:var(--s-field,var(--surface))}
 .cc-room .send-btn{background:var(--s-accent,var(--text))}
 .cc-room .send-btn svg path{stroke:var(--s-accentInk,#fff)}
-.session-card.pinned{background:var(--pinned-bg);margin-bottom:8px}
-.session-avatar{width:44px;height:44px;border-radius:12px;background:var(--card);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;flex-shrink:0;overflow:hidden}
+.session-card.pinned{background:var(--s-card,var(--pinned-bg));margin-bottom:8px}
+.session-avatar{width:44px;height:44px;border-radius:var(--s-avatarR,12px);background:var(--s-avatarBg,var(--card));color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;flex-shrink:0;overflow:hidden}
 .session-avatar img{width:100%;height:100%;object-fit:cover}
 .session-info{flex:1;min-width:0}
 .session-top{display:flex;justify-content:space-between;align-items:center}
 .session-name{font-size:15px;font-weight:600}
-.session-time{font-size:12px;color:var(--text-dim)}
+.session-time{font-family:var(--s-ui);font-size:12px;color:var(--s-mute,var(--text-dim))}
 .session-sub-row{margin-top:1px}
 .session-sublabel{font-size:11px;color:var(--text-dim)}
 .session-bottom{display:flex;align-items:center;gap:6px;margin-top:2px}
-.session-preview{flex:1;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.session-preview.draft{color:var(--accent);font-weight:500}
+.session-preview{flex:1;font-family:var(--s-body);font-size:13px;color:var(--s-ink2,var(--text-secondary));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-preview.draft{color:var(--s-draft,var(--accent));font-weight:500}
 .session-model-tag{font-size:10px;color:var(--text-dim);background:var(--card);padding:1px 6px;border-radius:4px;flex-shrink:0}
 
 .search-panel{height:100%;display:flex;flex-direction:column;background:var(--bg)}

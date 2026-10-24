@@ -416,6 +416,9 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --s-body:var(--v-sc);--s-title:var(--v-serif);
   --s-bar:var(--vc-head);--s-barGlass:blur(20px) saturate(1.3);--s-field:var(--v-card);--s-accent:var(--v-acc);--s-accentInk:var(--v-acc-ink);
   --s-meta:var(--vc-meta);--s-metaShadow:var(--vc-meta-shadow);--s-icon:var(--v-mute);--s-card:var(--v-card);--s-ink:var(--v-ink);
+  /* 对话列表（App.css 里 .chatlist-page / .session-* 那几条）：标题下一条线，沐那张卡片带边框和阴影，头像是雾蓝方块 */
+  --s-rule:1px solid var(--v-line);--s-cardLine:1px solid var(--v-line);--s-cardR:20px;--s-cardShadow:var(--v-shadow);
+  --s-avatarR:16px;--s-avatarBg:var(--v-cover);--s-ui:var(--v-sans);--s-mute:var(--v-mute);--s-ink2:var(--v-ink2);--s-draft:var(--v-ink2);
   /* 按住说话键：录音中、上滑取消。.vesper button 把边框清成 0，描边用内阴影画，不改尺寸；淡色叠在卡片色上，别透出后面 */
   --s-recBg:linear-gradient(var(--v-acc-soft),var(--v-acc-soft)),var(--v-card);--s-recInk:var(--v-acc);--s-recRing:inset 0 0 0 1px var(--v-acc);
   --s-cancelBg:linear-gradient(rgba(192,96,94,.12),rgba(192,96,94,.12)),var(--v-card);--s-cancelInk:var(--v-danger);--s-cancelRing:inset 0 0 0 1px var(--v-danger);
@@ -439,12 +442,12 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat>.chatroom{position:relative;z-index:1;background:none}
 .v-chat .more-sub-page,.v-chat .chatlist-page{position:relative;z-index:1;height:100%;background:var(--bg);padding-top:var(--s-top);padding-bottom:var(--v-tbSpace)}
 /* 对话列表照画布：大标题 + 一条线，沐那张卡片（雾蓝方块里一颗星） */
-.v-chat .chatlist-page{padding:calc(var(--s-top) + 33px) 20px var(--v-tbSpace);font-family:var(--v-serif)}
-.v-chat .chatlist-page .page-header{padding:0 0 20px;border-bottom:1px solid var(--v-line)}
+.v-chat .chatlist-page{padding:calc(var(--s-top) + 33px) 20px var(--v-tbSpace)}
+.v-chat .chatlist-page .page-header{padding:0 0 20px}
 .v-chat .chatlist-page .page-header h1{font-size:42px;font-weight:500;line-height:1;letter-spacing:0}
 .v-chat .chatlist-page .session-list{padding:0}
-.v-chat .chatlist-page .session-card{margin:18px 0 0;gap:14px;padding:14px;border-radius:20px;background:var(--v-card);border:1px solid var(--v-line);box-shadow:var(--v-shadow)}
-.v-chat .chatlist-page .session-avatar{position:relative;width:50px;height:50px;border-radius:16px;background:var(--v-cover)}
+.v-chat .chatlist-page .session-card{margin:18px 0 0;gap:14px;padding:14px}
+.v-chat .chatlist-page .session-avatar{position:relative;width:50px;height:50px}
 .cc-list-spark i{position:absolute;background:linear-gradient(180deg,rgba(255,255,255,0),#fff,rgba(255,255,255,0))}
 .cc-list-spark i:first-child{left:24.5px;top:13px;width:1px;height:24px}
 .cc-list-spark i+i{left:13px;top:24.5px;width:24px;height:1px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff,rgba(255,255,255,0))}
@@ -452,9 +455,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .chatlist-page .session-info{display:flex;flex-direction:column;gap:3px}
 .v-chat .chatlist-page .session-top{align-items:baseline}
 .v-chat .chatlist-page .session-name{font-style:italic;font-size:22px;font-weight:500;line-height:1.1}
-.v-chat .chatlist-page .session-time{font-family:var(--v-sans);font-size:12px;color:var(--v-mute)}
 .v-chat .chatlist-page .session-bottom{margin:0}
-.v-chat .chatlist-page .session-preview{font-family:var(--v-sc);font-size:13.5px;color:var(--v-ink2)}
+.v-chat .chatlist-page .session-preview{font-size:13.5px}
 /* ⋮ 进去的三页（Chat Info / Search Chat / Reply Mode）照画布：60 高的顶栏、左边一个方块返回键、中间宋体标题 */
 .v-chat .more-sub-page{padding-bottom:0}
 .v-chat .more-sub-page>.page-header,.v-chat .cc-brain-page>.chatroom-header{position:relative;height:60px;padding:0;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--v-line);background:none;backdrop-filter:none;-webkit-backdrop-filter:none}

@@ -75,6 +75,18 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   | `--s-toolInk` / `--s-toolAlpha` | 工具那行后面的文件名、失败（`.cc-tool-sum` / `.cc-tool-fail`） | `--text-dim` / 不透明 | `currentColor`（跟 Read 同色）/ .82 |
   | `--s-noticeR` | 聊天里的提示条（`.cc-notice`）圆角 | 10px | 12px |
 
+  对话列表（App.css 里 `.chatlist-page` / `.session-*`）也读这一套，Vesper 同样挂在 `.v-chat` 上：
+
+  | 变量 | 管什么 | Clawd 不设时 | Vesper |
+  |---|---|---|---|
+  | `--s-title` / `--s-body` / `--s-ui`（再用） | 整页字体 / 预览字体 / 时间字体 | 继承 | `--v-serif` / `--v-sc` / `--v-sans` |
+  | `--s-rule` | 标题下面那条线 | 无 | 1px `--v-line` |
+  | `--s-card` / `--s-cardLine` / `--s-cardR` / `--s-cardShadow` | 会话卡片底色、边框、圆角、阴影 | `--surface`（置顶 `--pinned-bg`）/ 无 / 14px / 淡阴影 | `--v-card` / 1px `--v-line` / 20px / `--v-shadow` |
+  | `--s-avatarBg` / `--s-avatarR` | 头像方块 | `--card` / 12px | `--v-cover` / 16px |
+  | `--s-mute` / `--s-ink2` / `--s-draft` | 时间、预览、草稿预览的字色 | `--text-dim` / `--text-secondary` / `--accent` | `--v-mute` / `--v-ink2` / `--v-ink2` |
+
+  Vesper 以前的预览字色（`.v-chat .chatlist-page .session-preview`）把 `.draft` 的高亮也压住了，所以草稿在 Vesper 下和普通预览同色。改变量时单独给了 `--s-draft`，保持原样；想让草稿高亮，改 Vesper 的 `--s-draft` 就行。
+
   按住说话键平时的底色读 `--s-field`（和输入框一样）。Vesper 的 `.vesper button` 把边框清成 0，所以描边用 inset box-shadow 画，按钮尺寸不变；淡色要叠在卡片色上（`linear-gradient(淡色,淡色),var(--v-card)`），直接用半透明色会透出输入栏后面的东西。
 
   间距、字号、尺寸这些不是主题，还留在皮肤自己的 `.v-chat` 规则里（比如展开的思考 / 工具的内边距 10px 12px）。加号面板、表情面板 Vesper 是另一种排法（一格一格的大按钮、占键盘的位置），整块布局都在 `vesper.css`，不走变量。
