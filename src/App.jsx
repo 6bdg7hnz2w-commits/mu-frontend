@@ -3599,6 +3599,53 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
   }
 
   // 英文版（Vesper）点输入框、收起键盘时都回到最底下；键盘起落要一会儿，高度变完再补两次
+  // 键盘、表情面板、加号面板三选一。点开面板先收起键盘，面板占键盘的位置（Vesper 里面板高度 = 上次键盘的高度）；
+  // 点输入框弹键盘时，面板等键盘真的升上来那一下再收，输入框一直在同一个高度，不会先掉下去再被顶上来
+  const panelOpen = emojiOpen || attachOpen
+  const closePanels = () => { setEmojiOpen(false); setAttachOpen(false) }
+  const togglePanel = (which) => {
+    textareaRef.current?.blur()
+    setEmojiOpen(which === 'emoji' ? o => !o : false)
+    setAttachOpen(which === 'attach' ? o => !o : false)
+  }
+  const onInputFocus = () => {
+    if (panelOpen) {
+      const vv = window.visualViewport
+      const h0 = vv?.height ?? 0
+      let done = false
+      const finish = () => { if (done) return; done = true; vv?.removeEventListener('resize', onVv); closePanels() }
+      const onVv = () => { if (vv.height < h0 - 100) finish() }
+      vv?.addEventListener('resize', onVv)
+      setTimeout(finish, 600) // 外接键盘、电脑上不会有这一下
+    }
+    stickBottom()
+  }
+  // Vesper 要知道面板开着：和键盘一样收起底部 tab 栏
+  useEffect(() => { window.dispatchEvent(new CustomEvent('cc-panel', { detail: panelOpen })) }, [panelOpen])
+  useEffect(() => () => window.dispatchEvent(new CustomEvent('cc-panel', { detail: false })), [])
+  // 输入栏变高变矮（面板开合、键盘起落、草稿图那一排）时消息列表贴着底：最后一条跟着输入栏走，不跳
+  // 面板开合、草稿图那一排是渲染引起的：每次渲染完、画出来之前对一下；键盘起落不经过渲染，交给 ResizeObserver。
+  // 列表是后来才渲染出来的（先有加载中那一屏），换了元素就重新挂
+  const anchorRef = useRef(null)
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (anchorRef.current?.el !== el) {
+      anchorRef.current?.ro?.disconnect()
+      anchorRef.current = null
+      if (!el) return
+      const a = { el, h: el.clientHeight }
+      a.adjust = () => {
+        const d = a.h - el.clientHeight
+        a.h = el.clientHeight
+        if (d && !detachedRef.current && el.scrollHeight - el.scrollTop - el.clientHeight - Math.max(d, 0) < 80) el.scrollTop += d
+      }
+      if (typeof ResizeObserver !== 'undefined') { a.ro = new ResizeObserver(a.adjust); a.ro.observe(el) }
+      anchorRef.current = a
+      return
+    }
+    anchorRef.current?.adjust()
+  })
+  useEffect(() => () => anchorRef.current?.ro?.disconnect(), [])
   const stickBottom = () => {
     if (say(true, false) || detachedRef.current) return
     const go = () => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight }
@@ -3967,7 +4014,7 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={closePanels}>
         {loadingMore && <div className="empty-state">Loading…</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
@@ -4076,13 +4123,6 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
             <span>{!recording.start ? 'Opening mic…' : recording.cancel ? 'Release to cancel' : 'Release to send · slide up to cancel'}</span>
           </div>
         )}
-        {attachOpen && (
-          <div className="cc-attach-menu">
-            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
-            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
-            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
-          </div>
-        )}
         {/* 左边切语音 / 键盘；语音模式下输入框换成整条"按住 说话"；右边 ⊕ 是照片和文件，有东西要发时多一个发送 */}
         <div className="composer-input-row cc-composer-row">
           <button className="attach-btn cc-mode-btn" onClick={toggleVoiceMode} disabled={!passcode || (!voiceMode && !canRecord)} aria-label={voiceMode ? say('切换到键盘', 'Keyboard') : say('切换到语音', 'Voice')}>{voiceMode ? CC_KEYBOARD_ICON : CC_VOICE_ICON}</button>
@@ -4091,15 +4131,22 @@ function CCChatPage({ onBack, onMenu, jumpTo }) {
               onPointerDown={startRecording} onPointerMove={moveRecording} onPointerUp={releaseRecording} onPointerCancel={() => stopRecording(true)}
               onContextMenu={e => e.preventDefault()}>{!recording ? 'Hold to talk' : recording.cancel ? 'Release to cancel' : 'Release to send'}</button>
           ) : (
-            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={stickBottom} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
+            <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} placeholder="Say to Soren" rows={1} disabled={!passcode} />
           )}
-          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => { setAttachOpen(false); setEmojiOpen(o => !o); textareaRef.current?.blur() }} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
-          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => { setEmojiOpen(false); setAttachOpen(o => !o) }} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
+          <button className={`attach-btn${emojiOpen ? ' active' : ''}`} onClick={() => togglePanel('emoji')} disabled={!passcode} aria-label="Emoji" aria-expanded={emojiOpen}>{CC_EMOJI_ICON}</button>
+          <button className={`attach-btn${attachOpen ? ' active' : ''}`} onClick={() => togglePanel('attach')} disabled={!passcode || full} aria-label="Add photos or files" aria-expanded={attachOpen}>{CC_PLUS_ICON}</button>
           <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={handleFileSelect} style={{ display: 'none' }} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} style={{ display: 'none' }} />
           {((!voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={sendMessage} disabled={!passcode}>{I.send}</button>}
         </div>
+        {attachOpen && (
+          <div className="cc-attach-menu">
+            {say(false, true) && <button onClick={() => { setAttachOpen(false); cameraInputRef.current?.click() }} disabled={!passcode || full}>{I.camera}<span>Camera</span></button>}
+            <button onClick={() => { setAttachOpen(false); photoInputRef.current?.click() }} disabled={!passcode || full}>{I.photo}<span>{say('照片', 'Photos')}</span></button>
+            <button onClick={() => { setAttachOpen(false); fileInputRef.current?.click() }} disabled={!passcode || !fileTypes || full}>{I.file}<span>{say('文件', 'Files')}</span></button>
+          </div>
+        )}
         {emojiOpen && (
           <div className="cc-emoji-panel">
             <div className="cc-emoji-grid">{CC_EMOJI_LIST.map(em => <button key={em} onClick={() => insertEmoji(em)}>{em}</button>)}</div>

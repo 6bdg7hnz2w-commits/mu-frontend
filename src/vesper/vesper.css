@@ -356,7 +356,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 
 /* ─── Chats：Clawd 的聊天页换成 Vesper 的颜色 ─── */
 .v-chat{--v-tbSpace:calc(62px + max(calc(var(--v-bottom) - 8px),14px) + 8px);position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
-.vesper.tab-hidden .v-chat{--v-tbSpace:0px} /* 键盘弹出、tab 栏收起：输入栏贴回底边 */
+.vesper.tab-hidden .v-chat,.v-chat:has(.cc-emoji-panel,.cc-attach-menu){--v-tbSpace:0px} /* 键盘弹出、面板打开、tab 栏收起：输入栏贴回底边（面板那条不等 tab 栏的状态，同一帧就贴下去） */
 .v-clawd{
   --bg:#f1f3f7;--surface:#fafbfc;--card:#fafbfc;--text:#1c2232;--text-secondary:#7f879a;--text-dim:#a9b0bf;--border:#e3e7ee;
   --accent:#4f638c;--accent-soft:rgba(95,115,156,.16);--accent-light:rgba(95,115,156,.08);
@@ -371,14 +371,15 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
   --cc-switch-track:#232a36;--code-bg:rgba(0,0,0,.35);--code-inline-bg:rgba(255,255,255,.1)
 }
 
-/* 照画布：聊天壁纸 + 一层薄雾；顶栏和输入栏是雾面玻璃；她的话是主题色气泡，他的话是没有气泡的衬线正文 */
+/* 聊天壁纸 + 一层纯色蒙版（照片退成氛围，路灯、屋顶上的字也看得清）；顶栏和输入栏是雾面玻璃；
+   她的话是主题色气泡，他的话是一层半透明的淡底 */
 .v-chat{--vc-head:rgba(244,246,249,.74);--vc-glass:rgba(250,251,253,.86);--vc-ink:#1a2030;--vc-meta:#2f3646;
   --vc-meta-shadow:0 0 6px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9);--vc-text-shadow:0 0 12px rgba(255,255,255,.75);
-  --vc-veil:linear-gradient(180deg,rgba(241,243,247,.62) 0%,rgba(241,243,247,.46) 35%,rgba(241,243,247,.46) 70%,rgba(241,243,247,.64) 100%);
+  --vc-veil:rgba(255,255,255,.42);--vc-his:rgba(255,255,255,.6);
   --vc-f:none;--vc-base:#c9c3d6}
 .vesper[data-look="night"] .v-chat{--vc-head:rgba(10,12,17,.72);--vc-glass:rgba(16,20,30,.7);--vc-ink:#eceef3;--vc-meta:rgba(255,255,255,.72);
   --vc-meta-shadow:none;--vc-text-shadow:0 1px 10px rgba(0,0,0,.55);
-  --vc-veil:linear-gradient(180deg,rgba(5,7,12,.62) 0%,rgba(5,7,12,.42) 40%,rgba(5,7,12,.42) 70%,rgba(5,7,12,.64) 100%);
+  --vc-veil:rgba(10,14,24,.45);--vc-his:rgba(20,24,36,.55);
   --vc-f:brightness(.48) saturate(.9);--vc-base:#0b0d12}
 .v-chat-wall{position:absolute;inset:0;background:var(--vc-base)}
 .v-chat-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--vc-f)}
@@ -472,7 +473,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-room .msg.user .bubble{box-sizing:content-box}
 .v-chat .cc-room .msg.user .msg-meta{margin-top:5px;gap:10px;padding:0 4px}
 .v-chat .cc-turn{padding:4px 0}
-.v-chat .cc-turn-body{padding:0}
 .v-chat .cc-piece+.cc-piece{margin-top:7px}
 .v-chat .cc-turn .msg-meta{margin-top:7px;gap:10px;padding:0 4px}
 .v-chat .msg-meta .copy-btn{padding:0}
@@ -480,8 +480,8 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-tools .cc-thinking-head{gap:4px;padding:0;font-size:12px;line-height:normal}
 .v-chat .cc-tools .cc-thinking-head svg{width:11px;height:11px}
 .v-chat .cc-room .msg.user .bubble{background:var(--v-acc);color:var(--v-acc-ink);border-radius:17px 17px 6px 17px;max-width:76%;padding:8px 13px;font-family:var(--v-sc);font-size:14.5px;line-height:1.55;letter-spacing:0;box-shadow:0 4px 14px rgba(40,55,90,.18)}
-.v-chat .cc-turn-body{font-family:var(--v-sc);font-size:15.5px;line-height:1.85;letter-spacing:.01em;color:var(--vc-ink);text-shadow:var(--vc-text-shadow)}
-.v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{text-shadow:none;background:var(--vc-glass)}
+.v-chat .cc-turn-body{width:fit-content;max-width:100%;box-sizing:border-box;padding:9px 14px;border-radius:17px 17px 17px 6px;background:var(--vc-his);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-family:var(--v-sc);font-size:15.5px;line-height:1.7;letter-spacing:.01em;color:var(--vc-ink)}
+.v-chat .cc-turn-body .md-pre,.v-chat .cc-turn-body .md-table-wrap{background:var(--vc-glass)}
 .v-chat .msg-time,.v-chat .msg-meta .copy-btn,.v-chat .msg-meta button,.v-chat .cc-thinking-head,.v-chat .cc-tools,.v-chat .cc-msg-note,.v-chat .cc-late{color:var(--vc-meta);text-shadow:var(--vc-meta-shadow)}
 .v-chat .cc-tool-sum,.v-chat .cc-tool-fail{color:inherit;opacity:.82} /* 读的文件名：跟 Read 同色、略淡，壁纸上也看得清 */
 .v-chat .cc-thinking-body,.v-chat .cc-tools-body{background:var(--vc-glass);border:0;border-radius:12px;padding:10px 12px;color:var(--v-ink2);text-shadow:none}
@@ -501,9 +501,14 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-hold-btn{border-color:var(--v-line);background:var(--v-card)}
 .v-chat .send-btn{width:36px;height:36px;background:var(--v-acc)}
 .v-chat .send-btn svg path{stroke:var(--v-acc-ink)}
-.v-chat .cc-attach-menu{margin:0 4px 8px}
-.v-chat .cc-attach-menu button{height:34px;padding:0 14px;border:1px solid var(--v-line);background:var(--v-card);font-size:13.5px}
-.v-chat .cc-attach-menu button svg{width:16px;height:16px}
+.v-chat .cc-attach-menu button{flex-direction:column;justify-content:center;gap:8px;width:72px;height:76px;padding:0;border:1px solid var(--v-line);border-radius:18px;background:var(--v-card);color:var(--v-ink2);font-size:12.5px}
+.v-chat .cc-attach-menu button svg{width:22px;height:22px}
+/* 表情、加号面板占键盘的位置：高度 = 上次键盘的高度（VesperApp 记的 --v-kb），输入框和弹键盘时在同一个高度 */
+.v-chat .cc-attach-menu,.v-chat .cc-emoji-panel{height:var(--v-kb,320px);box-sizing:border-box;margin:9px -10px calc(-1 * var(--v-tbSpace) - 9px);padding:12px 10px var(--v-bottom);border-top:1px solid var(--v-line)}
+.v-chat .cc-attach-menu{display:flex;align-items:flex-start;gap:14px;padding-top:18px;padding-left:20px}
+.v-chat .cc-emoji-panel{display:flex;flex-direction:column}
+.v-chat .cc-emoji-grid{flex:1;min-height:0;max-height:none}
+.v-chat .cc-emoji-del{bottom:calc(var(--v-bottom) + 6px)}
 .v-chat .cc-jump-btn{background:var(--v-card);border:1px solid var(--v-line);color:var(--v-ink);box-shadow:0 6px 18px rgba(20,30,60,.16)}
 .v-chat .cc-notice{border-radius:12px}
 
