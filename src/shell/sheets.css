@@ -1,0 +1,3 @@
+/* 弹窗底下那层半透明蒙版：颜色读皮肤给的 --s-scrim；操作菜单可以单给一层 --s-scrimSheet */
+[data-scrim]{background:var(--s-scrim,rgba(0,0,0,.4))}
+[data-scrim="sheet"]{background:var(--s-scrimSheet,var(--s-scrim,rgba(0,0,0,.4)))}
