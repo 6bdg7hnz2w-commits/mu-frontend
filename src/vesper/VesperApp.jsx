@@ -11,7 +11,6 @@ import GamePage from './Game.jsx'
 import ReadingPage from './Reading.jsx'
 import MemoryPage from './Memory.jsx'
 import AlbumPage from './Album.jsx'
-import StatusScrim from '../StatusScrim.jsx'
 import './vesper.css'
 
 // ─── Vesper ─────────────────────────────────────────
@@ -41,9 +40,11 @@ function useMode() {
   return [mode, setMode, mode === 'auto' ? (sysDark ? 'night' : 'day') : mode]
 }
 
-// 状态栏是透明的（index.html），页面画到最上面；html / body / theme-color 全用开屏那个黑，换回 Clawd 时还原
+// 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走：
+// 键盘上面那条工具栏是半透明的，透出来的就是 html 的底色，浅色页面得是浅的，深色（夜间、Home 壁纸）才用深的。换回 Clawd 时还原
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
-function usePageChrome() {
+const CHROME = { night: '#0a0c11', home: '#000000', day: '#f1f3f7' }
+function usePageChrome(color) {
   useEffect(() => {
     if (document.getElementById('vesper-fonts')) return // index.html 已经加了（打开就是 Vesper 时）
     const link = Object.assign(document.createElement('link'), { id: 'vesper-fonts', rel: 'stylesheet', href: FONTS_HREF })
@@ -52,15 +53,19 @@ function usePageChrome() {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
-    if (meta) meta.content = '#000000'
     const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
-    els.forEach(el => { el.style.background = '#000' })
+    document.getElementById('vesper-top')?.remove() // index.html 开屏前垫的黑，React 接手后交给这里
     return () => {
       if (meta && prevMeta != null) meta.content = prevMeta
-      els.forEach(el => { el.style.background = '' })
-      document.getElementById('vesper-top')?.remove()
+      els.forEach(el => { el.style.background = ''; el.style.colorScheme = '' })
     }
   }, [])
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.content = color
+    const scheme = color === CHROME.day ? 'light' : 'dark'
+    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
+  }, [color])
 }
 
 // 键盘弹出时 iOS 不缩页面、而是把整页往上推，顶栏被推出屏幕、输入框和键盘之间空一截。
@@ -231,7 +236,7 @@ export default function VesperApp() {
   const [unlocked, setUnlocked] = useState(() => !!getPasscode())
   const [lockExpired, setLockExpired] = useState(false)
   const frame = useRef(null)
-  usePageChrome()
+  usePageChrome(look === 'night' ? CHROME.night : tab === 'home' ? CHROME.home : CHROME.day)
   useVisibleHeight(frame)
   useKeyboardOpen(setKeyboardOpen)
   const onImmersive = useCallback((v) => setImmersive(v), [])
@@ -268,7 +273,6 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
       {/* 白天除了 Home（壁纸顶上自己有黑到透明那层），其余页面都是浅色，垫一层暗色让状态栏白字看得清 */}
-      <StatusScrim on={look === 'day' && !(tab === 'home' && !immersive)} />
       <Splash />
       {/* 浮在底下的圆玻璃；选中那格垫一块会滑动的小玻璃 */}
       <nav className="v-tabbar">
