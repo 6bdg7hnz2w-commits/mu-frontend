@@ -1,7 +1,7 @@
 // ─── 键盘调试读数（平时不显示；换机型、升 iOS 后拿来量键盘） ─────────
 // 在真机上量键盘起落时 visualViewport 每一帧的值：主屏幕模式下键盘动画途中到底有没有中间值。
 // 打开：聊天顶栏的名字 2 秒内连点 5 下（主屏幕 App 里没法带网址参数），或网址带 ?kbdebug；再连点 5 下关掉。
-// 输入框每次得到 / 失去焦点录 1.5 秒：每帧的 vv 高度、offsetTop、innerHeight、输入栏底边，和 vv resize 事件的时刻。
+// 输入框每次得到 / 失去焦点、表情 / 加号面板每次开合录 1.5 秒：每帧的 vv 高度、offsetTop、innerHeight、输入栏底边，和 vv resize 事件的时刻。
 // 录完一条出一行结论；Copy 把最近 10 条原始数据拷走，贴给 Claude
 // 别处也能往里记一行（kbLog）：聊天往上加载更早的消息后，锚点补完还差几 px
 
@@ -22,11 +22,20 @@ function scroller(el) {
   return null
 }
 
-// 每帧：dt、vv 高度、vv offsetTop、innerHeight、聊天输入栏底边、输入框顶边、它所在滚动区的 scrollTop、底部面板的 top
+// 聊天消息列表：scrollTop、离底还差多少（scrollHeight − scrollTop − clientHeight）、最后一条底边到输入栏顶边的距离
+function listCols() {
+  const m = document.querySelector('.cc-room>.messages'), c = document.querySelector('.cc-room .composer')
+  if (!m || !c) return [-1, -1, -1]
+  const last = [...m.children].reverse().find(n => n.offsetHeight)
+  return [r(m.scrollTop), r(m.scrollHeight - m.scrollTop - m.clientHeight), r(c.getBoundingClientRect().top - (last?.getBoundingClientRect().bottom ?? 0))]
+}
+
+// 每帧：dt、vv 高度、vv offsetTop、innerHeight、聊天输入栏底边、输入框顶边、它所在滚动区的 scrollTop、底部面板的 top、
+// 消息列表 scrollTop、列表离底、最后一条到输入栏的空隙
 function sample(t0, el, sc) {
   const vv = window.visualViewport
   return [r(performance.now() - t0), r(vv.height), r(vv.offsetTop), window.innerHeight, r(bar() ?? -1),
-    r(el?.getBoundingClientRect().top ?? -1), r(sc?.scrollTop ?? -1), r(document.querySelector('.v-bsheet')?.getBoundingClientRect().top ?? -1)]
+    r(el?.getBoundingClientRect().top ?? -1), r(sc?.scrollTop ?? -1), r(document.querySelector('.v-bsheet')?.getBoundingClientRect().top ?? -1), ...listCols()]
 }
 
 // 一条录完：高度换了几次值、头一次变是第几毫秒、最后一次变在第几毫秒、开头和结尾之间有几个中间值
@@ -36,10 +45,11 @@ function summarize(tr) {
   const changes = tr.frames.filter((f, i) => i && f[1] !== tr.frames[i - 1][1])
   const mids = new Set(hs.filter(h => (h - a) * (h - z) < 0)).size
   const gaps = tr.frames.map(f => r(f[2] + f[1] - f[4]))
-  return `${tr.kind === 'focusin' ? '▲open ' : '▼close'} ${a}→${z} · ${changes.length} changes` +
+  return `${tr.kind === 'cc-panel' ? (tr.field === 'true' ? '▲panel' : '▼panel') : tr.kind === 'focusin' ? '▲open ' : '▼close'} ${a}→${z} · ${changes.length} changes` +
     ` · first ${changes[0]?.[0] ?? '-'}ms last ${changes.at(-1)?.[0] ?? '-'}ms · ${mids} mid values` +
     ` · resize@${tr.resizes.join(',') || '-'} · ${tr.frames.length} frames · bar gap ${Math.min(...gaps)}..${Math.max(...gaps)}` +
     ` · field ${tr.field} top ${tr.frames[0][5]}→${tr.frames.at(-1)[5]} biggest 1-frame move ${Math.max(0, ...tr.frames.map((f, i) => i ? Math.abs(f[5] - tr.frames[i - 1][5]) : 0))}px` +
+    ` · list gap ${tr.frames[0][10]}→${tr.frames.at(-1)[10]} max ${Math.max(...tr.frames.map(f => f[10]))}` +
     (tr.notes.length ? ` · ${tr.notes.join(' ')}` : '')
 }
 
@@ -49,9 +59,9 @@ function render() {
 }
 
 function record(e) {
-  if (!box || !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
-  const t0 = performance.now(), vv = window.visualViewport, el = e.target, sc = scroller(el)
-  const tr = { kind: e.type, field: el.placeholder || el.tagName, at: new Date().toISOString(), frames: [sample(t0, el, sc)], resizes: [], notes: [] }
+  if (!box || (e.type.startsWith('focus') && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName))) return
+  const t0 = performance.now(), vv = window.visualViewport, el = e.target instanceof Element ? e.target : null, sc = scroller(el)
+  const tr = { kind: e.type, field: el?.placeholder || el?.tagName || String(e.detail), at: new Date().toISOString(), frames: [sample(t0, el, sc)], resizes: [], notes: [] }
   traces.push(tr); if (traces.length > 10) traces.shift()
   const onResize = () => tr.resizes.push(r(performance.now() - t0))
   vv.addEventListener('resize', onResize)
@@ -90,7 +100,7 @@ function show() {
   row.style.cssText = 'margin-top:6px;pointer-events:auto'
   row.append(
     btn('Copy', async () => {
-      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom,fieldTop,scrollTop,sheetTop', traces, logs }, null, 0)
+      const text = JSON.stringify({ ua: navigator.userAgent, standalone: navigator.standalone ?? matchMedia('(display-mode: standalone)').matches, cols: 'dt,vvH,vvTop,innerH,barBottom,fieldTop,scrollTop,sheetTop,listTop,listToBottom,lastGap', traces, logs }, null, 0)
       try { await navigator.clipboard.writeText(text); list.textContent = 'Copied ' + traces.length + ' traces\n' + list.textContent } catch {
         const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'width:100%;height:120px;font:9px monospace'; box.append(ta); ta.select()
       }
@@ -139,6 +149,7 @@ export function installKbDebug() {
   document.addEventListener('click', onTap, true)
   document.addEventListener('focusin', record, true)
   document.addEventListener('focusout', record, true)
+  window.addEventListener('cc-panel', record)
   let on = false
   try { on = localStorage.getItem(KEY) === '1' || new URLSearchParams(location.search).has('kbdebug') } catch {}
   if (on) show()
@@ -146,6 +157,7 @@ export function installKbDebug() {
     document.removeEventListener('click', onTap, true)
     document.removeEventListener('focusin', record, true)
     document.removeEventListener('focusout', record, true)
+    window.removeEventListener('cc-panel', record)
     hide()
   }
 }
