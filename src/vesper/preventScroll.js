@@ -23,9 +23,12 @@ function canScroll(el) {
   return /(auto|scroll)/.test(s.overflowY + s.overflowX) && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)
 }
 
+// 往上找到 fixed 的那层（弹窗、底部面板）就停：面板头上一拖，不能去滚面板底下那一页
 function scrollParent(el) {
   for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
-    if (n.nodeType === 1 && canScroll(n)) return n
+    if (n.nodeType !== 1) continue
+    if (canScroll(n)) return n
+    if (getComputedStyle(n).position === 'fixed') return null
   }
   return null
 }

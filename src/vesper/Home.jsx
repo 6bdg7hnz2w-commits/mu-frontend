@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { START_DATE, apiFetch, beijingDateStr } from '../App.jsx'
 import { useCached, setCached, refresh } from './data.js'
 import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, keepAboveKeyboard } from './ui.jsx'
+import { usePreventPageScroll } from './preventScroll.js'
 
 // ─── Home / Diary / Read ────────────────────────────
 // 首页（壁纸 + 每日一句 + Day N + 重要日期 + 日记本），点日记本翻开进 Diary，点一页进 Read。
@@ -234,6 +235,8 @@ function DiaryScreen({ diaries, setDiaries, fresh, onBack, onRead }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [q, setQ] = useState('')
   const [write, setWrite] = useState(null) // { id?, text }
+  const root = useRef(null)
+  usePreventPageScroll(root) // 写日记、搜日记时点输入框不让 iOS 滚页面；输入卡片露出来靠 keepAboveKeyboard 滚日记页自己
   const [busy, setBusy] = useState(false)
   const [menu, setMenu] = useState(null)
   const [toast, showToast] = useToast()
@@ -282,7 +285,7 @@ function DiaryScreen({ diaries, setDiaries, fresh, onBack, onRead }) {
   }
 
   return (
-    <div className="v-sub v-diary">
+    <div ref={root} className="v-sub v-diary">
       <SubHead onBack={onBack}><div className="v-sub-italic">diary</div></SubHead>
       <div className="v-sub-body v-diary-body">
         <div className="v-diary-top">

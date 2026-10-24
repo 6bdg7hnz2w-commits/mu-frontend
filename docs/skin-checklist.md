@@ -41,7 +41,8 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
     - `touchmove`（capture、`passive:false`）里，手指下面往上找不到真能滚的元素（overflow 是 auto/scroll，而且内容确实比框长）就 `preventDefault`。两指缩放、正在选字、在已经聚焦的输入框里拖都放行。侧滑返回、下拖收键盘是自己听 touchmove 的，`preventDefault` 不影响它们。
     - 点输入框的处理从聊天 textarea 挪到这里，所有能弹键盘的输入框都管；`HTMLElement.prototype.focus` 改成一律带 `preventScroll`，代码里调的 focus 也不滚页面。
     - 在 React 里要注意顺序：这里挂在 document 的 capture 上，比 React 的 `onTouchEnd` 先跑，focus 在 React 收到 touchend 之前就发生了。所以"她自己点了输入框、清掉 `swipeBlurAt`"要放在 textarea 的 `onTouchStart` 里，放在 `onTouchEnd` 里就晚了：下拖收键盘后 600ms 内她真点输入框，会被当成误聚焦再收掉。
-    - 先只在聊天页用（`CCChatPage` 里 `usePreventPageScroll(roomRef)`，只在 `.vesper` 里才生效），离开聊天页全部撤掉。New Event、日记输入稳了再挂。
+    - 挂在哪：聊天页（`CCChatPage` 的 `roomRef`）、日历的底部面板 `BottomSheet`（New Event、纪念日）、日记页 `DiaryScreen`。只在 `.vesper` 里才生效，几个同时开着只装一次，全关了才撤。新加带输入框的页面或弹窗，挂上 `usePreventPageScroll(ref)`。
+    - 往上找"能滚的元素"时，碰到 `position:fixed` 那层就停。弹窗、底部面板是 fixed 的，但 DOM 上还挂在日历页里面；不停的话，在面板头上一拖找到的是底下的日历页，拖动会去滚面板后面那一页。
   - 不用 Telegram Web 那套：它现在在 iOS 上只锁 `html{position:fixed}`、高度按 `innerHeight`，以前的 visualViewport 改高度和"聚焦前把输入框挪到屏幕外"的办法都用 `&& false` 关掉了，键盘动画不跟。
   - 消息列表贴底沿用第 8 条的 ResizeObserver：列表高度一变，在画出来之前就把 `scrollTop` 补上差值，不用 smooth。没改成 `column-reverse`：现有的贴底已经够用，改了还会影响往上加载更早消息时的位置保持。
 - 代码在 `VesperApp.jsx` 的 `useVisibleHeight`、`vesper.css` 的 `html.v-lock`、`vesper/preventScroll.js`。
@@ -285,6 +286,6 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - [ ] 一次发 20 张：逐张显示进度，断网让其中一张失败，点它能单独重传。
 - [ ] 聊天里只有从左边缘起手才能侧滑返回；长按选字、看大图、横滑待发的图都不会退。拖一半松手会弹回。
 - [ ] 下拖收键盘：输入栏贴着键盘往下走，tab 栏同时滑上来，键盘不弹回。
-- [ ] 键盘开着时，手指在顶栏、输入栏、气泡上下拖：整页一点不动；消息列表照常滚，滚到头不带着页面走。
+- [ ] 键盘开着时，手指在顶栏、输入栏、气泡上下拖：整页一点不动；消息列表照常滚，滚到头不带着页面走。New Event 面板、写日记时也一样，面板头上拖不会带着后面那页滚。
 - [ ] 下拖收起键盘后马上再点输入框：键盘正常弹出，不会被收回去。
 - [ ] 量键盘：`src/vesper/kbDebug.js` 的读数（聊天顶栏名字 2 秒内连点 5 下）看新机型、新 iOS 版本键盘起落有没有中间值（`N mid values`），有的话可以考虑改回逐帧跟。
