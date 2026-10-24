@@ -1,0 +1,6 @@
+/* 视口（viewport.js 的 useVisibleHeight 挂上 / 卸下 html.v-lock），只在用了它的皮肤里生效 */
+/* 文档本身不让滚：body 钉在顶上、高度定死（--v-doc = html 的高度，useVisibleHeight 量的）。
+   不能写 height:100%：fixed 的 100% 是少算了状态栏的那个视口，主屏幕模式底下会又空一条黑（checklist 第 1 条）。
+   iOS 弹键盘会去滚文档露出输入框，这里滚不动；visualViewport 自己偏开的那点由外框的 top 跟上 */
+html.v-lock,html.v-lock body{overflow:hidden;overscroll-behavior:none}
+html.v-lock body{position:fixed;top:0;left:0;right:0;height:var(--v-doc,100%)}

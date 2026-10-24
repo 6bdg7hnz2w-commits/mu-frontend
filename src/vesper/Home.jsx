@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { START_DATE, apiFetch, beijingDateStr } from '../App.jsx'
 import { useCached, setCached, refresh } from './data.js'
-import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet, keepAboveKeyboard } from './ui.jsx'
-import { usePreventPageScroll } from './preventScroll.js'
+import { V, MONS, DF, D3, MONF, SubHead, flowerStyle, useToast, ActionSheet } from './ui.jsx'
+import { keepAboveKeyboard } from '../shell/viewport.js'
+import { usePreventPageScroll } from '../shell/preventScroll.js'
 
 // ─── Home / Diary / Read ────────────────────────────
 // 首页（壁纸 + 每日一句 + Day N + 重要日期 + 日记本），点日记本翻开进 Diary，点一页进 Read。

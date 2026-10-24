@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPasscode, apiJson, ensureImportantMigrated, importantFromEvent, eventFirstDay, eventLastDay, shDateOf, shTimeOf, addDaysStr, daysBetweenStr, predictNextPeriod } from '../App.jsx'
-import { V, MONS, MONF, ActionSheet, useToast, keepAboveKeyboard } from './ui.jsx'
-import { usePreventPageScroll } from './preventScroll.js'
+import { V, MONS, MONF, ActionSheet, useToast } from './ui.jsx'
+import { keepAboveKeyboard } from '../shell/viewport.js'
+import { usePreventPageScroll } from '../shell/preventScroll.js'
 
 // ─── Calendar ───────────────────────────────────────
 // 和 Clawd 的 CalendarPage 同一套接口：/api/events（日程 + kind=important 的重要日期）、/api/todos、/api/periods。
