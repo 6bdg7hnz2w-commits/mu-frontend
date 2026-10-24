@@ -85,14 +85,23 @@ export function useVisibleHeight(ref) {
 // ─── Global focus-based keyboard/tab-bar visibility ──
 export function useKeyboardOpen(setKeyboardOpen) {
   useEffect(() => {
-    const onFocusIn = (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') setKeyboardOpen(true) }
+    const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
+    // 聚焦着的输入框整个被拿掉（查找页什么都没搜、键盘开着就按返回）：iOS Safari 不发 focusout，
+    // kb-open、tab-hidden 会一直挂着。输入框聚焦期间盯着 DOM，它不在了就当键盘关了
+    let field = null
+    const mo = new MutationObserver(() => { if (field && !field.isConnected) { field = null; mo.disconnect(); setKeyboardOpen(false) } })
+    const onFocusIn = (e) => {
+      if (!isField(e.target)) return
+      setKeyboardOpen(true)
+      if (!field) mo.observe(document.body, { childList: true, subtree: true })
+      field = e.target
+    }
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
-    const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
-    const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) setKeyboardOpen(false) }, 50) }
+    const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) { field = null; mo.disconnect(); setKeyboardOpen(false) } }, 50) }
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
-    return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
+    return () => { mo.disconnect(); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
   }, [setKeyboardOpen])
 }
 

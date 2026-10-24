@@ -311,6 +311,12 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
      - 键盘开着时底部多留 32px。
 - Notes 原来是衬线体，和别的输入框不一致：底部面板里的 textarea 统一用无衬线体。
 
+### 9b. 查找页什么都没搜就返回，tab 栏不回来
+- **现象**：进查找聊天记录，不输入直接返回，回到聊天页、对话列表都没有底部 tab 栏；搜过再返回就正常。
+- **原因**：查找页没词时输入框 autoFocus，键盘开着。按返回，这个还聚焦着的输入框整个被 React 拿掉，iOS Safari 不发 `focusout`，`useKeyboardOpen` 的 kb-open 一直是 true，tab 栏一直收着。搜过的时候一般先收了键盘，focusout 正常发了。
+- **正确做法**（`shell/viewport.js` 的 `useKeyboardOpen`）：输入框聚焦期间用 MutationObserver 盯着 DOM，它 `isConnected` 变成 false 就当键盘关了。
+- 本地 Chrome 复现不了：浏览器面板在后台时 autoFocus 不发 focus 事件。验证时手动派发 focusin 再 remove 输入框，看 kb-open 有没有掉。
+
 ---
 
 ## 五、路由和导航
