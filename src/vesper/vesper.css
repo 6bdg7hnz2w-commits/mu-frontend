@@ -72,7 +72,6 @@
 .v-sub{position:absolute;inset:0;z-index:5;background:var(--v-bg);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
 .v-sub-head{position:absolute;top:0;left:0;right:0;z-index:4;padding:calc(var(--s-top) + 12px) 16px 0;display:flex;justify-content:center;pointer-events:none}
 .v-sub-head>*{pointer-events:auto}
-.v-sub-head::before{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 62px);pointer-events:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);z-index:-1}
 .v-chip{position:absolute;left:16px;top:calc(var(--s-top) + 12px);width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .v-sub-head>:not(.v-chip){height:44px;box-sizing:border-box;padding:0 24px;border-radius:999px;display:flex;align-items:center;line-height:1}
 .v-chip,.v-sub-head>:not(.v-chip),
@@ -473,7 +472,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .more-sub-page{padding-top:0;padding-bottom:0}
 .v-chat .more-sub-page>.page-header,.v-chat .cc-brain-page>.chatroom-header{position:sticky;top:0;z-index:3;height:auto;min-height:0;padding:calc(var(--s-top) + 12px) 16px 6px;display:flex;align-items:center;justify-content:center;border-bottom:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;pointer-events:none}
 .v-chat .more-sub-page>.page-header>*,.v-chat .cc-brain-page>.chatroom-header>*{position:relative;z-index:1;pointer-events:auto}
-.v-chat .more-sub-page>.page-header::before,.v-chat .cc-brain-page>.chatroom-header::before{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 62px);pointer-events:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent)}
 .v-chat .more-sub-page>.page-header .icon-btn,.v-chat .cc-brain-page>.chatroom-header .icon-btn{position:absolute;left:16px;top:calc(var(--s-top) + 12px);width:44px;height:44px;border-radius:50%;padding:0;color:var(--v-ink)}
 .v-chat .more-sub-page>.page-header h1,.v-chat .cc-brain-page>.chatroom-header .chatroom-title{height:44px;box-sizing:border-box;padding:0 24px;border-radius:999px;display:flex;align-items:center;justify-content:center}
 .v-chat .more-sub-page>.page-header .icon-btn svg,.v-chat .cc-brain-page>.chatroom-header .icon-btn svg{width:18px;height:18px;stroke-width:1.6}
@@ -514,12 +512,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:400}
 .v-chat .cc-brain-test-result{padding:0;font-size:13px}
 /* 聊天顶栏：返回键、名字、菜单各是一块玻璃（材质照底部 tab 栏），不再铺一整条模糊带（skin-checklist 3b）。
-   后面垫一层渐进模糊：状态栏那截最糊，往下渐淡，到胶囊底边正好没了；胶囊浮在上面，阴影压一点底下的气泡。只模糊不加色 */
+   后面不再垫自己的渐进模糊：状态栏那截系统（iOS 27 顶边效果）已经模糊过一遍，叠上去只是重复（skin-checklist 3d）。胶囊浮在上面，阴影压一点底下的气泡 */
 .v-chat .chatroom-header{padding:calc(var(--s-top) + 12px) 12px 6px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
 .v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;pointer-events:none}
 .v-chat .cc-room>.chatroom-header>*{pointer-events:auto}
-.v-chat .cc-room::before{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 62px);z-index:2;pointer-events:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent)}
 .v-chat .cc-room>.chatroom-header .icon-btn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
 .v-chat .cc-room>.chatroom-header .chatroom-title{height:44px;box-sizing:border-box;padding:0 24px;border-radius:999px;display:flex;align-items:center;justify-content:center;justify-self:center}
 .v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 70px)}
@@ -719,7 +716,6 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-reader-bar{position:absolute;left:0;right:0;z-index:3;display:flex;gap:10px;padding:0 20px;background:var(--rb);transition:opacity .3s,transform .3s}
 .v-reader-bar.top{top:0;padding:calc(var(--s-top) + 12px) 16px 0;align-items:center;background:none;pointer-events:none}
 .v-reader-bar.top>*{pointer-events:auto}
-.v-reader-bar.top::before{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 62px);z-index:-1;pointer-events:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent)}
 .v-reader-bar.top .v-rd-btn{width:44px;height:44px;border-radius:50%}
 .v-reader-bar.top .v-reader-crumb{flex:0 1 auto;margin:0 auto;height:44px;line-height:44px;padding:0 18px;border-radius:999px}
 .v-reader-bar.top .v-rd-btn,.v-reader-bar.top .v-reader-crumb{background:var(--rb)!important;backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);border:1px solid var(--rl)!important;box-shadow:0 6px 18px rgba(10,16,32,.14),0 1px 3px rgba(10,16,32,.06)}
