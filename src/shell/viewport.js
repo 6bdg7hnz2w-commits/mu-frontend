@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { kbNote } from './kbDebug.js'
+import { kbNote, kbLog } from './kbDebug.js'
 import './viewport.css'
 
 // ─── 视口：键盘、可见高度、状态栏底色 ─────────────────────
@@ -99,9 +99,18 @@ export function useKeyboardOpen(setKeyboardOpen) {
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
     const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) { field = null; mo.disconnect(); setKeyboardOpen(false) } }, 50) }
+    // 键盘开着切到后台：系统把键盘收了，回来时输入框还是 activeElement、不发 focusout，kb-open、tab-hidden 一直挂着（聊天页 tab 栏没了）。
+    // 切走时就把输入框 blur 掉、当键盘关了；回来时焦点不在输入框上，也就不会再被当成键盘开着（见 docs/skin-checklist.md 第 9c 条）
+    const onVisibility = () => {
+      kbLog(`${document.visibilityState} · active ${document.activeElement?.tagName} · kb ${!!field}`)
+      if (document.visibilityState !== 'hidden') return
+      if (isField(document.activeElement)) document.activeElement.blur()
+      field = null; mo.disconnect(); setKeyboardOpen(false)
+    }
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
-    return () => { mo.disconnect(); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut) }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { mo.disconnect(); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility) }
   }, [setKeyboardOpen])
 }
 
