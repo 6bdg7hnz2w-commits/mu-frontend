@@ -371,12 +371,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **还有一种**（10/25 真机）：不切后台，键盘收起来（下滑收键盘等）以后 tab 也不回来。同样是输入框还聚焦着、没有 focusout。正确做法：`useKeyboardOpen` 也盯 visualViewport 的 resize，聚焦以后量到过键盘、后来键盘没了，就当关了并 blur 输入框（再点会重新弹）。只看焦点判断键盘不可靠，焦点只能当“开”的信号，“关”要以键盘真的不在为准。
 - **跟着出的坑**（#73 之后真机）：键盘在后台被收掉，visualViewport 的 resize 在后台发不到，回来时 `--s-vh` 还是有键盘时的高度：输入栏和 tab 栏停在半屏，底下空一大块。正确做法：`useVisibleHeight` 在 visibilitychange（visible）和 pageshow 时重量一次，150ms、500ms 再补两次。
 
-- **截屏也收键盘**（10/25 真机）：
-  - 第一次以为截屏会一闪 hidden，把切后台的 blur 改成离开 ≥1s 才做（这条留着，无害）。真机日志没有 hidden，只有一行 `kb gone while focused → blur`：截屏那一下 iOS 把 visualViewport 报成整屏，`onVv` 当键盘被收了，顺手 blur，键盘真收了。
-  - 第二次：`onVv` 看到键盘没了先等 0.6s，高度回来就不 blur。真机还是收：等 5s 的调试版日志是 `window blur · vv 455`（键盘还在）→ 键盘没了 → 5s 后 blur → `window focus`。
-  - **真正的原因**：截屏界面接管窗口，先发 window blur，iOS 跟着把键盘藏起来；缩略图消失时才 window focus。等多久都不对，因为缩略图挂几秒、长短不定。
-  - **正确做法**：跟窗口状态走。window blur 期间键盘没了不当收键盘（日志 `kb hidden while window blurred → wait for focus`）；window focus 后 0.7s 键盘回来了就保持（`window back, keyboard back → keep`），没回来才 blur（`window back, no keyboard → blur`），下次点输入框照常弹。平时（窗口没失焦）下滑收键盘仍是等 0.6s。
-  - 真机结果：iOS 截屏后**不会**把键盘还回来（网页只有用户手势里的 focus 能弹键盘，没法自己弹回去）。所以能做到的是：键盘一被藏 tab 栏就回来，缩略图消失后 blur，再点输入框照常弹。原生 App 截屏不收键盘，网页做不到。
+- **截屏会收键盘：iOS 限制，不修**（10/25）。截屏时 iOS 先让窗口失焦、把键盘藏起来，缩略图消失后也不会还回来；网页只有用户手势里的 focus 能弹键盘，自己弹不回去。#97 后半、#98–#101 试过：离开不到 1s 不算切后台、键盘没了先等 0.6s、跟 window blur/focus 走。都没让键盘留住，最后一版还出了“键盘开着 tab 栏也在”的新问题（截屏期间收了 kb-open，键盘回来时没再挂上）。**全部退回 #96 的键盘逻辑**，只留 #97 的 `#root` 单独配色。以后别再在 `useKeyboardOpen` 里为截屏加特判。截屏收键盘后再点一下输入框就能弹。
 
 ### 9d. 发完消息键盘别收
 - **现象**：打完字点发送，键盘跟着收起来，接着打还要再点一次输入框。
