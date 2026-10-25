@@ -373,7 +373,9 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 
 - **截屏也收键盘**（10/25 真机）：
   - 第一次以为截屏会一闪 hidden，把切后台的 blur 改成离开 ≥1s 才做（这条留着，无害）。真机日志没有 hidden，只有一行 `kb gone while focused → blur`：截屏那一下 iOS 把 visualViewport 报成整屏，`onVv` 当键盘被收了，顺手 blur，键盘真收了。
-  - 正确做法：`onVv` 看到键盘没了先等 0.6s，期间高度变回有键盘的样子就算了（日志 `kb back after …ms → keep`），还是整屏才 blur。代价：下滑收键盘后 tab 栏晚 0.6s 回来。等待期间每次高度变化都记日志（`vv … @…ms`），还不行就看这几行。
+  - 第二次：`onVv` 看到键盘没了先等 0.6s，高度回来就不 blur。真机还是收：等 5s 的调试版日志是 `window blur · vv 455`（键盘还在）→ 键盘没了 → 5s 后 blur → `window focus`。
+  - **真正的原因**：截屏界面接管窗口，先发 window blur，iOS 跟着把键盘藏起来；缩略图消失时才 window focus。等多久都不对，因为缩略图挂几秒、长短不定。
+  - **正确做法**：跟窗口状态走。window blur 期间键盘没了不当收键盘（日志 `kb hidden while window blurred → wait for focus`）；window focus 后 0.7s 键盘回来了就保持（`window back, keyboard back → keep`），没回来才 blur（`window back, no keyboard → blur`），下次点输入框照常弹。平时（窗口没失焦）下滑收键盘仍是等 0.6s。
 
 ### 9d. 发完消息键盘别收
 - **现象**：打完字点发送，键盘跟着收起来，接着打还要再点一次输入框。

@@ -112,7 +112,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
     // 聚焦着的输入框整个被拿掉（查找页什么都没搜、键盘开着就按返回）：iOS Safari 不发 focusout，
     // kb-open、tab-hidden 会一直挂着。输入框聚焦期间盯着 DOM，它不在了就当键盘关了
-    let field = null, dogT = 0, goneT = 0, goneAt = 0, bgStale = false
+    let field = null, dogT = 0, goneT = 0, goneAt = 0, winT = 0, winOff = false, bgStale = false
     const mo = new MutationObserver(() => { if (field && !field.isConnected) { field = null; mo.disconnect(); setKeyboardOpen(false) } })
     const onFocusIn = (e) => {
       if (!isField(e.target)) return
@@ -150,6 +150,8 @@ export function useKeyboardOpen(setKeyboardOpen) {
         return
       }
       if (!kbSeen || goneT) return
+      // 截屏：先 window blur（键盘还在），截屏界面接管窗口，iOS 跟着把键盘藏了。这时不动，等 window focus 回来再看（skin-checklist 9c）
+      if (winOff) { kbLog('kb hidden while window blurred → wait for focus'); return }
       const el = field
       goneAt = Date.now()
       goneT = setTimeout(() => {
@@ -198,14 +200,29 @@ export function useKeyboardOpen(setKeyboardOpen) {
       hiddenAt = Date.now(); gone = false
       visT.splice(0, visT.length, setTimeout(leave, 1000))
     }
-    // 调试：截屏时窗口有没有失焦 / 得焦（面板关着时 kbLog 不记）
-    const onWin = (e) => kbLog(`window ${e.type} · vv ${Math.round(vv?.height ?? 0)} · active ${document.activeElement?.tagName}`)
+    // 截屏（真机日志）：window blur 时键盘还在 → 截屏界面接管窗口、键盘被藏 → 缩略图消失时 window focus。
+    // 窗口失焦期间键盘没了不算收键盘；窗口回来 0.7s 后键盘还没回来，才 blur，下次点输入框照常弹
+    const onWin = (e) => {
+      kbLog(`window ${e.type} · vv ${Math.round(vv?.height ?? 0)} · active ${document.activeElement?.tagName}`)
+      if (e.type === 'blur') { winOff = true; clearTimeout(winT); return }
+      if (e.type !== 'focus') return
+      winOff = false
+      clearTimeout(winT)
+      winT = setTimeout(() => {
+        const el = field
+        if (!el || document.activeElement !== el) return
+        if (vv && vv.height < document.documentElement.getBoundingClientRect().height - 150) { kbSeen = true; kbLog('window back, keyboard back → keep'); return }
+        field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
+        kbLog('window back, no keyboard → blur')
+        el.blur()
+      }, 700)
+    }
     ;['blur', 'focus', 'pagehide', 'pageshow'].forEach(t => window.addEventListener(t, onWin))
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
     document.addEventListener('visibilitychange', onVisibility)
     vv?.addEventListener('resize', onVv)
-    return () => { ['blur', 'focus', 'pagehide', 'pageshow'].forEach(t => window.removeEventListener(t, onWin)); mo.disconnect(); clearTimeout(dogT); clearTimeout(goneT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
+    return () => { ['blur', 'focus', 'pagehide', 'pageshow'].forEach(t => window.removeEventListener(t, onWin)); mo.disconnect(); clearTimeout(dogT); clearTimeout(goneT); clearTimeout(winT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
   }, [setKeyboardOpen])
 }
 
