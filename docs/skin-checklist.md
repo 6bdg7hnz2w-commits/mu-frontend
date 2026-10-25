@@ -215,7 +215,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **原因**：顶栏的两层模糊（backdrop-filter）写在顶栏自己的 `::before` / `::after` 上，和名字在同一个层叠上下文里。iOS 会把模糊层单独合成，盖在它上面的名字也被拉进合成层一起画，字边变软。首页的模糊是单独的兄弟元素 `.v-top-blur`，字不在它里面，所以清楚。
 - **正确做法**：模糊只放在背景层，和文字分开：两层模糊挪到 `.cc-room::before` / `::after`（z-index 2，高度 = 顶栏高度 `--s-top + 66px`），顶栏（z-index 3）本身不带任何 backdrop-filter / filter / opacity / transform。改顶栏的上下边距时，这个高度要一起改。
 - 以后加玻璃效果也一样：文字永远不要放在带 backdrop-filter / filter 的元素里面，也不要放在一直挂着 transform、opacity 动画的元素里。
-- **还没解决（10/25）**：挪出来以后真机上还是糊，而且返回箭头也一样糊，说明是整条顶栏被画成了低分辨率，不只是名字。重构期间聊天页加过滑入的 transform（#45）和 `overflow:clip`（#46），都可能是原因。调试读数里加了两个试验开关：No blur（去掉两层模糊）和 No clip（.v-chat 改回 visible），点哪个能变清楚，就是哪个的问题。查清以后把结论补到这里，开关删掉。
+- **还没解决（10/25）**：挪出来以后真机上还是糊，而且返回箭头也一样糊，说明是整条顶栏被画成了低分辨率，不只是名字。重构期间聊天页加过滑入的 transform（#45）和 `overflow:clip`（#46），都可能是原因。调试读数里加了两个试验开关：No blur（去掉两层模糊）和 No clip（.v-chat 改回 visible），点哪个能变清楚，就是哪个的问题。真机：两个都不行。现在换成 No blur / No glass（关掉消息里气泡的 backdrop-filter，顶栏底下滚过的气泡都是玻璃）/ Layer（顶栏 translateZ(0) 单独一层）。查清以后把结论补到这里，开关删掉。
 
 ---
 
@@ -331,6 +331,8 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **正确做法**（`useKeyboardOpen`）：`visibilitychange` 变成 hidden 时，把聚焦着的输入框 `blur()` 掉，直接当键盘关了。回来时焦点不在输入框上，不会再被当成键盘开着。每次前后台切换都会在调试读数里记一行（visible/hidden、activeElement、kb）。
 - 以前为什么不对：`useKeyboardOpen` 只认 focusin / focusout（9b 又补了输入框被拿掉的情况），没管前后台切换。
 - 本地验证：手动派发 focusin，再把 `document.visibilityState` 改成 hidden 派发 visibilitychange，看 kb-open、tab-hidden 有没有掉。
+- **还有一种**（10/25 真机）：不切后台，键盘收起来（下滑收键盘等）以后 tab 也不回来。同样是输入框还聚焦着、没有 focusout。正确做法：`useKeyboardOpen` 也盯 visualViewport 的 resize，聚焦以后量到过键盘、后来键盘没了，就当关了并 blur 输入框（再点会重新弹）。只看焦点判断键盘不可靠，焦点只能当“开”的信号，“关”要以键盘真的不在为准。
+- **跟着出的坑**（#73 之后真机）：键盘在后台被收掉，visualViewport 的 resize 在后台发不到，回来时 `--s-vh` 还是有键盘时的高度：输入栏和 tab 栏停在半屏，底下空一大块。正确做法：`useVisibleHeight` 在 visibilitychange（visible）和 pageshow 时重量一次，150ms、500ms 再补两次。
 
 ---
 

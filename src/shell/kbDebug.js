@@ -92,7 +92,8 @@ function btn(label, fn) {
 
 // 试验开关：在 html 上挂一个类名，样式只在这里，用完整段删掉
 const PROBE_CSS = '.kbx-noblur .v-chat .cc-room::before,.kbx-noblur .v-chat .cc-room::after{display:none}' +
-  '.kbx-noclip .v-chat{overflow:visible!important}'
+  '.kbx-noglass .cc-room .messages *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}' +
+  '.kbx-layer .v-chat .cc-room>.chatroom-header{transform:translateZ(0)}'
 function probe(label, cls) {
   if (!document.getElementById('kbx-style')) { const st = document.createElement('style'); st.id = 'kbx-style'; st.textContent = PROBE_CSS; document.head.append(st) }
   const b = btn(label, () => { const on = document.documentElement.classList.toggle(cls); b.style.background = on ? '#2a7' : '#444'; kbLog(`${label} ${on ? 'on' : 'off'}`) })
@@ -118,7 +119,8 @@ function show() {
     btn('Clear', () => { traces.length = logs.length = 0; render() }),
     // 临时试验：聊天顶栏发糊（skin-checklist 3b）到底是谁造成的。点一下切换，看顶栏的字和返回箭头会不会变清楚
     probe('No blur', 'kbx-noblur'),
-    probe('No clip', 'kbx-noclip'),
+    probe('No glass', 'kbx-noglass'),
+    probe('Layer', 'kbx-layer'),
     btn('Hide', () => toggle(false)),
   )
   box.append(live, list, row)
