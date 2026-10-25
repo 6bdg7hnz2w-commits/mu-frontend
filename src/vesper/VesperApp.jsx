@@ -189,7 +189,7 @@ export default function VesperApp() {
   const shell = useTabShell() // 外框、键盘、tab 栏收起（shell/TabShell.jsx）
   useVesperFonts()
   const chrome = look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day
-  usePageChrome(chrome, chrome === CHROME.day ? 'light' : 'dark') // 日记、读书这些从 Home 打开的浅色页也是浅底
+  usePageChrome(chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
