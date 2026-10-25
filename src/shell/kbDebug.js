@@ -112,13 +112,15 @@ function show() {
   // 试 iOS 27 顶边效果、键盘工具栏各自取哪一层的颜色：每个按钮只把一层换成测试色，弹键盘截图对照（skin-checklist 6）
   const probe = document.createElement('div')
   probe.style.cssText = 'margin-top:6px;pointer-events:auto'
+  // 点过的按钮变成那个测试色、记一行，看得出点上了（html 被页面盖着，点了页面上看不出变化）
+  const mark = (e, name, c) => { e.currentTarget.style.background = c; e.currentTarget.style.color = '#000'; kbLog(`probe: ${name} → ${c}`) }
   const paint = (el, c) => el && el.style.setProperty('background', c, 'important')
   const meta = () => document.querySelector('meta[name="theme-color"]')
   probe.append(
-    btn('html red', () => paint(document.documentElement, '#ff0000')),
-    btn('body green', () => paint(document.body, '#00c000')),
-    btn('root blue', () => paint(document.getElementById('root'), '#0050ff')),
-    btn('theme yellow', () => { const m = meta(); if (m) m.content = '#ffd000' }),
+    btn('html red', e => { paint(document.documentElement, '#ff0000'); mark(e, 'html', '#ff0000') }),
+    btn('body green', e => { paint(document.body, '#00c000'); mark(e, 'body', '#00c000') }),
+    btn('root blue', e => { paint(document.getElementById('root'), '#0050ff'); mark(e, '#root', '#0050ff') }),
+    btn('theme yellow', e => { const m = meta(); if (m) m.content = '#ffd000'; mark(e, 'theme-color', '#ffd000') }),
     btn('Reset', () => location.reload()),
   )
   box.append(live, list, row, probe)
