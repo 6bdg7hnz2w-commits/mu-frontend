@@ -21,14 +21,22 @@ export function useVisibleHeight(ref) {
     root.classList.add('v-lock')
     const css = (k, v) => v == null ? ref.current?.style.removeProperty(k) : ref.current?.style.setProperty(k, v)
     // gap：没键盘时 html 比 visualViewport 高出的那截（主屏幕模式下是状态栏那么高，见 index.css）
-    let gap = null, lastH = null, animT = 0
+    let gap = null, lastH = null, animT = 0, stale = false
     const on = () => {
       // 文档被滚了就拉回去；visualViewport 自己在 layout viewport 里偏开了（offsetTop），外框往下挪同样多。
       // 和高度在同一个回调里一起改：外框永远正好盖住看得见的那块，顶栏、背景不动，不出空白帧
       if (window.scrollY || root.scrollTop) window.scrollTo(0, 0)
       css('--s-vtop', `${Math.max(0, Math.round(vv.offsetTop))}px`)
       // 拿 html 的高度比较有没有键盘：它不随键盘变（innerHeight 在有的 iOS 版本上会跟着变小，有的不会，不可靠）
-      const full = root.getBoundingClientRect().height, h = vv.height
+      const full = root.getBoundingClientRect().height
+      let h = vv.height
+      // 切过后台：回来时 iOS 的 visualViewport 有时还报着有键盘时的高度（真机 iOS 27：vv 431 / html 852，键盘早没了、焦点在 body），
+      // 照它排输入栏、tab 栏就停在半屏。键盘只会在输入框聚焦时出现，所以这时没有输入框聚焦就不信它，按整屏排；
+      // 等它自己报回整屏、或者又点了输入框，再照常（skin-checklist 9c）
+      if (stale) {
+        if (h >= full - 150 || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) stale = false
+        else h = full - (gap ?? 0)
+      }
       css('--s-full', `${Math.round(full)}px`) // 整个屏幕的高度：聊天背景按它铺，不跟键盘、面板变
       root.style.setProperty('--s-doc', `${Math.round(full)}px`) // 钉死的 body 的高度（fixed 的 100% 是少算了状态栏的那个视口）
       if (h >= full - 150) gap = full - h
@@ -73,7 +81,7 @@ export function useVisibleHeight(ref) {
     // 回来时高度还是有键盘时的，输入栏、tab 栏停在半屏，底下空一大块。回到前台重量一次，再补两次兜底（skin-checklist 9c）
     const visT = []
     const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
+      if (document.visibilityState === 'hidden') { stale = true; return }
       visT.forEach(clearTimeout)
       on(); visT.splice(0, 2, setTimeout(on, 150), setTimeout(on, 500))
     }
