@@ -785,10 +785,11 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-map{--mps:0 14px 30px rgba(60,50,30,.16);--mp:#efebe2;--mi:#1f2a44;--mm:#8b8372;--mr:#b5622f;--ml:rgba(31,42,68,.18);--mc:#f7f4ee;--mg:rgba(110,98,76,.06);--mv:rgba(150,180,214,.85);--mct:rgba(110,98,76,.22);--mtx:#4d4a42;--mbody:#3a3730;
   position:absolute;inset:0;z-index:5;background:var(--mp);color:var(--mi);animation:vIn .4s cubic-bezier(.2,.7,.2,1)}
 .vesper[data-look="night"] .v-map{--mps:0 14px 30px rgba(0,0,0,.45);--mp:#12161f;--mi:#dfe3ea;--mm:#7f8899;--mr:#d58c5e;--ml:rgba(200,210,230,.14);--mc:#181d28;--mg:rgba(200,210,230,.04);--mv:rgba(120,150,200,.55);--mct:rgba(200,210,230,.10);--mtx:#aab2c0;--mbody:#c9cfda}
-.v-map-head{position:absolute;top:var(--s-top);left:20px;height:60px;z-index:6;display:flex;align-items:center}
+/* 返回键、邮票样式不动，只和其它页的胶囊对齐：返回键中线在 s-top+34（胶囊 s-top+12 起、44 高），邮票顶边和胶囊顶边齐（skin-checklist 3d） */
+.v-map-head{position:absolute;top:calc(var(--s-top) + 4px);left:16px;height:60px;z-index:6;display:flex;align-items:center}
 .v-shelf-head .v-gchip{width:44px;height:44px;border-radius:50%}
 .v-map-head .v-rd-btn{background:var(--mc)!important;border-color:var(--ml)!important;color:var(--mi)!important}
-.v-map-stamp{position:absolute;right:22px;top:calc(var(--s-top) + 10px);z-index:5;width:44px;height:50px;border:1.5px solid var(--mi);outline:1px solid var(--ml);outline-offset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--mi)}
+.v-map-stamp{position:absolute;right:20px;top:calc(var(--s-top) + 12px);z-index:5;width:44px;height:50px;border:1.5px solid var(--mi);outline:1px solid var(--ml);outline-offset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--mi)}
 .v-map-stamp .ink{fill:var(--mi)}.v-map-stamp .paper{fill:var(--mp)}
 .v-map-stamp b{font-size:10px;font-weight:600;line-height:1}
 .v-map-stamp span{font-family:var(--v-sans);font-size:5.5px;letter-spacing:.1em}
