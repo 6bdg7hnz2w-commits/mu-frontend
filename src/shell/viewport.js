@@ -112,19 +112,33 @@ export function useKeyboardOpen(setKeyboardOpen) {
     const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
     // 聚焦着的输入框整个被拿掉（查找页什么都没搜、键盘开着就按返回）：iOS Safari 不发 focusout，
     // kb-open、tab-hidden 会一直挂着。输入框聚焦期间盯着 DOM，它不在了就当键盘关了
-    let field = null
+    let field = null, dogT = 0, bgStale = false
     const mo = new MutationObserver(() => { if (field && !field.isConnected) { field = null; mo.disconnect(); setKeyboardOpen(false) } })
     const onFocusIn = (e) => {
       if (!isField(e.target)) return
       setKeyboardOpen(true)
       if (!field) mo.observe(document.body, { childList: true, subtree: true })
-      field = e.target; kbSeen = false
+      field = e.target
+      // 从一个输入框点到另一个：键盘一直在、visualViewport 不再变，聚焦这一刻就看它在不在。
+      // 刚回前台它还报着旧的键盘高度，等它真的 resize 过一次（bgStale 清掉）再信
+      kbSeen = !bgStale && !!vv && vv.height < document.documentElement.getBoundingClientRect().height - 150
+      // 看门狗：iOS 会自己把焦点还给输入框却不弹键盘（回前台、IME 拼音没选字就点 ✓、点空白处收键盘之后），
+      // kb-open、tab-hidden 挂着，再点输入框也不弹。聚焦后 0.7s 键盘还没升起来过，就当没聚焦：blur 掉、tab 回来。
+      // 正常点输入框键盘 0.3s 内就上来了（真机读数），不受影响；电脑上没有屏幕键盘，不看（skin-checklist 9c）
+      clearTimeout(dogT)
+      if (navigator.maxTouchPoints > 0) dogT = setTimeout(() => {
+        if (field !== e.target || kbSeen) return
+        // 刚回前台 visualViewport 可能还报着旧的键盘高度，真键盘升起来要是正好一样高就不会再 resize：这时看不出来，不动手
+        if (bgStale && vv && vv.height < document.documentElement.getBoundingClientRect().height - 150) { kbLog('focus, vv stale, skip'); return }
+        kbLog('focus without keyboard → blur'); unstick()
+      }, 700)
     }
     // 键盘被收了但输入框还聚焦着（下滑收键盘、切后台），iOS 不发 focusout，kb-open、tab-hidden 一直挂着。
     // 所以还要看键盘真的在不在：聚焦后量到过键盘（visualViewport 比 html 矮 150 以上），后来又没了，就当关了，
     // 顺手 blur，再点输入框会重新 focusin、弹键盘（skin-checklist 第 9c 条）
     const vv = window.visualViewport
     const onVv = () => {
+      bgStale = false
       if (!field) return
       const up = vv.height < document.documentElement.getBoundingClientRect().height - 150
       if (up) { kbSeen = true; return }
@@ -136,7 +150,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     }
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
-    const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) { field = null; mo.disconnect(); setKeyboardOpen(false) } }, 50) }
+    const onFocusOut = (e) => { if (isField(e.target)) setTimeout(() => { if (!isField(document.activeElement)) { field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false) } }, 50) }
     // 键盘开着切到后台：系统把键盘收了，回来时输入框还是 activeElement、不发 focusout，kb-open、tab-hidden 一直挂着（聊天页 tab 栏没了）。
     // 切走时就把输入框 blur 掉、当键盘关了；回来时焦点不在输入框上，也就不会再被当成键盘开着（见 docs/skin-checklist.md 第 9c 条）
     // 回到前台时 iOS 有时自己把焦点还给输入框，但不弹键盘（真机 iOS 27）：kb-open、tab-hidden 挂着，再点输入框也不弹，
@@ -155,13 +169,13 @@ export function useKeyboardOpen(setKeyboardOpen) {
       if (document.visibilityState === 'visible') { visT.splice(0, 4, setTimeout(unstick, 300), setTimeout(unstick, 800), setTimeout(unstick, 1500), setTimeout(unstick, 3000)); return }
       if (document.visibilityState !== 'hidden') return
       if (isField(document.activeElement)) document.activeElement.blur()
-      field = null; mo.disconnect(); setKeyboardOpen(false)
+      field = null; kbSeen = false; bgStale = true; mo.disconnect(); setKeyboardOpen(false) // kbSeen 也要清：不清的话回来 iOS 偷偷恢复焦点时还以为键盘在，unstick 不动手（#81 失效的原因）
     }
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
     document.addEventListener('visibilitychange', onVisibility)
     vv?.addEventListener('resize', onVv)
-    return () => { mo.disconnect(); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
+    return () => { mo.disconnect(); clearTimeout(dogT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
   }, [setKeyboardOpen])
 }
 

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { CcLimitedNotice, useCcUsageBrief } from '../../Usage'
 import { loadDraftFiles, saveDraftFiles } from '../../draftFiles.js'
 import { usePreventPageScroll } from '../preventScroll.js'
+import { keyboardShown } from '../viewport.js'
 import { I, useChatSwipeBack, useSwipeBack } from '../../App.jsx'
 import { API, CC_SESSION, SH_TZ, apiFetch, getDraft, getPasscode, lockApp, setDraftStorage } from '../data.js'
 import { VoiceAwareContent, estimateVoiceDurations, useVoicePlayer } from './voice.jsx'
@@ -1229,6 +1230,11 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 手指一开始往上推（往新消息那边滚）就不算；只认一根手指、竖着的拖
   const listSwipe = useRef(null)
   const swipeBlurAt = useRef(0) // 下拖刚收了键盘：这之后一小会儿里冒出来的 focus 不是她点的（列表在动、iOS 自己聚焦回去），再收一次，键盘不弹回
+  // 点空白处收键盘：iOS 收起后有时又自己聚焦回去、键盘弹回来。和下拖一样记下时刻，之后 0.6s 里冒出来的 focus 再收一次
+  const onListTap = () => {
+    if (document.activeElement === textareaRef.current || keyboardShown()) { swipeBlurAt.current = Date.now(); textareaRef.current?.blur() }
+    closePanels()
+  }
   const onListTouchEnd = (e) => { if (!e.touches.length) listTouchingRef.current = false }
   const onListTouchStart = (e) => { listTouchingRef.current = true; const t = e.touches[0]; listSwipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, done: false } : null }
   const onListTouchMove = (e) => {
@@ -1590,7 +1596,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
 
       <CcLimitedNotice brief={usageBrief} en={say(false, true)} />
       {compacting && <div className="cc-compacting" role="status" aria-label={say('正在压缩', 'Compacting')}>compacting<span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span><span className="cc-compacting-dot">.</span></div>}
-      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={() => closePanels()} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove} onTouchEnd={onListTouchEnd} onTouchCancel={onListTouchEnd}>
+      <div className="messages" ref={listRef} onScroll={onListScroll} onClick={onListTap} onTouchStart={onListTouchStart} onTouchMove={onListTouchMove} onTouchEnd={onListTouchEnd} onTouchCancel={onListTouchEnd}>
         {/* 还有更早的就一直占着这一格（高度固定），加载时只换里面的字，出现、消失都不推动下面的消息 */}
         {hasMore && messages.length > 0 && <div className="cc-older">{loadingMore ? 'Loading…' : ''}</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
