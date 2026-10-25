@@ -102,6 +102,11 @@ export function useVisibleHeight(ref) {
 }
 
 // ─── Global focus-based keyboard/tab-bar visibility ──
+// 这次聚焦以后键盘真的升起来过没有（visualViewport 变矮过）。回前台时 iOS 会自己把焦点还给输入框、不弹键盘，
+// 光标还放在最前面；这时 activeElement 是输入框，但键盘不在。preventScroll.js 的点按据此决定要不要重新聚焦（skin-checklist 9c）
+let kbSeen = false
+export const keyboardShown = () => kbSeen
+
 export function useKeyboardOpen(setKeyboardOpen) {
   useEffect(() => {
     const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
@@ -113,20 +118,19 @@ export function useKeyboardOpen(setKeyboardOpen) {
       if (!isField(e.target)) return
       setKeyboardOpen(true)
       if (!field) mo.observe(document.body, { childList: true, subtree: true })
-      field = e.target; seen = false
+      field = e.target; kbSeen = false
     }
     // 键盘被收了但输入框还聚焦着（下滑收键盘、切后台），iOS 不发 focusout，kb-open、tab-hidden 一直挂着。
     // 所以还要看键盘真的在不在：聚焦后量到过键盘（visualViewport 比 html 矮 150 以上），后来又没了，就当关了，
     // 顺手 blur，再点输入框会重新 focusin、弹键盘（skin-checklist 第 9c 条）
-    let seen = false
     const vv = window.visualViewport
     const onVv = () => {
       if (!field) return
       const up = vv.height < document.documentElement.getBoundingClientRect().height - 150
-      if (up) { seen = true; return }
-      if (!seen) return
+      if (up) { kbSeen = true; return }
+      if (!kbSeen) return
       const el = field
-      field = null; seen = false; mo.disconnect(); setKeyboardOpen(false)
+      field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
       kbLog('kb gone while focused → blur')
       if (document.activeElement === el) el.blur()
     }
@@ -140,9 +144,9 @@ export function useKeyboardOpen(setKeyboardOpen) {
     const visT = []
     const unstick = () => {
       const el = document.activeElement
-      if (!isField(el) || (vv && vv.height < document.documentElement.getBoundingClientRect().height - 150)) return
+      if (!isField(el) || kbSeen) return // 不用 visualViewport 判断：回前台时它还报着旧的键盘高度
       kbLog(`back: ${el.tagName} focused, no keyboard → blur`)
-      field = null; seen = false; mo.disconnect(); setKeyboardOpen(false)
+      field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
       el.blur()
     }
     const onVisibility = () => {
@@ -181,7 +185,7 @@ export function keepAboveKeyboard(card) {
 
 // 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走：
 // 键盘上面那条工具栏是半透明的，透出来的就是 html 的底色，浅色页面得是浅的，深色页面才用深的。皮肤卸下时还原。
-export function usePageChrome(color) {
+export function usePageChrome(color, scheme) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
@@ -195,9 +199,10 @@ export function usePageChrome(color) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = color
-    // color-scheme 只放在皮肤自己的外框上（.vesper 按白天 / 夜间写），html、body 都是 light dark：
-    // Safari 算 prefers-color-scheme 时会看文档这一层声明支持哪种，写成只支持 light（html 或 body）它就一直答"浅色"，
-    // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。键盘、输入框在外框里面，照样跟页面
-    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = 'light dark' })
-  }, [color])
+    // color-scheme 不写在 html 上：Safari 判断 prefers-color-scheme 时看根元素声明支持哪种，只写 light 它就一直答"浅色"，
+    // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。写在 body / #root 上，键盘、输入框照样跟页面
+    document.documentElement.style.background = color
+    document.documentElement.style.colorScheme = 'light dark'
+    ;[document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
+  }, [color, scheme])
 }

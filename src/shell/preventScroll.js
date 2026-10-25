@@ -1,3 +1,4 @@
+import { keyboardShown } from './viewport.js'
 import { useEffect } from 'react'
 
 // ─── 不让 iOS 去滚整个页面 ────────────────────────────
@@ -59,7 +60,10 @@ function install() {
   const onEnd = (e) => {
     const t = e.target
     if (!start || start.moved || e.changedTouches.length !== 1) return
-    if (!opensKeyboard(t) || document.activeElement === t) return
+    if (!opensKeyboard(t)) return
+    // 已经聚焦、键盘也在：照常（点哪光标到哪）。已经聚焦但键盘不在（回前台时 iOS 自己恢复的焦点）：
+    // 系统不会再弹键盘，先 blur 再在这次点按里重新聚焦，光标放到最后接着打（skin-checklist 9c）
+    if (document.activeElement === t) { if (keyboardShown()) return; t.blur() }
     e.preventDefault()
     t.focus({ preventScroll: true })
     if (typeof t.setSelectionRange === 'function' && t.type !== 'number' && t.type !== 'email') {
