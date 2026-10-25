@@ -112,7 +112,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     const isField = (el) => el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
     // 聚焦着的输入框整个被拿掉（查找页什么都没搜、键盘开着就按返回）：iOS Safari 不发 focusout，
     // kb-open、tab-hidden 会一直挂着。输入框聚焦期间盯着 DOM，它不在了就当键盘关了
-    let field = null, dogT = 0, bgStale = false
+    let field = null, dogT = 0, goneT = 0, goneAt = 0, bgStale = false
     const mo = new MutationObserver(() => { if (field && !field.isConnected) { field = null; mo.disconnect(); setKeyboardOpen(false) } })
     const onFocusIn = (e) => {
       if (!isField(e.target)) return
@@ -137,16 +137,28 @@ export function useKeyboardOpen(setKeyboardOpen) {
     // 所以还要看键盘真的在不在：聚焦后量到过键盘（visualViewport 比 html 矮 150 以上），后来又没了，就当关了，
     // 顺手 blur，再点输入框会重新 focusin、弹键盘（skin-checklist 第 9c 条）
     const vv = window.visualViewport
+    // 截屏那一下 iOS 会把 visualViewport 报成整屏（键盘其实还在，真机日志只有一行 kb gone、没有 hidden）。
+    // 所以看到键盘没了先等 0.6s：期间高度又变回有键盘的样子就当没事；还是整屏才 blur（skin-checklist 9c）
     const onVv = () => {
       bgStale = false
       if (!field) return
       const up = vv.height < document.documentElement.getBoundingClientRect().height - 150
-      if (up) { kbSeen = true; return }
-      if (!kbSeen) return
+      if (goneT) kbLog(`vv ${Math.round(vv.height)} @${Date.now() - goneAt}ms`)
+      if (up) {
+        kbSeen = true
+        if (goneT) { clearTimeout(goneT); goneT = 0; kbLog(`kb back after ${Date.now() - goneAt}ms → keep`) }
+        return
+      }
+      if (!kbSeen || goneT) return
       const el = field
-      field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
-      kbLog('kb gone while focused → blur')
-      if (document.activeElement === el) el.blur()
+      goneAt = Date.now()
+      goneT = setTimeout(() => {
+        goneT = 0
+        if (field !== el || vv.height < document.documentElement.getBoundingClientRect().height - 150) return
+        field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
+        kbLog('kb gone 0.6s while focused → blur')
+        if (document.activeElement === el) el.blur()
+      }, 600)
     }
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
@@ -190,7 +202,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     document.addEventListener('focusout', onFocusOut)
     document.addEventListener('visibilitychange', onVisibility)
     vv?.addEventListener('resize', onVv)
-    return () => { mo.disconnect(); clearTimeout(dogT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
+    return () => { mo.disconnect(); clearTimeout(dogT); clearTimeout(goneT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
   }, [setKeyboardOpen])
 }
 
