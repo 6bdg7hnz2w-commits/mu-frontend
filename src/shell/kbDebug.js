@@ -109,7 +109,19 @@ function show() {
     btn('Clear', () => { traces.length = logs.length = 0; render() }),
     btn('Hide', () => toggle(false)),
   )
-  box.append(live, list, row)
+  // 试 iOS 27 顶边效果、键盘工具栏各自取哪一层的颜色：每个按钮只把一层换成测试色，弹键盘截图对照（skin-checklist 6）
+  const probe = document.createElement('div')
+  probe.style.cssText = 'margin-top:6px;pointer-events:auto'
+  const paint = (el, c) => el && el.style.setProperty('background', c, 'important')
+  const meta = () => document.querySelector('meta[name="theme-color"]')
+  probe.append(
+    btn('html red', () => paint(document.documentElement, '#ff0000')),
+    btn('body green', () => paint(document.body, '#00c000')),
+    btn('root blue', () => paint(document.getElementById('root'), '#0050ff')),
+    btn('theme yellow', () => { const m = meta(); if (m) m.content = '#ffd000' }),
+    btn('Reset', () => location.reload()),
+  )
+  box.append(live, list, row, probe)
   document.body.append(box)
   render()
   loop()
