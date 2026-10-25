@@ -199,7 +199,7 @@ export function keepAboveKeyboard(card) {
 
 // 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走：
 // 键盘上面那条工具栏是半透明的，透出来的就是 html 的底色，浅色页面得是浅的，深色页面才用深的。皮肤卸下时还原。
-export function usePageChrome(color, scheme) {
+export function usePageChrome(color) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
@@ -213,6 +213,10 @@ export function usePageChrome(color, scheme) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = color
-    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
-  }, [color, scheme])
+    // color-scheme 只放在皮肤自己的外框上（.vesper 按白天 / 夜间写），html、body 都是 light dark：
+    // Safari 算 prefers-color-scheme 时会看文档这一层声明支持哪种，写成只支持 light（html 或 body）它就一直答"浅色"，
+    // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。键盘、输入框在外框里面，照样跟页面。
+    // 另外 iOS 27 的系统顶边效果按文档声明的深浅上色：html 写死 dark 时开屏、首页状态栏下面会多一条黑（10/25 真机）
+    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = 'light dark' })
+  }, [color])
 }
