@@ -145,7 +145,8 @@ export function Composer({ passcode, rec, notice, onClearNotice, pending, onReor
         <input ref={fileInputRef} type="file" accept={fileAccept} multiple onChange={onPickFiles} style={{ display: 'none' }} />
         <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: 'none' }} />
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={onPickImages} style={{ display: 'none' }} />
-        {((!rec.voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onClick={onSend} disabled={!passcode}>{I.send}</button>}
+        {/* 点发送不抢输入框的焦点，键盘不收（skin-checklist 9d）：触屏在 touchend 里拦掉默认（不再有 click、焦点不动）直接发；鼠标拦 mousedown */}
+        {((!rec.voiceMode && input.trim()) || pending.length > 0) && <button className="send-btn" onMouseDown={e => e.preventDefault()} onTouchEnd={e => { if (!passcode) return; e.preventDefault(); onSend() }} onClick={onSend} disabled={!passcode}>{I.send}</button>}
       </div>
       {attachOpen && (
         <div className="cc-attach-menu" {...panelFromProps(panelFrom)}>
