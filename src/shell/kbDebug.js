@@ -149,7 +149,7 @@ export function kbNote(msg) {
 export const kbDebugOn = () => !!box
 export function kbLog(msg) {
   if (!box) return
-  logs.push(msg); if (logs.length > 10) logs.shift()
+  logs.push(msg); if (logs.length > 30) logs.shift()
   render()
 }
 
