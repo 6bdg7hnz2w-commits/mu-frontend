@@ -46,7 +46,15 @@ function useMode() {
 
 // 状态栏、html 底色跟着页面走（shell/viewport.js 的 usePageChrome）：浅色页面用浅的，夜间、Home 壁纸用深的。字体是 Vesper 自己的
 const FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif+SC:wght@300;400;500&family=LXGW+WenKai+TC&display=swap'
-const CHROME = { night: '#0a0c11', home: '#000000', day: '#f1f3f7' }
+// html / body 的底色。iOS 27 的系统顶边效果（状态栏下面那层渐变 + 轻模糊）拿它上色，所以它要和页面顶上实际显示的颜色一样，
+// 不然开屏、首页顶上一条黑，浅色聊天页名字上面一片白（skin-checklist 第 3c 条）。
+// 首页、聊天页是壁纸顶上那一截叠了滤镜 / 蒙版之后的平均色；开屏是开屏的底色；其它页面是页面底色（键盘上那条工具栏也透出它，第 6 条）
+const CHROME = {
+  day: '#f1f3f7', night: '#0a0c11',
+  home: '#4b628f', homeNight: '#2b354b',
+  chat: '#afa7be', chatNight: '#24222f',
+  splash: '#66799e', splashNight: '#000000',
+}
 function useVesperFonts() {
   useEffect(() => {
     if (document.getElementById('vesper-fonts')) return // index.html 已经加了（打开就是 Vesper 时）
@@ -161,7 +169,7 @@ function vesperReady() {
 }
 
 // 打开时和画布一样先亮一下星光：至少 1.25 秒，字体和壁纸都到了再整页淡入，淡完撤掉
-function Splash() {
+function Splash({ onDone }) {
   const [out, setOut] = useState(false)
   const [gone, setGone] = useState(false)
   useEffect(() => {
@@ -169,7 +177,7 @@ function Splash() {
     const min = new Promise(r => setTimeout(r, 1250))
     Promise.all([min, vesperReady()]).then(() => {
       if (!alive) return
-      setOut(true); b = setTimeout(() => setGone(true), 750)
+      setOut(true); onDone?.(); b = setTimeout(() => setGone(true), 750)
     })
     return () => { alive = false; clearTimeout(b) }
   }, [])
@@ -188,10 +196,17 @@ export default function VesperApp() {
   const [lockExpired, setLockExpired] = useState(false)
   const shell = useTabShell() // 外框、键盘、tab 栏收起（shell/TabShell.jsx）
   useVesperFonts()
-  const chrome = look === 'night' ? CHROME.night : tab === 'home' && !immersive ? CHROME.home : CHROME.day
+  const [chatRoom, setChatRoom] = useState(true) // Chats 里是在聊天页本身（不是对话列表、二级页）
+  const [splashOn, setSplashOn] = useState(true)
+  const night = look === 'night'
+  const chrome = splashOn ? (night ? CHROME.splashNight : CHROME.splash)
+    : tab === 'home' && !immersive ? (night ? CHROME.homeNight : CHROME.home)
+    : tab === 'chat' && chatRoom && !chatUsage && !chatSub ? (night ? CHROME.chatNight : CHROME.chat)
+    : night ? CHROME.night : CHROME.day
   usePageChrome(chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
+  const onChatRoom = useCallback((v) => setChatRoom(v), [])
   // Chats 里 Clawd 自己有左滑返回，这里不再叠一层
   const swipe = useEdgeSwipe(() => { if (tab === 'more' && moreView) setMoreView(null); else if (chatUsage) setChatUsage(false) })
 
@@ -214,7 +229,7 @@ export default function VesperApp() {
       {/* 一级页（Home / Calendar / More）顶上：滑上去的内容到状态栏这里渐进变糊，不和时间叠在一起。只有模糊、不带颜色（不要罩，见 docs/skin-checklist.md） */}
       {!subPage && tab !== 'chat' && <div className="v-top-blur" />}
       {tab === 'home' && <HomeTab onImmersive={onImmersive} />}
-      {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} />}
+      {tab === 'chat' && <ChatTab onUsage={() => setChatUsage(true)} onSubPage={onChatSub} onRoom={onChatRoom} />}
       {tab === 'chat' && chatUsage && <UsagePage onBack={() => setChatUsage(false)} />}
       {tab === 'calendar' && <CalendarTab />}
       {tab === 'more' && <MorePage onOpen={setMoreView} onOpenSetting={() => setMoreView('setting')} />}
@@ -225,7 +240,7 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
-      <Splash />
+      <Splash onDone={() => setSplashOn(false)} />
     </TabShell>
   )
 }

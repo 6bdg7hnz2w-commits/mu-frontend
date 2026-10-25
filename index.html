@@ -12,11 +12,15 @@
         // Vesper 一打开就是 Home：壁纸和 JS 一起开始下，不等 React 跑起来
         // 字体也一样：不等 React，这里就开始下（VesperApp 看到 #vesper-fonts 就不再加）
         if (localStorage.getItem('mu_skin') === 'vesper') {
-          // 全局一个底色：和开屏一样的黑（html、body、theme-color）
+          // 全局一个底色：和开屏的底色一样（白天蓝、夜间黑；html、body、theme-color）。
+          // iOS 27 的系统顶边效果拿 html 底色上色，不一样的话开屏顶上会多一条（skin-checklist 第 3c 条，颜色和 VesperApp 的 CHROME.splash 一致）
+          var m = localStorage.getItem('mu_vesper_mode')
+          var dark = m === 'night' || (m !== 'day' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
+          var bg = dark ? '#000000' : '#66799e'
           var top = document.createElement('style'); top.id = 'vesper-top'
-          top.textContent = 'html:root,html:root body{background:#000}'
+          top.textContent = 'html:root,html:root body{background:' + bg + '}'
           document.head.appendChild(top)
-          document.querySelector('meta[name="theme-color"]').content = '#000000'
+          document.querySelector('meta[name="theme-color"]').content = bg
           ['', '-b3', '-b8', '-b16', '-b30'].forEach(function (b) {
             var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = '/vesper/home-bg' + b + '.webp'; document.head.appendChild(l)
           })
