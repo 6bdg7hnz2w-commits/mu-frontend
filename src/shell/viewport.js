@@ -151,7 +151,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
       }
       if (!kbSeen || goneT) return
       // 截屏：先 window blur（键盘还在），截屏界面接管窗口，iOS 跟着把键盘藏了。这时不动，等 window focus 回来再看（skin-checklist 9c）
-      if (winOff) { kbLog('kb hidden while window blurred → wait for focus'); return }
+      if (winOff) { setKeyboardOpen(false); kbLog('kb hidden while window blurred → tab back, wait for focus'); return } // 键盘已经被藏，tab 栏先回来；焦点等窗口回来再处理
       const el = field
       goneAt = Date.now()
       goneT = setTimeout(() => {
@@ -211,7 +211,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
       winT = setTimeout(() => {
         const el = field
         if (!el || document.activeElement !== el) return
-        if (vv && vv.height < document.documentElement.getBoundingClientRect().height - 150) { kbSeen = true; kbLog('window back, keyboard back → keep'); return }
+        if (vv && vv.height < document.documentElement.getBoundingClientRect().height - 150) { kbSeen = true; setKeyboardOpen(true); kbLog('window back, keyboard back → keep'); return }
         field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
         kbLog('window back, no keyboard → blur')
         el.blur()
