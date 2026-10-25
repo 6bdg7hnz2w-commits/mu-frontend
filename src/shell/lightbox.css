@@ -9,6 +9,11 @@
 .image-lightbox-track::-webkit-scrollbar{display:none}
 .image-lightbox-slide{flex:0 0 100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .image-lightbox-slide img{flex-shrink:0;display:block;will-change:transform;-webkit-touch-callout:none}
-.image-lightbox-overlay.closing .image-lightbox-more,.image-lightbox-overlay.closing .image-lightbox-count{opacity:0;transition:opacity .2s}
+.image-lightbox-overlay.closing .image-lightbox-glass,.image-lightbox-overlay.closing .image-lightbox-count{opacity:0;transition:opacity .2s}
 .image-lightbox-count{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);text-align:center;color:rgba(255,255,255,.75);font-size:13px;letter-spacing:.04em;pointer-events:none}
-.image-lightbox-more{position:absolute;z-index:1;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;color:#fff;background:rgba(255,255,255,.14)}
+/* 返回、三个点：和皮肤顶栏胶囊一样的 44px 玻璃圆，顶边 s-top + 12（skin-checklist 3d / 18）。变量打开时从 .vesper 抄过来，没有就用夜间那套 */
+.image-lightbox-overlay{--v-tabbar:rgba(22,27,38,.55);--v-tbLine:rgba(255,255,255,.1);--v-tbHi:rgba(255,255,255,.14);--v-ink:#e4e8ef}
+.image-lightbox-glass{position:absolute;z-index:1;top:calc(env(safe-area-inset-top,0px) + 12px);width:44px;height:44px;padding:0;border-radius:50%;color:var(--v-ink);background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 6px 18px rgba(10,16,32,.18),0 1px 3px rgba(10,16,32,.08)}
+.image-lightbox-glass:active{background:var(--v-tabbar)}
+.image-lightbox-back{left:16px}.image-lightbox-back svg{width:18px;height:18px;stroke-width:1.6}
+.image-lightbox-more{right:16px}.image-lightbox-more svg{width:18px;height:18px}

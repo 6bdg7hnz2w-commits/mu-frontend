@@ -14,7 +14,8 @@ const LIGHTBOX_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'w
 // items：[{ path?, localUrl?, lb? }]。path 是 bridge 上的图：先用缩略图垫着，滑到附近了再取原图（分享的也是原图）。
 // lb 是聊天里那张缩略图的 data-lb：打开时图从缩略图的位置和大小放大到全屏（FLIP），关的时候缩回去；找不到就原地淡入淡出。
 // 手势照微信：单击关（等 250ms 确认不是双击）、按住往下拖跟手缩小、背景变淡，拖够远松手就关；双指捏合缩放，
-// 双击在点的位置放大到 2 倍、再双击还原；放大以后单指拖着看，这时不左右翻页、往下拖也不关
+// 双击在点的位置放大到 2 倍、再双击还原；放大以后单指拖着看，这时不左右翻页、往下拖也不关。
+// 分享面板开着（以及刚收起的一下）点屏幕只收面板，不关图（skin-checklist 18）
 const LB_MS = 300
 const LB_EASE = 'cubic-bezier(.2,.8,.2,1)'
 const lbThumb = (key) => { try { return key ? document.querySelector(`[data-lb="${CSS.escape(key)}"]`) : null } catch { return null } }
@@ -45,10 +46,14 @@ export function ImageLightbox({ items, index = 0, onClose }) {
   }
   const onFile = useCallback((i, f) => setFiles(prev => ({ ...prev, [i]: f })), [])
   const file = files[at]
+  const sheet = useRef({ open: false, at: 0 }) // 分享面板开着 / 什么时候收起的
   const share = (e) => {
     e.stopPropagation()
+    sheet.current.open = true
     navigator.share({ files: [file] }).catch(() => {}) // 她在面板里取消也会走到 catch，不用提示
+      .finally(() => { sheet.current = { open: false, at: Date.now() } })
   }
+  const sheetBusy = () => sheet.current.open || Date.now() - sheet.current.at < 600
   const cur = () => imgs.current.get(atRef.current)
   const setBg = (o, ms = 0) => { const el = bg.current; if (!el) return; el.style.transition = ms ? `opacity ${ms}ms ease-out` : 'none'; el.style.opacity = String(o) }
   const apply = (ms = 0) => {
@@ -88,6 +93,7 @@ export function ImageLightbox({ items, index = 0, onClose }) {
   const close = () => {
     if (closing.current) return
     closing.current = true
+    chrome.current?.() // html 底色先换回聊天的，顶边效果跟着背景一起淡回去
     const el = cur()
     if (!el) { onClose(); return }
     const now = getComputedStyle(el).transform
@@ -105,29 +111,36 @@ export function ImageLightbox({ items, index = 0, onClose }) {
     setTimeout(end, LB_MS + 250) // 动画事件没来（切到后台之类）也一定关掉
   }
 
+  // 开着的时候 html / body 换成查看器的黑：iOS 27 系统顶边效果取 html 的底色，不换顶上会是聊天壁纸色（skin-checklist 18）。#root 不动（键盘工具栏，第 6 条）
+  const chrome = useRef(null)
+  useLayoutEffect(() => {
+    const els = [document.documentElement, document.body]
+    const prev = els.map(el => el.style.background)
+    els.forEach(el => { el.style.background = '#000' })
+    let done = false
+    chrome.current = () => { if (!done) { done = true; els.forEach((el, i) => { if (el.style.background === 'rgb(0, 0, 0)') el.style.background = prev[i] }) } }
+    return () => chrome.current()
+  }, [])
+  // 顶上两颗玻璃按钮用皮肤自己顶栏胶囊的材质：查看器挂在 body 上拿不到 .vesper 的变量，打开时抄过来
+  useLayoutEffect(() => {
+    const sk = document.querySelector('.vesper'), el = overlay.current
+    if (!sk || !el) return
+    const cs = getComputedStyle(sk)
+    for (const k of ['--v-tabbar', '--v-tbLine', '--v-tbHi', '--v-ink']) { const v = cs.getPropertyValue(k).trim(); if (v) el.style.setProperty(k, v) }
+  }, [])
+
   const tapTimer = useRef(0), lastTap = useRef(null)
   const down = (e) => {
     if (e.target.closest('button') || closing.current) return
     const st = g.current
     st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (st.pts.size === 1) Object.assign(st, { mode: null, p0: { x: e.clientX, y: e.clientY }, t0: Date.now(), base: { ...z.current }, moved: false })
-    if (st.pts.size === 2) {
-      const [a, b] = [...st.pts.values()]
-      Object.assign(st, { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, c0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, base: { ...z.current }, moved: true })
-      clearTimeout(tapTimer.current)
-    }
+    if (st.pts.size === 1) Object.assign(st, { mode: null, p0: { x: e.clientX, y: e.clientY }, t0: Date.now(), base: { ...z.current }, moved: false, sheet: sheetBusy() })
   }
   const move = (e) => {
     const st = g.current
     if (!st.pts.has(e.pointerId) || closing.current) return
     st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (st.mode === 'pinch' && st.pts.size >= 2) {
-      const [a, b] = [...st.pts.values()]
-      const s = Math.min(5, Math.max(0.5, st.base.s * Math.hypot(a.x - b.x, a.y - b.y) / st.d0)) // 捏的时候能缩到 1 倍以下，松手弹回
-      zoomAt({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, s, st.base, st.c0)
-      apply()
-      return
-    }
+    if (st.mode === 'pinch' || st.mode === 'after') return // 捏合走下面的 touch 事件
     const dx = e.clientX - st.p0.x, dy = e.clientY - st.p0.y
     if (!st.moved && Math.hypot(dx, dy) > 8) st.moved = true
     if (!st.moved) return
@@ -147,12 +160,7 @@ export function ImageLightbox({ items, index = 0, onClose }) {
     const st = g.current
     if (!st.pts.has(e.pointerId)) return
     st.pts.delete(e.pointerId)
-    if (st.mode === 'pinch') {
-      if (st.pts.size) return // 还剩一根手指：等它也抬起来
-      if (z.current.s <= 1.02) reset()
-      else { if (z.current.s > 4) zoomAt(st.c0, 4); clampPan(); apply(220); setZoomed(true) }
-      st.mode = null; return
-    }
+    if (st.mode === 'pinch' || st.mode === 'after') { if (!st.pts.size && st.mode === 'after') st.mode = null; return }
     if (st.mode === 'pan') { clampPan(); apply(220); return }
     if (st.mode === 'drag') {
       const dy = e.clientY - st.p0.y, fast = dy > 40 && dy / Math.max(1, Date.now() - st.t0) > 0.6
@@ -161,6 +169,7 @@ export function ImageLightbox({ items, index = 0, onClose }) {
       return
     }
     if (st.moved || e.type === 'pointercancel' || Date.now() - st.t0 > 300) return
+    if (st.sheet || sheetBusy()) return // 这一下是收分享面板的
     // 点了一下：250ms 里又点一下是双击（在点的位置放大到 2 倍 / 还原），不然就是单击，关
     const p = { x: e.clientX, y: e.clientY }, last = lastTap.current
     if (last && Date.now() - last.t < 250 && Math.hypot(p.x - last.x, p.y - last.y) < 30) {
@@ -178,12 +187,46 @@ export function ImageLightbox({ items, index = 0, onClose }) {
   useEffect(() => {
     const el = overlay.current
     if (!el) return
-    const stop = (e) => { if (e.touches?.length > 1 || z.current.s !== 1 || g.current.mode === 'drag') e.preventDefault() }
+    // 捏合用 touch 事件算，不用 pointer：没放大时 track 能横着滚，两根手指一动 iOS 就当成翻页，给 pointer 发 pointercancel，捏合就断了（skin-checklist 18）
+    const mid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 })
+    const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1
+    const tStart = (e) => {
+      if (e.touches.length !== 2 || closing.current) return
+      const st = g.current
+      clearTimeout(tapTimer.current); lastTap.current = null
+      if (st.mode === 'drag') { reset(false); setBg(1) }
+      Object.assign(st, { mode: 'pinch', d0: dist(e.touches), c0: mid(e.touches), base: { ...z.current }, moved: true, sl: track.current?.scrollLeft })
+    }
+    const stop = (e) => {
+      const st = g.current
+      if (st.mode === 'pinch' && e.touches.length >= 2) {
+        e.preventDefault()
+        if (track.current && st.sl != null) track.current.scrollLeft = st.sl // 已经被带着滑了一点就拉回来
+        const s = Math.min(5, Math.max(0.5, st.base.s * dist(e.touches) / st.d0)) // 捏的时候能缩到 1 倍以下，松手弹回
+        zoomAt(mid(e.touches), s, st.base, st.c0)
+        apply(); return
+      }
+      if (e.touches?.length > 1 || z.current.s !== 1 || st.mode === 'drag') e.preventDefault()
+    }
+    const tEnd = (e) => {
+      const st = g.current
+      if (st.mode !== 'pinch' || e.touches.length >= 2) return
+      if (z.current.s <= 1.02) reset()
+      else { if (z.current.s > 4) zoomAt(st.c0, 4); clampPan(); apply(220); setZoomed(true) }
+      st.mode = e.touches.length ? 'after' : null // 还剩一根手指：抬起来之前不拖、不关
+      if (!e.touches.length) st.pts.clear()
+    }
     const noGesture = (e) => e.preventDefault()
+    el.addEventListener('touchstart', tStart, { passive: true })
     el.addEventListener('touchmove', stop, { passive: false })
+    el.addEventListener('touchend', tEnd); el.addEventListener('touchcancel', tEnd)
     el.addEventListener('gesturestart', noGesture)
     el.addEventListener('gesturechange', noGesture)
-    return () => { el.removeEventListener('touchmove', stop); el.removeEventListener('gesturestart', noGesture); el.removeEventListener('gesturechange', noGesture) }
+    return () => {
+      el.removeEventListener('touchstart', tStart); el.removeEventListener('touchmove', stop)
+      el.removeEventListener('touchend', tEnd); el.removeEventListener('touchcancel', tEnd)
+      el.removeEventListener('gesturestart', noGesture); el.removeEventListener('gesturechange', noGesture)
+    }
   }, [])
   // 图一直没出来（取不到）：背景也照样变黑，不卡在透明
   useEffect(() => { const t = setTimeout(() => { if (!opened.current) setBg(1, 200) }, 600); return () => clearTimeout(t) }, [])
@@ -193,7 +236,8 @@ export function ImageLightbox({ items, index = 0, onClose }) {
     <div className={`image-lightbox-overlay${zoomed ? ' zoomed' : ''}`} ref={overlay}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
       <div className="image-lightbox-bg" ref={bg} />
-      {file && <button className="icon-btn image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
+      <button className="icon-btn image-lightbox-glass image-lightbox-back" onClick={(e) => { e.stopPropagation(); close() }} aria-label={say('返回', 'Back')}>{I.back}</button>
+      {file && <button className="icon-btn image-lightbox-glass image-lightbox-more" onClick={share} aria-label={say('分享或存储图像', 'Share or save image')}>{I.more}</button>}
       <div className="image-lightbox-track" ref={track} onScroll={onScroll}>
         {items.map((img, i) => <LightboxSlide key={img.path || img.localUrl || i} img={img} near={Math.abs(i - at) <= 1}
           onFile={f => onFile(i, f)} imgRef={el => { if (el) imgs.current.set(i, el); else imgs.current.delete(i) }}
