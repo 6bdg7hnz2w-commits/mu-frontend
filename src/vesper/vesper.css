@@ -506,13 +506,14 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 /* 聊天顶栏：浮在消息上面的玻璃，往下渐进变透明——两层模糊，上面那层更重、先淡掉；不带颜色 */
 .v-chat .chatroom-header{padding:calc(var(--s-top) + 4px) 10px 4px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
-.v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;padding-bottom:26px}
-/* 两层模糊不放在顶栏里面（顶栏的 ::before/::after 会让名字和模糊层合成在一起，iOS 上字边发糊），放在 .cc-room 上、垫在顶栏（z 3）下面；高度 = 顶栏高度：上边距 s-top+4、按钮 36、下边距 26（见 skin-checklist 第 3b 条） */
-.v-chat .cc-room::before,.v-chat .cc-room::after{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 66px);z-index:2;pointer-events:none}
+/* 顶栏比一般页面低 16px：iOS 系统自己在状态栏下面画一层边缘效果（白渐变 + 轻模糊，CSS 管不到），名字和返回键离顶太近会被它糊掉（skin-checklist 3b） */
+.v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;padding-top:calc(var(--s-top) + 20px);padding-bottom:26px}
+/* 两层模糊不放在顶栏里面（顶栏的 ::before/::after 会让名字和模糊层合成在一起，iOS 上字边发糊），放在 .cc-room 上、垫在顶栏（z 3）下面；高度 = 顶栏高度：上边距 s-top+20、按钮 36、下边距 26（见 skin-checklist 第 3b 条） */
+.v-chat .cc-room::before,.v-chat .cc-room::after{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 82px);z-index:2;pointer-events:none}
 /* 只模糊、不带颜色：以前这里垫了一层 --v-bg → --vc-head 的渐变，等于给状态栏加了罩（skin-checklist 第 5 条） */
 .v-chat .cc-room::before{backdrop-filter:blur(10px) saturate(1.5);-webkit-backdrop-filter:blur(10px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
 .v-chat .cc-room::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
-.v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 60px)}
+.v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 76px)}
 .v-chat .cc-room .chatroom-name{font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 /* 连接状态：名字右边的小圆点。连接中黄点轻轻呼吸，连上了绿点亮一会儿淡掉，断开是暗红点；不占位、不推动消息列表 */
 .v-chat .cc-name-wrap{position:relative;display:inline-block}
