@@ -210,6 +210,12 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **现象**：聊天背景是按外框高度铺的，键盘起落、面板开合时背景跟着变。
 - **正确做法**（1a1177d）：`useVisibleHeight` 每次把 html 高度记成 `--s-full`，背景层的高度写死成它，超出部分被外框裁掉。键盘、面板变化时只有消息区在变。现在这层是 shell 的 `ChatWall`（`shell/chat/wall.css`），新皮肤直接用。
 
+### 3b. 聊天顶栏的名字发糊
+- **现象**：聊天页顶栏的 “Soren” 字边不清楚；首页顶栏的字是清楚的。
+- **原因**：顶栏的两层模糊（backdrop-filter）写在顶栏自己的 `::before` / `::after` 上，和名字在同一个层叠上下文里。iOS 会把模糊层单独合成，盖在它上面的名字也被拉进合成层一起画，字边变软。首页的模糊是单独的兄弟元素 `.v-top-blur`，字不在它里面，所以清楚。
+- **正确做法**：模糊只放在背景层，和文字分开：两层模糊挪到 `.cc-room::before` / `::after`（z-index 2，高度 = 顶栏高度 `--s-top + 66px`），顶栏（z-index 3）本身不带任何 backdrop-filter / filter / opacity / transform。改顶栏的上下边距时，这个高度要一起改。
+- 以后加玻璃效果也一样：文字永远不要放在带 backdrop-filter / filter 的元素里面，也不要放在一直挂着 transform、opacity 动画的元素里。
+
 ---
 
 ## 二、状态栏
@@ -316,6 +322,13 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **原因**：查找页没词时输入框 autoFocus，键盘开着。按返回，这个还聚焦着的输入框整个被 React 拿掉，iOS Safari 不发 `focusout`，`useKeyboardOpen` 的 kb-open 一直是 true，tab 栏一直收着。搜过的时候一般先收了键盘，focusout 正常发了。
 - **正确做法**（`shell/viewport.js` 的 `useKeyboardOpen`）：输入框聚焦期间用 MutationObserver 盯着 DOM，它 `isConnected` 变成 false 就当键盘关了。
 - 本地 Chrome 复现不了：浏览器面板在后台时 autoFocus 不发 focus 事件。验证时手动派发 focusin 再 remove 输入框，看 kb-open 有没有掉。
+
+### 9c. 用着用着聊天页 tab 栏没了（切到后台再回来）
+- **现象**：聊天页本该一直有底部 tab 栏，用一阵子就没了，切到后台再回来尤其容易出现。
+- **原因**：键盘开着时切到后台，系统把键盘收了，但回来时输入框还是 `document.activeElement`，iOS 不发 `focusout`，kb-open 一直是 true，tab 栏一直收着。和 9b 一样，都是“键盘其实关了，但焦点事件没来”。
+- **正确做法**（`useKeyboardOpen`）：`visibilitychange` 变成 hidden 时，把聚焦着的输入框 `blur()` 掉，直接当键盘关了。回来时焦点不在输入框上，不会再被当成键盘开着。每次前后台切换都会在调试读数里记一行（visible/hidden、activeElement、kb）。
+- 以前为什么不对：`useKeyboardOpen` 只认 focusin / focusout（9b 又补了输入框被拿掉的情况），没管前后台切换。
+- 本地验证：手动派发 focusin，再把 `document.visibilityState` 改成 hidden 派发 visibilitychange，看 kb-open、tab-hidden 有没有掉。
 
 ---
 
