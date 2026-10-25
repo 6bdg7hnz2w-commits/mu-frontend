@@ -503,14 +503,17 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-test{flex-direction:row;align-items:center;flex-wrap:wrap;gap:12px;margin:0}
 .v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:400}
 .v-chat .cc-brain-test-result{padding:0;font-size:13px}
-/* 聊天顶栏：浮在消息上面的玻璃，往下渐进变透明——两层模糊，上面那层更重、先淡掉；最顶上和状态栏同色接上 */
-.v-chat .chatroom-header{padding:calc(var(--s-top) + 4px) 10px 4px;min-height:0;background:none;border-bottom:0;z-index:3}
+/* 聊天顶栏：返回键、名字、菜单各是一块玻璃（材质照底部 tab 栏），不再铺一整条模糊带（skin-checklist 3b）。
+   状态栏那一截单独一层渐进模糊（和一级页的 .v-top-blur 一样，只模糊不加色），滑上去的消息不和时间叠在一起 */
+.v-chat .chatroom-header{padding:calc(var(--s-top) + 6px) 12px 6px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
-.v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;padding-bottom:26px}
-.v-chat .cc-room>.chatroom-header::before,.v-chat .cc-room>.chatroom-header::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none}
-.v-chat .cc-room>.chatroom-header::before{background:linear-gradient(180deg,var(--v-bg) 0%,var(--vc-head) calc(100% - 30px),rgba(0,0,0,0) 100%);backdrop-filter:blur(10px) saturate(1.5);-webkit-backdrop-filter:blur(10px) saturate(1.5);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
-.v-chat .cc-room>.chatroom-header::after{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px));mask-image:linear-gradient(180deg,#000 calc(100% - 40px),transparent calc(100% - 12px))}
-.v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 60px)}
+.v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;pointer-events:none}
+.v-chat .cc-room>.chatroom-header>*{pointer-events:auto}
+.v-chat .cc-room::before{content:'';position:absolute;top:0;left:0;right:0;height:var(--s-top);z-index:2;pointer-events:none;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);-webkit-mask-image:linear-gradient(180deg,#000 40%,transparent);mask-image:linear-gradient(180deg,#000 40%,transparent)}
+.v-chat .cc-room>.chatroom-header .icon-btn,.v-chat .cc-room>.chatroom-header .chatroom-title{background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 8px 22px rgba(10,16,32,.14)}
+.v-chat .cc-room>.chatroom-header .icon-btn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
+.v-chat .cc-room>.chatroom-header .chatroom-title{height:44px;box-sizing:border-box;padding:0 24px;border-radius:999px;display:flex;align-items:center;justify-content:center;justify-self:center}
+.v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 64px)}
 .v-chat .cc-room .chatroom-name{font-style:italic;font-size:22px;font-weight:500;line-height:1.2}
 /* 连接状态：名字右边的小圆点。连接中黄点轻轻呼吸，连上了绿点亮一会儿淡掉，断开是暗红点；不占位、不推动消息列表 */
 .v-chat .cc-name-wrap{position:relative;display:inline-block}

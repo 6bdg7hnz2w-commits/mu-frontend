@@ -1,4 +1,3 @@
-import { keyboardShown } from './viewport.js'
 import { useEffect } from 'react'
 
 // ─── 不让 iOS 去滚整个页面 ────────────────────────────
@@ -44,9 +43,6 @@ function install() {
   let scroller = null, allow = false, start = null
   const onStart = (e) => {
     const t = e.target, p = e.touches[0]
-    // 回前台时 iOS 自己把焦点还给输入框、不弹键盘：这时点它系统不会再弹，同一下点按里 blur 再 focus 也不认（真机）。
-    // 手指一按下就 blur，让它回到“没聚焦”的状态，抬手时走下面最普通的那条：focus + 光标放最后（skin-checklist 9c）
-    if (opensKeyboard(t) && t === document.activeElement && !keyboardShown()) t.blur()
     scroller = scrollParent(t)
     start = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, moved: false } : null
     // 正在选字、拖选区的把手、在已经聚焦的输入框里挪光标：都放行
