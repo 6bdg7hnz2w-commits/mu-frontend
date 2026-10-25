@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { kbNote, kbLog } from './kbDebug.js'
+import { kbNote, kbLog, kbDebugOn } from './kbDebug.js'
 import './viewport.css'
 
 // ─── 视口：键盘、可见高度、状态栏底色 ─────────────────────
@@ -156,9 +156,9 @@ export function useKeyboardOpen(setKeyboardOpen) {
         goneT = 0
         if (field !== el || vv.height < document.documentElement.getBoundingClientRect().height - 150) return
         field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
-        kbLog('kb gone 0.6s while focused → blur')
+        kbLog(`kb gone ${Date.now() - goneAt}ms while focused → blur`)
         if (document.activeElement === el) el.blur()
-      }, 600)
+      }, kbDebugOn() ? 5000 : 600) // 调试面板开着时等 5s，看截屏后键盘、高度到底回不回来
     }
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
@@ -198,11 +198,14 @@ export function useKeyboardOpen(setKeyboardOpen) {
       hiddenAt = Date.now(); gone = false
       visT.splice(0, visT.length, setTimeout(leave, 1000))
     }
+    // 调试：截屏时窗口有没有失焦 / 得焦（面板关着时 kbLog 不记）
+    const onWin = (e) => kbLog(`window ${e.type} · vv ${Math.round(vv?.height ?? 0)} · active ${document.activeElement?.tagName}`)
+    ;['blur', 'focus', 'pagehide', 'pageshow'].forEach(t => window.addEventListener(t, onWin))
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
     document.addEventListener('visibilitychange', onVisibility)
     vv?.addEventListener('resize', onVv)
-    return () => { mo.disconnect(); clearTimeout(dogT); clearTimeout(goneT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
+    return () => { ['blur', 'focus', 'pagehide', 'pageshow'].forEach(t => window.removeEventListener(t, onWin)); mo.disconnect(); clearTimeout(dogT); clearTimeout(goneT); visT.forEach(clearTimeout); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
   }, [setKeyboardOpen])
 }
 
