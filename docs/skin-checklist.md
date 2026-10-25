@@ -250,6 +250,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   3. e233587 / 33921eb / 340d379：状态栏颜色定成 Home 顶上的雾蓝，开屏从同一个颜色渐过去。iOS 多半只在打开那一刻取一次 html 底色，后面不跟着换，越改越乱。
   4. ae5688a：统一在 index.html 写死 `black-translucent`，页面画到状态栏底下。方向对了。
   5. 3f7bc05：觉得浅色页上白字看不清，加了一层暗色遮罩（StatusScrim）。**多余**。
+- **theme-color 在 iPhone 上不起作用**（10/25 查资料确认）：iOS 26 起 Safari 不再用 `theme-color` 给顶栏 / 底栏上色，颜色取 html / body 的背景；页面上显示固定定位元素（弹窗、浮层）时取那个元素的背景（[Apple 论坛 801239](https://developer.apple.com/forums/thread/801239)、[Ben Frain](https://benfrain.com/ios26-safari-theme-color-tab-tinting-with-fixed-position-elements/)、WebKit bug 301756 / 305546）。和 10/25 真机分层试的结果一致（第 6 条）。`usePageChrome` 还写 theme-color 只是给 Android 之类的浏览器；顶色问题别再去改 theme-color 试错。#104 曾让图片查看器也覆盖 theme-color，是多余的，已去掉。
 - **正确做法**（47080ad）：
   - 状态栏在 index.html 写死 `black-translucent`，页面自己画到最上面，各自让出 `env(safe-area-inset-top)`。
   - 主屏幕模式下状态栏的字会**自己随背景变黑/白**，不要加遮罩。
@@ -519,7 +520,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
   - 原因：iOS 27 系统顶边效果取 html 的底色（第 3c 条），查看器开着 html 还是聊天页的颜色。
   - 正确做法：查看器开着时 html / body 换成 `#000`（深浅一样），开始关的那一下换回来；`#root` 不动（第 6 条）。
   - 以前为什么不对：查看器只盖了一层黑的 div，系统顶边那层不看 div。
-  - **（10/25 再补）切 app 回来又变紫**：查看器第一版自己直接改 html 底色，页面这边（`usePageChrome`）一重刷就把它盖回聊天壁纸色。现在查看器调 `overridePageChrome('#000')`，由 `usePageChrome` 记着：开着时它怎么重刷，html / body / theme-color 都是黑，关的时候换回页面当时的颜色。以后盖在页面上的全屏层要自己的顶色，都走这个，别直接写 html 的 style。
+  - **（10/25 再补）切 app 回来又变紫**：查看器第一版自己直接改 html 底色，页面这边（`usePageChrome`）一重刷就把它盖回聊天壁纸色。现在查看器调 `overridePageChrome('#000')`，由 `usePageChrome` 记着：开着时它怎么重刷，html / body 都是黑，关的时候换回页面当时的颜色。以后盖在页面上的全屏层要自己的顶色，都走这个，别直接写 html 的 style。
 - **（10/25）右上三个点看不清**：
   - 现象：白色半透明小圆在亮图上几乎看不见，也和其它页顶栏不一样。
   - 正确做法：返回键 + 三个点都是 44px 玻璃圆，材质同顶栏胶囊（`--v-tabbar` 等），顶边 `s-top + 12`（第 3d 条）。查看器挂在 body 上拿不到 `.vesper` 的变量，打开时从 `.vesper` 的计算样式抄到查看器上；没有 Vesper 就用夜间那套。
