@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { I } from '../App.jsx'
 import { ccImageCache, ccReduceMotion, fetchCcImage, useCcSay } from './chat/CcChat.jsx'
+import { overridePageChrome } from './viewport.js'
 import './lightbox.css'
 
 // ─── ImageLightbox：点开的大图 ─────────────────────
@@ -111,14 +112,13 @@ export function ImageLightbox({ items, index = 0, onClose }) {
     setTimeout(end, LB_MS + 250) // 动画事件没来（切到后台之类）也一定关掉
   }
 
-  // 开着的时候 html / body 换成查看器的黑：iOS 27 系统顶边效果取 html 的底色，不换顶上会是聊天壁纸色（skin-checklist 18）。#root 不动（键盘工具栏，第 6 条）
+  // 开着的时候 html / body / theme-color 换成查看器的黑：iOS 27 系统顶边效果取 html 的底色，不换顶上会是聊天壁纸色。
+  // 交给 usePageChrome 记着（overridePageChrome），切 app 回来页面重刷颜色也还是黑（skin-checklist 18）。#root 不动（键盘工具栏，第 6 条）
   const chrome = useRef(null)
   useLayoutEffect(() => {
-    const els = [document.documentElement, document.body]
-    const prev = els.map(el => el.style.background)
-    els.forEach(el => { el.style.background = '#000' })
+    overridePageChrome('#000')
     let done = false
-    chrome.current = () => { if (!done) { done = true; els.forEach((el, i) => { if (el.style.background === 'rgb(0, 0, 0)') el.style.background = prev[i] }) } }
+    chrome.current = () => { if (!done) { done = true; overridePageChrome(null) } }
     return () => chrome.current()
   }, [])
   // 顶上两颗玻璃按钮用皮肤自己顶栏胶囊的材质：查看器挂在 body 上拿不到 .vesper 的变量，打开时抄过来

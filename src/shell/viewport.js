@@ -200,6 +200,21 @@ export function keepAboveKeyboard(card) {
 // 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走（color）。
 // #root 单独给（under，默认同 color）：键盘弹起时外框缩到键盘上方，键盘和它上面那条半透明工具栏后面露出来的是 #root 的底色，
 // 和顶上系统顶边效果互不影响（10/25 真机分层试过：只有改 #root 工具栏变色，顶上不变；html / body / theme-color 都不影响工具栏，skin-checklist 6）。皮肤卸下时还原。
+// 盖在页面上的全屏层（图片查看器）要自己的顶色：开着时 html / body / theme-color 都用它，页面这边怎么重刷都不变，关了换回页面的（skin-checklist 18）
+let chromeNow = null, chromeOver = null, chromeBare = null
+function paintChrome() {
+  const els = [document.documentElement, document.body]
+  if (!chromeNow) { // 没有皮肤在管（旧皮肤）：直接改，关的时候还原
+    if (chromeOver) { chromeBare ??= els.map(el => el.style.background); els.forEach(el => { el.style.background = chromeOver }) }
+    else if (chromeBare) { els.forEach((el, i) => { el.style.background = chromeBare[i] }); chromeBare = null }
+    return
+  }
+  const c = chromeOver || chromeNow.color
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.content = c
+  els.forEach(el => { el.style.background = c })
+}
+export function overridePageChrome(color) { chromeOver = color || null; paintChrome() }
 export function usePageChrome(color, under = color) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
@@ -207,17 +222,17 @@ export function usePageChrome(color, under = color) {
     const els = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean)
     document.getElementById('vesper-top')?.remove() // index.html 开屏前垫的黑，React 接手后交给这里
     return () => {
+      chromeNow = null
       if (meta && prevMeta != null) meta.content = prevMeta
       els.forEach(el => { el.style.background = ''; el.style.colorScheme = '' })
     }
   }, [])
   useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.content = color
     // color-scheme 只放在皮肤自己的外框上（.vesper 按白天 / 夜间写），html、body 都是 light dark：
     // Safari 算 prefers-color-scheme 时会看文档这一层声明支持哪种，写成只支持 light（html 或 body）它就一直答"浅色"，
     // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。键盘、输入框在外框里面，照样跟页面。
     // 另外 iOS 27 的系统顶边效果按文档声明的深浅上色：html 写死 dark 时开屏、首页状态栏下面会多一条黑（10/25 真机）
     ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = el.id === 'root' ? under : color; el.style.colorScheme = 'light dark' })
+    chromeNow = { color }; paintChrome() // theme-color 和 html / body 的颜色在这里统一上（查看器开着就是它的黑）
   }, [color, under])
 }
