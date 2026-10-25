@@ -69,14 +69,25 @@ export function useVisibleHeight(ref) {
     }
     try { const kb = Number(localStorage.getItem('v_kb_h')); if (kb > 150) css('--s-kb', `${kb}px`) } catch {}
     on()
+    // 切后台时键盘被收掉（useKeyboardOpen 那边会 blur 输入框），这次 visualViewport 的 resize 在后台发不到，
+    // 回来时高度还是有键盘时的，输入栏、tab 栏停在半屏，底下空一大块。回到前台重量一次，再补两次兜底（skin-checklist 9c）
+    const visT = []
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      visT.forEach(clearTimeout)
+      on(); visT.splice(0, 2, setTimeout(on, 150), setTimeout(on, 500))
+    }
     vv.addEventListener('resize', on)
     vv.addEventListener('scroll', on)
     window.addEventListener('scroll', on)
     document.addEventListener('focusout', onBlur)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('pageshow', onVisible)
     return () => {
-      clearTimeout(animT); nudgeT.forEach(clearTimeout)
+      clearTimeout(animT); nudgeT.forEach(clearTimeout); visT.forEach(clearTimeout)
       vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); window.removeEventListener('scroll', on)
       document.removeEventListener('focusout', onBlur)
+      document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('pageshow', onVisible)
       root.classList.remove('v-lock')
     }
   }, [ref])
@@ -94,7 +105,22 @@ export function useKeyboardOpen(setKeyboardOpen) {
       if (!isField(e.target)) return
       setKeyboardOpen(true)
       if (!field) mo.observe(document.body, { childList: true, subtree: true })
-      field = e.target
+      field = e.target; seen = false
+    }
+    // 键盘被收了但输入框还聚焦着（下滑收键盘、切后台），iOS 不发 focusout，kb-open、tab-hidden 一直挂着。
+    // 所以还要看键盘真的在不在：聚焦后量到过键盘（visualViewport 比 html 矮 150 以上），后来又没了，就当关了，
+    // 顺手 blur，再点输入框会重新 focusin、弹键盘（skin-checklist 第 9c 条）
+    let seen = false
+    const vv = window.visualViewport
+    const onVv = () => {
+      if (!field) return
+      const up = vv.height < document.documentElement.getBoundingClientRect().height - 150
+      if (up) { seen = true; return }
+      if (!seen) return
+      const el = field
+      field = null; seen = false; mo.disconnect(); setKeyboardOpen(false)
+      kbLog('kb gone while focused → blur')
+      if (document.activeElement === el) el.blur()
     }
     // 从一个输入框点到另一个：先 focusout 再 focusin，键盘一直开着。50ms 后焦点已经在别的输入框上就不算关，
     // 不然 kb-open、tab-hidden 会闪一下，底部面板的留白跟着变，内容跳一下
@@ -110,7 +136,8 @@ export function useKeyboardOpen(setKeyboardOpen) {
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
     document.addEventListener('visibilitychange', onVisibility)
-    return () => { mo.disconnect(); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility) }
+    vv?.addEventListener('resize', onVv)
+    return () => { mo.disconnect(); document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); document.removeEventListener('visibilitychange', onVisibility); vv?.removeEventListener('resize', onVv) }
   }, [setKeyboardOpen])
 }
 
