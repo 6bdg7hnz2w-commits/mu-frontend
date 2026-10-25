@@ -332,6 +332,7 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - 以前为什么不对：`useKeyboardOpen` 只认 focusin / focusout（9b 又补了输入框被拿掉的情况），没管前后台切换。
 - 本地验证：手动派发 focusin，再把 `document.visibilityState` 改成 hidden 派发 visibilitychange，看 kb-open、tab-hidden 有没有掉。
 - **回前台重量也不够**（10/25 真机 iOS 27 读数）：回来时 `vv 431 · html 852`、焦点在 BODY、kb false——键盘早没了，iOS 的 visualViewport 还报着有键盘时的高度，重量多少次都是错的值。正确做法：切过后台以后（stale），只要没有输入框聚焦，就不信 visualViewport 的矮高度，按整屏排；它自己报回整屏或又点了输入框才恢复。依据：键盘只会在输入框聚焦时出现。
+- **回来后再点输入框不弹键盘**（10/25 真机 iOS 27）：回前台时 iOS 有时自己把焦点还给输入框，但不弹键盘。kb-open、tab-hidden 挂着，输入框已经聚焦，再点也不弹。正确做法：回前台后 0.3s、1s 各查一次，输入框聚焦着但键盘不在就 blur 掉（`useKeyboardOpen` 的 unstick）。
 - **还有一种**（10/25 真机）：不切后台，键盘收起来（下滑收键盘等）以后 tab 也不回来。同样是输入框还聚焦着、没有 focusout。正确做法：`useKeyboardOpen` 也盯 visualViewport 的 resize，聚焦以后量到过键盘、后来键盘没了，就当关了并 blur 输入框（再点会重新弹）。只看焦点判断键盘不可靠，焦点只能当“开”的信号，“关”要以键盘真的不在为准。
 - **跟着出的坑**（#73 之后真机）：键盘在后台被收掉，visualViewport 的 resize 在后台发不到，回来时 `--s-vh` 还是有键盘时的高度：输入栏和 tab 栏停在半屏，底下空一大块。正确做法：`useVisibleHeight` 在 visibilitychange（visible）和 pageshow 时重量一次，150ms、500ms 再补两次。
 
