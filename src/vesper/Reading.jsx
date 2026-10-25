@@ -261,7 +261,7 @@ function Reader({ book, chapters, startChapter, startSheet, progress, onBack }) 
 }
 
 // ─── 书架 ───
-export default function ReadingPage({ onBack, onImmersive }) {
+export default function ReadingPage({ onBack, onImmersive, onReader }) {
   const [books, setBooks] = useState(null)
   const [info, setInfo] = useState({}) // id → { her, mu, total, chapters, progress }
   const [searchOpen, setSearchOpen] = useState(false)
@@ -285,6 +285,9 @@ export default function ReadingPage({ onBack, onImmersive }) {
   }, [loadInfo])
   // 和画布一样：书架和阅读器都铺满整屏，不露底部标签栏
   useEffect(() => { onImmersive?.(true); return () => onImmersive?.(false) }, [onImmersive])
+
+  useEffect(() => { onReader?.(!!open) }, [open, onReader])
+  useEffect(() => () => onReader?.(false), [onReader])
 
   const openBook = (b, sheet) => {
     const i = info[b.id]
