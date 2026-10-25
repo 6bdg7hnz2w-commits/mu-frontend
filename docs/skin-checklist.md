@@ -371,7 +371,9 @@ Vesper 这套皮肤（2026-10-23 起，f1cd353 → 1a1177d）踩过的坑。每�
 - **还有一种**（10/25 真机）：不切后台，键盘收起来（下滑收键盘等）以后 tab 也不回来。同样是输入框还聚焦着、没有 focusout。正确做法：`useKeyboardOpen` 也盯 visualViewport 的 resize，聚焦以后量到过键盘、后来键盘没了，就当关了并 blur 输入框（再点会重新弹）。只看焦点判断键盘不可靠，焦点只能当“开”的信号，“关”要以键盘真的不在为准。
 - **跟着出的坑**（#73 之后真机）：键盘在后台被收掉，visualViewport 的 resize 在后台发不到，回来时 `--s-vh` 还是有键盘时的高度：输入栏和 tab 栏停在半屏，底下空一大块。正确做法：`useVisibleHeight` 在 visibilitychange（visible）和 pageshow 时重量一次，150ms、500ms 再补两次。
 
-- **截屏也收键盘**（10/25 真机）：截屏时页面可能一闪 hidden 又回来，切后台那套 blur 跟着触发。改成离开不到 1s 不算切走；后台计时器可能被 iOS 停住，所以回来时按离开了多久补做（≥1s 才 blur、清 kbSeen）。如果真机截屏还收，看调试面板有没有 `hidden` / `back after …ms` 这两行：没有就说明截屏没触发 visibilitychange，是别的原因。
+- **截屏也收键盘**（10/25 真机）：
+  - 第一次以为截屏会一闪 hidden，把切后台的 blur 改成离开 ≥1s 才做（这条留着，无害）。真机日志没有 hidden，只有一行 `kb gone while focused → blur`：截屏那一下 iOS 把 visualViewport 报成整屏，`onVv` 当键盘被收了，顺手 blur，键盘真收了。
+  - 正确做法：`onVv` 看到键盘没了先等 0.6s，期间高度变回有键盘的样子就算了（日志 `kb back after …ms → keep`），还是整屏才 blur。代价：下滑收键盘后 tab 栏晚 0.6s 回来。等待期间每次高度变化都记日志（`vv … @…ms`），还不行就看这几行。
 
 ### 9d. 发完消息键盘别收
 - **现象**：打完字点发送，键盘跟着收起来，接着打还要再点一次输入框。
