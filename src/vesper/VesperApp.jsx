@@ -54,6 +54,8 @@ const CHROME = {
   home: '#4b628f', homeNight: '#2b354b',
   chat: '#afa7be', chatNight: '#24222f',
   splash: '#66799e', splashNight: '#000000',
+  shelf: '#28405b', shelfNight: '#19293c', // 书架壁纸顶上一截叠了 .v-shelf-shade
+  paper: '#efebe2', paperNight: '#12161f', // 阅读器、记忆地图的纸色
 }
 function useVesperFonts() {
   useEffect(() => {
@@ -198,11 +200,21 @@ export default function VesperApp() {
   useVesperFonts()
   const [chatRoom, setChatRoom] = useState(true) // Chats 里是在聊天页本身（不是对话列表、二级页）
   const [splashOn, setSplashOn] = useState(true)
+  // 键盘收起时别马上换回壁纸色：键盘还在往下落，让出来的那块会先闪一下 html 底色。等它落完再换（skin-checklist 6）
+  const [kbChrome, setKbChrome] = useState(false)
+  const [readerOpen, setReaderOpen] = useState(false) // Reading 里翻开了一本书
+  useEffect(() => {
+    if (shell.keyboardOpen) { setKbChrome(true); return }
+    const t = setTimeout(() => setKbChrome(false), 650)
+    return () => clearTimeout(t)
+  }, [shell.keyboardOpen])
   const night = look === 'night'
   const chrome = splashOn ? (night ? CHROME.splashNight : CHROME.splash)
+    : tab === 'more' && (moreView === 'memory' || (moreView === 'reading' && readerOpen)) ? (night ? CHROME.paperNight : CHROME.paper)
+    : tab === 'more' && moreView === 'reading' ? (night ? CHROME.shelfNight : CHROME.shelf)
     : tab === 'home' && !immersive ? (night ? CHROME.homeNight : CHROME.home)
     // 键盘开着时 iOS 的键盘工具栏、它和输入栏之间那条缝透的是 html 底色：换回接得上输入栏的颜色（skin-checklist 6）
-    : tab === 'chat' && chatRoom && !chatUsage && !chatSub && !shell.keyboardOpen ? (night ? CHROME.chatNight : CHROME.chat)
+    : tab === 'chat' && chatRoom && !chatUsage && !chatSub && !kbChrome ? (night ? CHROME.chatNight : CHROME.chat)
     : night ? CHROME.night : CHROME.day
   usePageChrome(chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
   const onImmersive = useCallback((v) => setImmersive(v), [])
@@ -240,7 +252,7 @@ export default function VesperApp() {
       {tab === 'more' && moreView === 'game' && <GamePage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'memory' && <MemoryPage onBack={() => setMoreView(null)} />}
       {tab === 'more' && moreView === 'album' && <AlbumPage onBack={() => setMoreView(null)} />}
-      {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} />}
+      {tab === 'more' && moreView === 'reading' && <ReadingPage onBack={() => setMoreView(null)} onImmersive={onImmersive} onReader={setReaderOpen} />}
       <Splash onDone={() => setSplashOn(false)} />
     </TabShell>
   )
