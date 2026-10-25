@@ -201,7 +201,8 @@ export default function VesperApp() {
   const night = look === 'night'
   const chrome = splashOn ? (night ? CHROME.splashNight : CHROME.splash)
     : tab === 'home' && !immersive ? (night ? CHROME.homeNight : CHROME.home)
-    : tab === 'chat' && chatRoom && !chatUsage && !chatSub ? (night ? CHROME.chatNight : CHROME.chat)
+    // 键盘开着时 iOS 的键盘工具栏、它和输入栏之间那条缝透的是 html 底色：换回接得上输入栏的颜色（skin-checklist 6）
+    : tab === 'chat' && chatRoom && !chatUsage && !chatSub && !shell.keyboardOpen ? (night ? CHROME.chatNight : CHROME.chat)
     : night ? CHROME.night : CHROME.day
   usePageChrome(chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
   const onImmersive = useCallback((v) => setImmersive(v), [])
