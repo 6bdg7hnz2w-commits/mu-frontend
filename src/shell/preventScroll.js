@@ -44,6 +44,9 @@ function install() {
   let scroller = null, allow = false, start = null
   const onStart = (e) => {
     const t = e.target, p = e.touches[0]
+    // 回前台时 iOS 自己把焦点还给输入框、不弹键盘：这时点它系统不会再弹，同一下点按里 blur 再 focus 也不认（真机）。
+    // 手指一按下就 blur，让它回到“没聚焦”的状态，抬手时走下面最普通的那条：focus + 光标放最后（skin-checklist 9c）
+    if (opensKeyboard(t) && t === document.activeElement && !keyboardShown()) t.blur()
     scroller = scrollParent(t)
     start = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, moved: false } : null
     // 正在选字、拖选区的把手、在已经聚焦的输入框里挪光标：都放行
@@ -61,9 +64,7 @@ function install() {
     const t = e.target
     if (!start || start.moved || e.changedTouches.length !== 1) return
     if (!opensKeyboard(t)) return
-    // 已经聚焦、键盘也在：照常（点哪光标到哪）。已经聚焦但键盘不在（回前台时 iOS 自己恢复的焦点）：
-    // 系统不会再弹键盘，先 blur 再在这次点按里重新聚焦，光标放到最后接着打（skin-checklist 9c）
-    if (document.activeElement === t) { if (keyboardShown()) return; t.blur() }
+    if (document.activeElement === t) return // 已经聚焦、键盘在：照常（点哪光标到哪）
     e.preventDefault()
     t.focus({ preventScroll: true })
     if (typeof t.setSelectionRange === 'function' && t.type !== 'number' && t.type !== 'email') {
