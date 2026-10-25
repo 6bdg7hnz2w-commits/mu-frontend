@@ -163,13 +163,28 @@ export function useKeyboardOpen(setKeyboardOpen) {
       field = null; kbSeen = false; mo.disconnect(); setKeyboardOpen(false)
       el.blur()
     }
+    // 截屏时页面可能一闪 hidden 又马上 visible，键盘其实一直在：离开不到 1s 不算切走，不 blur（skin-checklist 9c）。
+    // 后台的计时器 iOS 可能停着不跑，所以回来时再按离开了多久补做一次
+    let hiddenAt = 0, gone = false
+    const leave = () => {
+      if (gone) return
+      gone = true
+      if (isField(document.activeElement)) document.activeElement.blur()
+      field = null; kbSeen = false; bgStale = true; mo.disconnect(); setKeyboardOpen(false) // kbSeen 也要清：不清的话回来 iOS 偷偷恢复焦点时还以为键盘在，unstick 不动手（#81 失效的原因）
+      kbLog('away ≥1s → blur')
+    }
     const onVisibility = () => {
       kbLog(`${document.visibilityState} · active ${document.activeElement?.tagName} · kb ${!!field}`)
       visT.forEach(clearTimeout)
-      if (document.visibilityState === 'visible') { visT.splice(0, 4, setTimeout(unstick, 300), setTimeout(unstick, 800), setTimeout(unstick, 1500), setTimeout(unstick, 3000)); return }
+      if (document.visibilityState === 'visible') {
+        if (hiddenAt && Date.now() - hiddenAt >= 1000) leave()
+        else if (hiddenAt) kbLog(`back after ${Date.now() - hiddenAt}ms (screenshot?) → keep`)
+        hiddenAt = 0
+        visT.splice(0, visT.length, setTimeout(unstick, 300), setTimeout(unstick, 800), setTimeout(unstick, 1500), setTimeout(unstick, 3000)); return
+      }
       if (document.visibilityState !== 'hidden') return
-      if (isField(document.activeElement)) document.activeElement.blur()
-      field = null; kbSeen = false; bgStale = true; mo.disconnect(); setKeyboardOpen(false) // kbSeen 也要清：不清的话回来 iOS 偷偷恢复焦点时还以为键盘在，unstick 不动手（#81 失效的原因）
+      hiddenAt = Date.now(); gone = false
+      visT.splice(0, visT.length, setTimeout(leave, 1000))
     }
     document.addEventListener('focusin', onFocusIn)
     document.addEventListener('focusout', onFocusOut)
@@ -197,9 +212,10 @@ export function keepAboveKeyboard(card) {
   setTimeout(align, 350); setTimeout(align, 700)
 }
 
-// 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走：
-// 键盘上面那条工具栏是半透明的，透出来的就是 html 的底色，浅色页面得是浅的，深色页面才用深的。皮肤卸下时还原。
-export function usePageChrome(color) {
+// 状态栏是透明的（index.html），页面画到最上面。html / body / theme-color 跟着页面走（color）。
+// #root 单独给（under，默认同 color）：键盘弹起时外框缩到键盘上方，键盘和它上面那条半透明工具栏后面露出来的是 #root 的底色，
+// 和顶上系统顶边效果互不影响（10/25 真机分层试过：只有改 #root 工具栏变色，顶上不变；html / body / theme-color 都不影响工具栏，skin-checklist 6）。皮肤卸下时还原。
+export function usePageChrome(color, under = color) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.content
@@ -217,6 +233,6 @@ export function usePageChrome(color) {
     // Safari 算 prefers-color-scheme 时会看文档这一层声明支持哪种，写成只支持 light（html 或 body）它就一直答"浅色"，
     // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。键盘、输入框在外框里面，照样跟页面。
     // 另外 iOS 27 的系统顶边效果按文档声明的深浅上色：html 写死 dark 时开屏、首页状态栏下面会多一条黑（10/25 真机）
-    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = 'light dark' })
-  }, [color])
+    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = el.id === 'root' ? under : color; el.style.colorScheme = 'light dark' })
+  }, [color, under])
 }
