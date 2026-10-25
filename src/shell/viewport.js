@@ -140,7 +140,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     // 键盘开着切到后台：系统把键盘收了，回来时输入框还是 activeElement、不发 focusout，kb-open、tab-hidden 一直挂着（聊天页 tab 栏没了）。
     // 切走时就把输入框 blur 掉、当键盘关了；回来时焦点不在输入框上，也就不会再被当成键盘开着（见 docs/skin-checklist.md 第 9c 条）
     // 回到前台时 iOS 有时自己把焦点还给输入框，但不弹键盘（真机 iOS 27）：kb-open、tab-hidden 挂着，再点输入框也不弹，
-    // 因为它已经聚焦了。回来后 0.3s、1s 各查一次：输入框聚焦着、键盘却不在，就 blur 掉，再点就是一次正常的聚焦
+    // 因为它已经聚焦了。回来后 0.3s、0.8s、1.5s、3s 各查一次：输入框聚焦着、键盘却不在，就 blur 掉，再点就是一次正常的聚焦
     const visT = []
     const unstick = () => {
       const el = document.activeElement
@@ -152,7 +152,7 @@ export function useKeyboardOpen(setKeyboardOpen) {
     const onVisibility = () => {
       kbLog(`${document.visibilityState} · active ${document.activeElement?.tagName} · kb ${!!field}`)
       visT.forEach(clearTimeout)
-      if (document.visibilityState === 'visible') { visT.splice(0, 2, setTimeout(unstick, 300), setTimeout(unstick, 1000)); return }
+      if (document.visibilityState === 'visible') { visT.splice(0, 4, setTimeout(unstick, 300), setTimeout(unstick, 800), setTimeout(unstick, 1500), setTimeout(unstick, 3000)); return }
       if (document.visibilityState !== 'hidden') return
       if (isField(document.activeElement)) document.activeElement.blur()
       field = null; mo.disconnect(); setKeyboardOpen(false)
@@ -199,10 +199,6 @@ export function usePageChrome(color, scheme) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = color
-    // color-scheme 不写在 html 上：Safari 判断 prefers-color-scheme 时看根元素声明支持哪种，只写 light 它就一直答"浅色"，
-    // Vesper 选 System 时永远换不到深色（skin-checklist 第 21 条）。写在 body / #root 上，键盘、输入框照样跟页面
-    document.documentElement.style.background = color
-    document.documentElement.style.colorScheme = 'light dark'
-    ;[document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
+    ;[document.documentElement, document.body, document.getElementById('root')].filter(Boolean).forEach(el => { el.style.background = color; el.style.colorScheme = scheme })
   }, [color, scheme])
 }
