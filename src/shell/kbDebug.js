@@ -93,7 +93,9 @@ function btn(label, fn) {
 // 试验开关：在 html 上挂一个类名，样式只在这里，用完整段删掉
 const PROBE_CSS = '.kbx-noblur .v-chat .cc-room::before,.kbx-noblur .v-chat .cc-room::after{display:none}' +
   '.kbx-noglass .cc-room .messages *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}' +
-  '.kbx-layer .v-chat .cc-room>.chatroom-header{transform:translateZ(0)}'
+  '.kbx-layer .v-chat .cc-room>.chatroom-header{transform:translateZ(0)}' +
+  // 顶栏整体往下挪 16px：iOS 26 系统自己在状态栏下面画一层边缘效果（白渐变 + 轻模糊），名字在它范围里会糊，挪出来看清不清楚
+  '.kbx-lower .v-chat .cc-room>.chatroom-header{padding-top:calc(var(--s-top) + 20px)}.kbx-lower .v-chat .cc-room::before,.kbx-lower .v-chat .cc-room::after{height:calc(var(--s-top) + 82px)}.kbx-lower .v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 76px)}'
 function probe(label, cls) {
   if (!document.getElementById('kbx-style')) { const st = document.createElement('style'); st.id = 'kbx-style'; st.textContent = PROBE_CSS; document.head.append(st) }
   const b = btn(label, () => { const on = document.documentElement.classList.toggle(cls); b.style.background = on ? '#2a7' : '#444'; kbLog(`${label} ${on ? 'on' : 'off'}`) })
@@ -121,6 +123,7 @@ function show() {
     probe('No blur', 'kbx-noblur'),
     probe('No glass', 'kbx-noglass'),
     probe('Layer', 'kbx-layer'),
+    probe('Lower', 'kbx-lower'),
     btn('Hide', () => toggle(false)),
   )
   box.append(live, list, row)
