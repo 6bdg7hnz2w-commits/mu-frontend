@@ -883,3 +883,7 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 @keyframes vsFlare{0%,35%{opacity:0;transform:scaleX(.1)}100%{opacity:1;transform:scaleX(1)}}
 @keyframes vsFlareV{0%,35%{opacity:0;transform:scaleY(.1)}100%{opacity:1;transform:scaleY(1)}}
 @keyframes vsCore{0%{opacity:0;transform:scale(.3)}100%{opacity:1;transform:scale(1)}}
+/* 键盘开着时：html 底色不换（换了顶上系统顶边效果跟着变色），反过来把输入栏染成和 html 底色（键盘工具栏透出来的颜色）一样，从输入栏到工具栏连成一块（skin-checklist 6） */
+.v-chat .cc-room .composer{transition:background-color var(--s-kbDur) var(--s-kbEase)}
+.vesper.kb-open .v-chat{--s-bar:rgba(175,167,190,.94)}
+.vesper.kb-open[data-look="night"] .v-chat{--s-bar:rgba(36,34,47,.94)}
