@@ -209,7 +209,9 @@ export default function VesperApp() {
     // 键盘开着时 iOS 的键盘工具栏、它和输入栏之间那条缝透的是 html 底色：换回接得上输入栏的颜色（skin-checklist 6）
     : tab === 'chat' && chatRoom && !chatUsage && !chatSub ? (night ? CHROME.chatNight : CHROME.chat)
     : night ? CHROME.night : CHROME.day
-  usePageChrome(chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
+  // #root 单独一色：键盘和工具栏后面露的是它。聊天页 html 是壁纸色（顶上系统顶边效果用），#root 用和输入栏接得上的页底色（skin-checklist 6）
+  const inRoom = !splashOn && tab === 'chat' && chatRoom && !chatUsage && !chatSub
+  usePageChrome(chrome, inRoom ? (night ? CHROME.night : CHROME.day) : chrome) // 日记、读书这些从 Home 打开的浅色页也是浅底
   const onImmersive = useCallback((v) => setImmersive(v), [])
   const onChatSub = useCallback((v) => setChatSub(v), [])
   const onChatRoom = useCallback((v) => setChatRoom(v), [])
