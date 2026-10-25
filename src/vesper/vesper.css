@@ -504,13 +504,13 @@ textarea.v-field{height:auto;padding:12px 14px;line-height:1.6;resize:none;font-
 .v-chat .cc-brain-test-btn{height:38px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:400}
 .v-chat .cc-brain-test-result{padding:0;font-size:13px}
 /* 聊天顶栏：返回键、名字、菜单各是一块玻璃（材质照底部 tab 栏），不再铺一整条模糊带（skin-checklist 3b）。
-   状态栏那一截单独一层渐进模糊（和一级页的 .v-top-blur 一样，只模糊不加色），滑上去的消息不和时间叠在一起 */
+   后面垫一层渐进模糊：状态栏那截最糊，往下渐淡，到胶囊底边正好没了；胶囊浮在上面，阴影压一点底下的气泡。只模糊不加色 */
 .v-chat .chatroom-header{padding:calc(var(--s-top) + 6px) 12px 6px;min-height:0;background:none;border-bottom:0;z-index:3}
 .v-chat .cc-room{position:relative}
 .v-chat .cc-room>.chatroom-header{position:absolute;top:0;left:0;right:0;pointer-events:none}
 .v-chat .cc-room>.chatroom-header>*{pointer-events:auto}
-.v-chat .cc-room::before{content:'';position:absolute;top:0;left:0;right:0;height:var(--s-top);z-index:2;pointer-events:none;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);-webkit-mask-image:linear-gradient(180deg,#000 40%,transparent);mask-image:linear-gradient(180deg,#000 40%,transparent)}
-.v-chat .cc-room>.chatroom-header .icon-btn,.v-chat .cc-room>.chatroom-header .chatroom-title{background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 8px 22px rgba(10,16,32,.14)}
+.v-chat .cc-room::before{content:'';position:absolute;top:0;left:0;right:0;height:calc(var(--s-top) + 56px);z-index:2;pointer-events:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent);mask-image:linear-gradient(180deg,#000 calc(var(--s-top) + 8px),transparent)}
+.v-chat .cc-room>.chatroom-header .icon-btn,.v-chat .cc-room>.chatroom-header .chatroom-title{background:var(--v-tabbar);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);border:1px solid var(--v-tbLine);box-shadow:inset 0 1px 0 var(--v-tbHi),0 6px 18px rgba(10,16,32,.18),0 1px 3px rgba(10,16,32,.08)}
 .v-chat .cc-room>.chatroom-header .icon-btn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
 .v-chat .cc-room>.chatroom-header .chatroom-title{height:44px;box-sizing:border-box;padding:0 24px;border-radius:999px;display:flex;align-items:center;justify-content:center;justify-self:center}
 .v-chat .cc-room>.messages{padding-top:calc(var(--s-top) + 64px)}

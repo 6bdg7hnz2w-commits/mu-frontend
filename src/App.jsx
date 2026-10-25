@@ -332,7 +332,7 @@ function ChatListPage({ onOpenCC }) {
   )
 }
 
-function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage, slideIn }) {
+function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage, onRoom, slideIn }) {
   // 每次切到 Chats 都会重新挂载，所以默认直接进沐；返回进对话列表。都保留 tab 栏
   // 沐右上角 ⋮ 离开聊天页进 menu，里面三个入口各是一整页：search 查找聊天记录 / brain 回复方式 / usage
   const [view, setView] = useState('cc') // cc / list / menu / search / brain / usage
@@ -351,6 +351,8 @@ function ChatPage({ onEnterRoom, lang = 'zh', onUsage, onSubPage, slideIn }) {
   // Vesper 要知道是不是进了二级页（menu / 查找 / 回复方式 / Usage）：二级页收起底部 tab
   useEffect(() => { onSubPage?.(view !== 'cc' && view !== 'list') }, [view, onSubPage])
   useEffect(() => () => onSubPage?.(false), [onSubPage])
+  // Vesper 要知道是不是在聊天页本身（不是对话列表）：html 底色要照壁纸顶上的颜色（iOS 27 系统顶边效果按它上色）
+  useEffect(() => { onRoom?.(view === 'cc') }, [view, onRoom])
   const list = <ChatListPage onOpenCC={() => go('cc')} />
   const room = <CCChatPage key={jumpTo?.n || 'cc'} onBack={() => go('list')} onMenu={() => go('menu')} jumpTo={jumpTo} slideIn={entering} onUnder={slideIn ? setUnder : undefined} />
   const page = view === 'cc' ? <>{under && <div className="cc-under on">{list}</div>}{room}</>
