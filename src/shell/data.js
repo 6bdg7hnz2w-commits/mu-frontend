@@ -21,6 +21,7 @@ function setPasscodeStorage(code) {
 function lockApp() {
   setPasscodeStorage('')
   try { localStorage.removeItem(CC_CACHE_KEY) } catch {} // 锁上了就别在本机留聊天记录
+  try { localStorage.removeItem('cc_history_v1') } catch {} // 换成 v2 以前的旧缓存
   window.dispatchEvent(new Event('mu-lock'))
 }
 async function apiFetch(path, opts = {}) {

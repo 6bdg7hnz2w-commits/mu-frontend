@@ -55,6 +55,8 @@ function ccFromServer(m) {
   // 他调过的工具：排进他那一轮里，几个挨着的合成一行"用了 N 个工具"
   if (m.role === 'system' && m.kind === 'tool') return { key: m.id, role: 'system', kind: 'tool', tool: m.tool, sum: m.sum || '', ok: m.ok !== false, time: m.time, ...seq, ...(typeof m.pid === 'string' ? { pid: m.pid } : {}) }
   if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
+  // 他用 CronCreate 定的闹钟响了（不是从前端发的、以"[闹钟]"开头；bridge 新记的带 alarm: true）：不是她说的话，只画一行小灰字
+  if (m.role === 'user' && (m.alarm === true || (m.via === 'app' && typeof m.text === 'string' && m.text.startsWith('[闹钟]')))) return { key: m.id, role: 'system', kind: 'alarm', time: m.time, ...seq }
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
     ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
@@ -103,6 +105,7 @@ const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)
 // 他同一轮（bridge 给的 pid）里的几段话合成一块显示；没有 pid 的旧记录，挨着的、前后不超过 3 分钟的算一轮
 const CC_TURN_GAP_MS = 3 * 60 * 1000
 export const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
+const ccIsAlarm = m => m.role === 'system' && m.kind === 'alarm'
 const ccIsHis = m => m.role === 'assistant' || ccIsTool(m) // 算进他那一块的：他的话和他调的工具
 // 往上加载前记下的锚点：屏幕顶上那一带的消息行，和它离列表顶的距离。
 // 跳过列表第一行：更早的话插进来时可能和它是同一轮，并进这一行、把它的顶往上撑；第一行后面那行的位置只跟插进来的总高度有关
@@ -783,10 +786,11 @@ function setCcLastStorage(m) {
 }
 // 最近三十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
 // 存的是 ccFromServer 之后的样子，格式改了就换 key（_v2…），旧的自然作废
-export const CC_CACHE_KEY = 'cc_history_v1'
+export const CC_CACHE_KEY = 'cc_history_v2' // v2：闹钟那条从她的气泡改成 kind alarm
 const CC_CACHE_TURNS = 30 // 按她发的消息数轮：往回数到她第三十条为止（10/11~18 平均一轮 3.6 条，30 轮约 100 条、30KB）
 const CC_CACHE_MAX = 100 // 不超过 bridge /history 一次最多给的条数：打开时一次拉回来就能把缓存整段对完
 function getCcCache() {
+  try { localStorage.removeItem('cc_history_v1') } catch {} // 换成 v2 以前的旧缓存（闹钟还画成她的气泡），不再用
   try {
     const v = JSON.parse(localStorage.getItem(CC_CACHE_KEY))
     return Array.isArray(v) ? v.filter(m => m && typeof m.key === 'string' && m.time).sort(ccOrder) : []
@@ -1293,7 +1297,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 服务器那条已经到了（SSE 往往比 /api/cc/send 的回应先到）：同一个 client_id 的临时消息就不再显示，不然会闪一下两条
   const messages = useMemo(() => {
     const arrived = new Set(history.map(m => m.clientId).filter(Boolean))
-    return [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
+    return [...history.filter(m => m.role !== 'system' || ccIsTool(m) || ccIsAlarm(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
   }, [history, temp])
   const rows = useMemo(() => ccRows(messages), [messages])
   // 点开聊天里的一张图：聊天里所有的图按顺序排成一组，左右滑着看
@@ -1311,7 +1315,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const lastRow = rows[rows.length - 1]
   const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
   const liveTurnKey = typingNow && !detached && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
-  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
+  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m) && !ccIsAlarm(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -1603,6 +1607,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
         {rows.map(row => {
           if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />
           const m = row.m
+          if (ccIsAlarm(m)) return <div key={m.key} className="cc-alarm-line" data-mids={m.key}>{say('他定的闹钟', 'His alarm')}</div>
           const failure = failures.get(m.key)
           const showFailure = failure && !calledAgain.has(failure.key)
           return <CcUserMsg key={m.key} m={m} flash={m.key === flashKey} failure={showFailure ? failure : null} editing={editingKey === m.key}
