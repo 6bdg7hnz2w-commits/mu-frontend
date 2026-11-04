@@ -55,6 +55,8 @@ function ccFromServer(m) {
   // 他调过的工具：排进他那一轮里，几个挨着的合成一行"用了 N 个工具"
   if (m.role === 'system' && m.kind === 'tool') return { key: m.id, role: 'system', kind: 'tool', tool: m.tool, sum: m.sum || '', ok: m.ok !== false, time: m.time, ...seq, ...(typeof m.pid === 'string' ? { pid: m.pid } : {}) }
   if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
+  // 他用 CronCreate 定的闹钟响了（不是从前端发的、以"[闹钟]"开头；bridge 新记的带 alarm: true）：不是她说的话，只画一行小灰字
+  if (m.role === 'user' && (m.alarm === true || (m.via === 'app' && typeof m.text === 'string' && m.text.startsWith('[闹钟]')))) return { key: m.id, role: 'system', kind: 'alarm', time: m.time, ...seq }
   return {
     key: m.id, role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '', time: m.time, ...seq,
     ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
@@ -99,10 +101,13 @@ function ccUnresolvedFailures(history) {
 // 先后：两条都有 bridge 给的序号就比序号（同一秒的几条也排得对），否则比时间（旧记录、发送中的本地消息）
 // 晚到、补上的话带 displayBefore：排在那个序号那条的前面（几条补在同一处时按各自序号排）
 const ccPos = m => (m.displayBefore != null ? m.displayBefore - 0.5 : m.seq)
-const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq) : new Date(a.time) - new Date(b.time))
+// 还没收到服务器确认的几条（本机临时消息）之间按发送序号 cseq 排，不按时间
+const ccOrder = (a, b) => (a.seq != null && b.seq != null ? (ccPos(a) - ccPos(b)) || (a.seq - b.seq)
+  : a.cseq != null && b.cseq != null ? a.cseq - b.cseq : new Date(a.time) - new Date(b.time))
 // 他同一轮（bridge 给的 pid）里的几段话合成一块显示；没有 pid 的旧记录，挨着的、前后不超过 3 分钟的算一轮
 const CC_TURN_GAP_MS = 3 * 60 * 1000
 export const ccIsTool = m => m.role === 'system' && m.kind === 'tool'
+const ccIsAlarm = m => m.role === 'system' && m.kind === 'alarm'
 const ccIsHis = m => m.role === 'assistant' || ccIsTool(m) // 算进他那一块的：他的话和他调的工具
 // 往上加载前记下的锚点：屏幕顶上那一带的消息行，和它离列表顶的距离。
 // 跳过列表第一行：更早的话插进来时可能和它是同一轮，并进这一行、把它的顶往上撑；第一行后面那行的位置只跟插进来的总高度有关
@@ -367,7 +372,7 @@ export function CcSearchPage({ saved, onBack, onPick }) {
             {r.hit.image && <CcImage img={{ path: r.hit.image }} onOpen={() => onPick(r)} />}
             <span className="cc-search-hit-main">
               <span className="cc-search-hit-top">
-                <span className="cc-search-who">{r.role === 'user' ? say('我', 'Me') : say('沐', 'Soren')}</span>
+                <span className="cc-search-who">{r.alarm ? say('【闹钟】', '[Alarm]') : r.role === 'user' ? say('我', 'Me') : say('沐', 'Soren')}</span>
                 {CC_HIT_FROM[r.hit.in] && <span className="cc-search-from">{say(CC_HIT_FROM[r.hit.in], CC_HIT_FROM_EN[r.hit.in])}</span>}
                 <span className="cc-search-time">{fmtSearchTime(r.time, say(false, true))}</span>
               </span>
@@ -523,6 +528,15 @@ function CcBrainPage({ brain, brainError, onChange, onClose }) {
 
 // 每条消息一个 client_id，重发时带同一个，bridge 据此去重，沐不会收到两条
 const ccClientId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+// 她每发一条的自增序号（本机记着，刷新、重开也接着往上数）；失败重发还用原来那个
+function ccNextSendSeq() {
+  let n = 0
+  try { n = Number(localStorage.getItem('cc_send_seq')) || 0 } catch {}
+  n += 1
+  try { localStorage.setItem('cc_send_seq', String(n)) } catch {}
+  return n
+}
+const CC_SEND_TIMEOUT_MS = 30 * 1000 // 后端等 bridge 最多 15 秒；再多给一倍，免得一条卡住把后面的全堵着
 
 // 自己发的文字原地改：和原话一样（只差首尾空格也算）就当取消，不发请求；不能改成空的
 export function CcEditBox({ text, onSave, onCancel }) {
@@ -783,10 +797,11 @@ function setCcLastStorage(m) {
 }
 // 最近三十轮存在本机：进聊天页先直接画出来，再拉 /history 对一遍（以服务器为准）。
 // 存的是 ccFromServer 之后的样子，格式改了就换 key（_v2…），旧的自然作废
-export const CC_CACHE_KEY = 'cc_history_v1'
+export const CC_CACHE_KEY = 'cc_history_v2' // v2：闹钟那条从她的气泡改成 kind alarm
 const CC_CACHE_TURNS = 30 // 按她发的消息数轮：往回数到她第三十条为止（10/11~18 平均一轮 3.6 条，30 轮约 100 条、30KB）
 const CC_CACHE_MAX = 100 // 不超过 bridge /history 一次最多给的条数：打开时一次拉回来就能把缓存整段对完
 function getCcCache() {
+  try { localStorage.removeItem('cc_history_v1') } catch {} // 换成 v2 以前的旧缓存（闹钟还画成她的气泡），不再用
   try {
     const v = JSON.parse(localStorage.getItem(CC_CACHE_KEY))
     return Array.isArray(v) ? v.filter(m => m && typeof m.key === 'string' && m.time).sort(ccOrder) : []
@@ -1293,7 +1308,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   // 服务器那条已经到了（SSE 往往比 /api/cc/send 的回应先到）：同一个 client_id 的临时消息就不再显示，不然会闪一下两条
   const messages = useMemo(() => {
     const arrived = new Set(history.map(m => m.clientId).filter(Boolean))
-    return [...history.filter(m => m.role !== 'system' || ccIsTool(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
+    return [...history.filter(m => m.role !== 'system' || ccIsTool(m) || ccIsAlarm(m)), ...temp.filter(m => !arrived.has(m.clientId))].sort(ccOrder)
   }, [history, temp])
   const rows = useMemo(() => ccRows(messages), [messages])
   // 点开聊天里的一张图：聊天里所有的图按顺序排成一组，左右滑着看
@@ -1311,7 +1326,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const lastRow = rows[rows.length - 1]
   const typingAt = serverTyping?.on ? serverTyping.at : waitSince ?? Infinity
   const liveTurnKey = typingNow && !detached && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
-  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
+  useEffect(() => { const last = messages.findLast(m => !ccIsTool(m) && !ccIsAlarm(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
@@ -1443,7 +1458,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     const imgs = items.filter(p => p.kind === 'image')
     const docs = items.filter(p => p.kind === 'file')
     const msg = {
-      key: `me-${Date.now()}`, local: true, clientId: ccClientId(), items, role: 'user', text, time: new Date().toISOString(),
+      key: `me-${Date.now()}`, local: true, clientId: ccClientId(), cseq: ccNextSendSeq(), items, role: 'user', text, time: new Date().toISOString(),
       ...(imgs.length ? { images: imgs.map(p => ({ key: p.key, localUrl: p.previewUrl })) } : {}),
       ...(docs.length ? { files: docs.map(p => ({ key: p.key, name: p.file.name, size: p.file.size, localUrl: p.localUrl })) } : {}),
     }
@@ -1452,9 +1467,36 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     setTemp(prev => [...prev, msg])
     setInput('')
     setPending([])
-    deliver(msg)
+    queueSend(msg)
+  }
+  // 发送排队：一次只发一条，上一条收到服务器确认（/api/cc/send 回 200）才发下一条。
+  // 失败了就停在这一条：点重发还是它（序号不变），撤掉了才轮到后面的——她连发两条、第一条失败重试时，第二条不会抢先到
+  const sendQueueRef = useRef([]) // [{ msg, failed, only }]，按序号排
+  const pumpingRef = useRef(false)
+  const pumpSend = async () => {
+    if (pumpingRef.current) return
+    pumpingRef.current = true
+    try {
+      for (let head; (head = sendQueueRef.current[0]) && !head.failed;) {
+        const ok = await deliver(head.msg, head.only)
+        if (sendQueueRef.current[0] !== head) continue // 发的时候被撤掉了（语音没认出是她之类）
+        if (ok) sendQueueRef.current.shift()
+        else head.failed = true
+      }
+    } finally {
+      pumpingRef.current = false
+    }
+  }
+  const queueSend = (msg) => { sendQueueRef.current.push({ msg }); pumpSend() }
+  // 点了重发（整条或者某一张图）：还是排在原来的位置
+  const retrySend = (m, only) => {
+    const q = sendQueueRef.current.find(x => x.msg.key === m.key)
+    if (!q) return
+    Object.assign(q, { failed: false, only })
+    pumpSend()
   }
   // only：点了某一张图上的重试，只重传这一张，别的失败的不动（全传上去了才真的发出去）
+  // 只由 pumpSend 调；发出去并收到确认返回 true，没发成返回 false
   const deliver = async (msg, only) => {
     setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: false } : m))
     startWaiting()
@@ -1496,12 +1538,12 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
         sent.push({ p, path })
       }
       if (firstErr) throw firstErr
-      if (waiting) { stopWaiting(); setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m)); return }
+      if (waiting) { stopWaiting(); setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m)); return false }
       const paths = sent.filter(s => s.p.kind === 'image').map(s => s.path)
       const files = sent.filter(s => s.p.kind === 'file')
       const voices = sent.filter(s => s.p.kind === 'voice')
-      const body = { text: msg.text, kind: 'chat', client_id: msg.clientId, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}), ...(voices.length ? { voices: voices.map(s => s.path) } : {}) }
-      const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const body = { text: msg.text, kind: 'chat', client_id: msg.clientId, client_seq: msg.cseq, client_time: msg.time, ...(paths.length ? { images: paths } : {}), ...(files.length ? { files: files.map(s => s.path) } : {}), ...(voices.length ? { voices: voices.map(s => s.path) } : {}) }
+      const res = await apiFetch(`/api/cc/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout?.(CC_SEND_TIMEOUT_MS) })
       if (res.status === 401) throw new Error('unauthorized')
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
       const data = await res.json().catch(() => ({}))
@@ -1514,13 +1556,16 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
       }], 'bottom')
       msg.items.forEach(p => uploadedRef.current.delete(p.key))
       setTemp(prev => prev.filter(m => m.key !== msg.key))
+      return true
     } catch (err) {
       if (err.message === 'unauthorized') lockOut()
+      else if (err.name === 'TimeoutError') setNotice(say('发送超时，点一下重发', 'Timed out — tap to retry'))
       else if (!/^HTTP \d+$/.test(err.message)) setNotice(err.message)
       stopWaiting()
       // 语音没认出是她 / 太短：这段不算发过，直接撤掉，提示留着
       if (err.drop) discardFailed(msg)
       else setTemp(prev => prev.map(m => m.key === msg.key ? { ...m, failed: true } : m))
+      return false
     }
   }
 
@@ -1528,15 +1573,17 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const sendVoice = (blob, duration) => {
     const localUrl = URL.createObjectURL(blob)
     const item = { key: `voice-${Date.now()}`, kind: 'voice', blob, duration, localUrl }
-    const msg = { key: `me-${Date.now()}`, local: true, clientId: ccClientId(), items: [item], role: 'user', text: '', time: new Date().toISOString(), voices: [{ key: item.key, localUrl, duration, listening: true }] }
+    const msg = { key: `me-${Date.now()}`, local: true, clientId: ccClientId(), cseq: ccNextSendSeq(), items: [item], role: 'user', text: '', time: new Date().toISOString(), voices: [{ key: item.key, localUrl, duration, listening: true }] }
     if (detachedRef.current) showLatest()
     scrollModeRef.current = 'bottom'
     setTemp(prev => [...prev, msg])
-    deliver(msg)
+    queueSend(msg)
   }
   const discardFailed = (msg) => {
     msg.items.forEach(p => { uploadedRef.current.delete(p.key); URL.revokeObjectURL(p.previewUrl || p.localUrl) })
     setTemp(prev => prev.filter(m => m.key !== msg.key))
+    sendQueueRef.current = sendQueueRef.current.filter(x => x.msg.key !== msg.key)
+    pumpSend() // 撤掉的是卡住的那条：后面排着的接着发
   }
   // 离开页面时，发送失败的文字、图和文件放回草稿，不会就这么丢了
   const tempRef = useRef(temp)
@@ -1544,7 +1591,10 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const pendingRef = useRef(pending)
   useEffect(() => { pendingRef.current = pending }, [pending])
   useEffect(() => () => {
-    const failed = tempRef.current.filter(m => m.failed)
+    // 卡在一条失败的上面时，后面排着的也都没发出去：一起放回草稿
+    const q = sendQueueRef.current
+    const stuck = new Set(q[0]?.failed ? q.map(x => x.msg.key) : [])
+    const failed = tempRef.current.filter(m => m.failed || stuck.has(m.key))
     const lost = failed.filter(m => m.text).map(m => m.text)
     if (lost.length) setDraftStorage(CC_SESSION.id, [...lost, getDraft(CC_SESSION.id)].filter(Boolean).join('\n'))
     const lostItems = failed.flatMap(m => m.items || [])
@@ -1603,11 +1653,12 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
         {rows.map(row => {
           if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />
           const m = row.m
+          if (ccIsAlarm(m)) return <div key={m.key} className="cc-alarm-line" data-mids={m.key}>{say('他定的闹钟', 'His alarm')}</div>
           const failure = failures.get(m.key)
           const showFailure = failure && !calledAgain.has(failure.key)
           return <CcUserMsg key={m.key} m={m} flash={m.key === flashKey} failure={showFailure ? failure : null} editing={editingKey === m.key}
             stuckNote={!showFailure && stuck && !compacting && !serverTyping?.on && m.key === lastUserKey}
-            onOpenImage={openChatImage} onRetry={deliver} onDiscard={discardFailed} onEdit={setEditingKey} onSaveEdit={saveEdit} onCancelEdit={() => setEditingKey(null)} onCallAgain={callAgain} />
+            onOpenImage={openChatImage} onRetry={retrySend} onDiscard={discardFailed} onEdit={setEditingKey} onSaveEdit={saveEdit} onCancelEdit={() => setEditingKey(null)} onCallAgain={callAgain} />
         })}
         {loadingNewer && <div className="empty-state">Loading…</div>}
         {typingNow && !liveTurnKey && !detached && <div className="msg assistant cc-typing" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>}
