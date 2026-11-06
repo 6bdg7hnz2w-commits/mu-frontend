@@ -8,7 +8,7 @@ import { API, CC_SESSION, SH_TZ, apiFetch, getDraft, getPasscode, lockApp, setDr
 import { VoiceAwareContent, estimateVoiceDurations, useVoicePlayer } from './voice.jsx'
 import { ChatHeader } from './ChatHeader.jsx'
 import { Composer, useVoiceRecorder } from './Composer.jsx'
-import { CcTurn, CcUserMsg } from './Turn.jsx'
+import { CcSuperseded, CcTurn, CcUserMsg } from './Turn.jsx'
 import { useStickToBottom } from './useStickToBottom.js'
 import { ImageLightbox } from '../ImageLightbox.jsx'
 import { kbDebugOn, kbLog } from '../kbDebug.js'
@@ -54,7 +54,7 @@ function ccFromServer(m) {
   const seq = Number.isSafeInteger(m.seq) ? { seq: m.seq } : {}
   // 他调过的工具：排进他那一轮里，几个挨着的合成一行"用了 N 个工具"
   if (m.role === 'system' && m.kind === 'tool') return { key: m.id, role: 'system', kind: 'tool', tool: m.tool, sum: m.sum || '', ok: m.ok !== false, time: m.time, ...seq, ...(typeof m.pid === 'string' ? { pid: m.pid } : {}) }
-  if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq }
+  if (m.role === 'system') return { key: m.id, role: 'system', kind: m.kind, replyTo: m.reply_to, time: m.time, ...seq, ...(m.blocked ? { blocked: true } : {}) }
   // 他用 CronCreate 定的闹钟响了（不是从前端发的、以"[闹钟]"开头；bridge 新记的带 alarm: true）：不是她说的话，只画一行小灰字
   if (m.role === 'user' && (m.alarm === true || (m.via === 'app' && typeof m.text === 'string' && m.text.startsWith('[闹钟]')))) return { key: m.id, role: 'system', kind: 'alarm', time: m.time, ...seq }
   return {
@@ -62,6 +62,7 @@ function ccFromServer(m) {
     ...(m.late && Number.isSafeInteger(m.display_before) ? { late: true, displayBefore: m.display_before } : {}),
     ...(typeof m.pid === 'string' ? { pid: m.pid } : {}),
     ...(m.edited_at ? { editedAt: m.edited_at } : {}),
+    ...(m.role === 'assistant' && m.superseded ? { superseded: true } : {}), // 她改了话或点了重新生成，这条作废了：折起来
     ...(m.via === 'app' ? { viaApp: true } : {}), // 她在官方 Claude App（Remote Control）里直接跟他说的，bridge 认出来补记的
     ...(m.role === 'user' && typeof m.client_id === 'string' ? { clientId: m.client_id } : {}), // 前端发的：认出对应的临时消息
     // 切到 API 时后端调模型回的：记下是哪个模型，有思考过程就带上（块里折叠显示，复制不带）
@@ -86,6 +87,7 @@ function ccVoiceView(v) {
 // 兜底：发出后这么久没回、也没收到"没回上来"的事件（bridge 挂了之类），就停三个点说"他好像卡住了"。
 // 2026-09-27 ~ 10-10 共 269 次"她发 → 他回"：中位 4 秒，p99 27 秒，最慢 34 秒，取 120 秒
 const CC_STUCK_MS = 120 * 1000
+const CC_COMPOSING_MS = 1000
 // 她哪几条"没回上来"还没解决：key → 那个系统事件。之后沐又回过话就都算解决了（history 按先后排好）
 // partial：她那条之后、断掉之前他已经说了几句（"话没说完就断了"）
 function ccUnresolvedFailures(history) {
@@ -93,7 +95,7 @@ function ccUnresolvedFailures(history) {
   let spoke = false
   for (const m of history) {
     if (m.role === 'user') spoke = false
-    else if (m.role === 'assistant') { out.clear(); spoke = true }
+    else if (m.role === 'assistant' && !m.superseded) { out.clear(); spoke = true }
     else if (m.role === 'system' && m.kind === 'reply_failed' && m.replyTo) out.set(m.replyTo, { ...m, partial: spoke })
   }
   return out
@@ -124,6 +126,7 @@ function ccRows(messages) {
   const seen = new Map() // pid → 出现过几块（同一轮被她的消息隔开时，块的 key 不撞）
   for (const m of messages) {
     const prev = rows[rows.length - 1]
+    if (m.superseded) { rows.push({ turn: false, superseded: true, key: m.key, m }); continue }
     if (ccIsHis(m) && prev?.turn) {
       const last = prev.items[prev.items.length - 1]
       const same = m.pid || last.pid ? m.pid === last.pid : Math.abs(new Date(m.time) - new Date(last.time)) <= CC_TURN_GAP_MS
@@ -947,7 +950,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     })
     fresh.forEach(m => { if (m.role === 'assistant') estimateVoiceDurations(m.key, m.text, fetchDurationEstimate) })
     // 沐回了，或者 bridge 说他这轮没回上来，都不用再转三个点；她那条被更正不算
-    if (fresh.some(m => m.role === 'assistant' || m.kind === 'reply_failed')) stopWaiting()
+    if (fresh.some(m => (m.role === 'assistant' && !m.superseded) || m.kind === 'reply_failed')) stopWaiting()
   }, [fetchDurationEstimate, stopWaiting])
 
   // params：before（往上翻）、around（搜索跳过来）、after（往下翻）
@@ -1328,6 +1331,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
   const liveTurnKey = typingNow && !detached && lastRow?.turn && lastRow.items.some(it => it.live || new Date(it.time) >= typingAt - 2000) ? lastRow.key : null
   useEffect(() => { const last = messages.findLast(m => !ccIsTool(m) && !ccIsAlarm(m)); if (last && !detachedRef.current) setCcLastStorage(last) }, [messages, detached])
   const failures = useMemo(() => ccUnresolvedFailures(history), [history])
+  // 能重新生成的：API 在接、整段聊天最后一块是 API 回的
+  const regenKey = !liveTurnKey && brain?.target === 'api' && lastRow?.turn && lastRow.items.at(-1)?.viaApi ? lastRow.items.at(-1).key : null
   const lastUserKey = useMemo(() => messages.findLast(m => m.role === 'user')?.key, [messages])
   useLayoutEffect(() => {
     const el = listRef.current
@@ -1617,6 +1622,30 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
     }
   }
 
+  // 长按他最后一条：旧的折起来，等新的
+  const regenerate = async (key) => {
+    scrollModeRef.current = 'bottom'
+    startWaiting()
+    try {
+      await ccPostJson(`/api/cc/regenerate`, { id: key })
+    } catch {
+      stopWaiting()
+      setNotice(say('没重新生成成，再试一次', "Couldn't regenerate — try again"))
+    }
+  }
+
+  // API 在接时告诉后端她还在打字，打完再回。约一秒一次；清空了说一声。发不出去就算了，只是回得早一点
+  const composingAtRef = useRef(0)
+  const onComposerInput = (value) => {
+    setInput(value)
+    if (brain?.target !== 'api') return
+    const on = !!value.trim()
+    const now = Date.now()
+    if (on ? now - composingAtRef.current < CC_COMPOSING_MS : !composingAtRef.current) return
+    composingAtRef.current = on ? now : 0
+    apiFetch(`/api/cc/composing`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) }).catch(() => {})
+  }
+
   // 更正她发过的文字；成功返回 true，编辑框收起
   const saveEdit = async (msg, text) => {
     try {
@@ -1651,7 +1680,8 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
         {hasMore && messages.length > 0 && <div className="cc-older">{loadingMore ? 'Loading…' : ''}</div>}
         {messages.length === 0 && <div className="empty-state">{jumping ? 'Loading…' : passcode ? 'Start chatting' : ''}</div>}
         {rows.map(row => {
-          if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />
+          if (row.superseded) return <CcSuperseded key={row.key} m={row.m} />
+          if (row.turn) return <CcTurn key={row.key} row={row} live={liveTurnKey === row.key} onRegenerate={regenKey && row === lastRow ? () => regenerate(regenKey) : null} flash={row.items.some(it => it.key === flashKey)} open={!!transcripts[row.key]} player={voice} onToggleTranscript={() => setTranscripts(prev => ({ ...prev, [row.key]: !prev[row.key] }))} />
           const m = row.m
           if (ccIsAlarm(m)) return <div key={m.key} className="cc-alarm-line" data-mids={m.key}>{say('他定的闹钟', 'His alarm')}</div>
           const failure = failures.get(m.key)
@@ -1677,7 +1707,7 @@ export function CCChatPage({ onBack, onMenu, jumpTo, slideIn, onUnder }) {
 
       <Composer passcode={passcode} rec={rec} notice={notice} onClearNotice={() => setNotice('')}
         pending={pending} onReorderPending={setPending} onOpenPending={openPendingImage} onRemovePending={removePending}
-        textareaRef={textareaRef} input={input} onInput={setInput} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} onTextTouchStart={() => { swipeBlurAt.current = 0 }}
+        textareaRef={textareaRef} input={input} onInput={onComposerInput} onKeyDown={handleKeyDown} onFocus={onInputFocus} onBlur={stickBottom} onTextTouchStart={() => { swipeBlurAt.current = 0 }}
         emojiOpen={emojiOpen} attachOpen={attachOpen} panelFrom={panelFrom} onTogglePanel={togglePanel} onCloseAttach={() => setAttachOpen(false)}
         full={full} fileAccept={fileAccept} filesReady={!!fileTypes} onPickFiles={handleFileSelect} onPickImages={handleImageSelect} onSend={sendMessage} />
 

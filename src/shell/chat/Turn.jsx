@@ -1,15 +1,27 @@
+import { useRef, useState } from 'react'
 import { I } from '../../App.jsx'
 import { fmtMsgTime } from '../data.js'
 import { CopyButton, messageCopyText } from './markdown.jsx'
 import { TranscriptToggle, VoiceAwareContent, hasVoiceSegment, parseVoiceSegments } from './voice.jsx'
 import { CcEditBox, CcFile, CcImage, CcPiece, CcTools, CcTurnBody, CcUpMark, CcVoice, ccIsTool, ccTurnParts, useCcSay } from './CcChat.jsx'
 
+const CC_LONG_PRESS_MS = 500
+
 // ─── 消息列表里的一行 ─────────────────────────────
 // CcTurn：他的一轮（几段合成一块）；CcUserMsg：她的一条。只管画，状态和动作都在 CCChatPage（CcChat.jsx）
 
 // live：这块还在说；open：转文字展开着；flash：从搜索跳过来的那条在这块里
-export function CcTurn({ row, live, flash, open, player, onToggleTranscript }) {
+export function CcTurn({ row, live, flash, open, player, onToggleTranscript, onRegenerate }) {
   const say = useCcSay()
+  // 长按他最后一条：操作行里多一个"重新生成"
+  const [regen, setRegen] = useState(false)
+  const pressRef = useRef(null)
+  const cancelPress = () => clearTimeout(pressRef.current)
+  const press = onRegenerate ? {
+    onTouchStart: () => { cancelPress(); pressRef.current = setTimeout(() => setRegen(true), CC_LONG_PRESS_MS) },
+    onTouchMove: cancelPress, onTouchEnd: cancelPress, onTouchCancel: cancelPress,
+    onContextMenu: () => setRegen(true),
+  } : {}
   // 他的一轮：几段合成一块，没有气泡；时间、复制整块、转文字放在块下面
   // 还在说（服务器的"正在输入"亮着、这是最后一块）：不显示操作行，三个点跟在这块最后面
   const items = row.items
@@ -21,7 +33,7 @@ export function CcTurn({ row, live, flash, open, player, onToggleTranscript }) {
   if (live && blocks?.at(-1)?.voice) blocks.push({ key: 'typing', parts: [] })
   const typing = <div className="cc-typing cc-typing-inline" aria-label={say('正在输入', 'Typing')}><span className="cc-typing-dot" /><span className="cc-typing-dot" /><span className="cc-typing-dot" /></div>
   return (
-    <div className={`msg assistant cc-turn${flash ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')}>
+    <div className={`msg assistant cc-turn${flash ? ' cc-flash' : ''}`} data-mids={items.map(it => it.key).join(' ')} {...press}>
       {blocks ? blocks.map((b, bi, all) => b.voice
         ? <div key={b.key} className="cc-turn-voice"><VoiceAwareContent raw={b.m.text} msgKey={b.m.key} player={player} showTranscript={open} flat range={b.range} /></div>
         : (
@@ -45,8 +57,21 @@ export function CcTurn({ row, live, flash, open, player, onToggleTranscript }) {
           {viaApi && <span className="msg-time cc-via-api">{viaApi.model ? `API · ${viaApi.model}` : 'API'}</span>}
           {said.length > 0 && <CopyButton getText={() => said.map(it => messageCopyText(it.text)).filter(Boolean).join('\n\n')} />}
           {voiced && <TranscriptToggle open={open} onClick={onToggleTranscript} />}
+          {regen && onRegenerate && <button className="cc-note-btn" onClick={() => { setRegen(false); onRegenerate() }}>{say('重新生成', 'Regenerate')}</button>}
         </div>
       )}
+    </div>
+  )
+}
+
+// 作废的回复：一行小灰字，点开看原文
+export function CcSuperseded({ m }) {
+  const say = useCcSay()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="cc-superseded" data-mids={m.key}>
+      <button className="cc-note-btn" onClick={() => setOpen(v => !v)}>{say('之前的回复', 'Earlier reply')}</button>
+      {open && <div className="cc-superseded-text">{m.text}</div>}
     </div>
   )
 }
@@ -104,7 +129,7 @@ export function CcUserMsg({ m, flash, failure, editing, stuckNote, onOpenImage, 
         )}
       </div>
       {failure && (
-        <div className="cc-msg-note">{failure.partial ? say('话没说完就断了', 'Cut off mid-reply') : say('他这次没回上来', "He didn't reply this time")} · <button className="cc-note-btn" onClick={() => onCallAgain(m, failure)}>{say('再叫他一下', 'Call him again')}</button></div>
+        <div className="cc-msg-note">{failure.blocked ? say('这次被拦下了', 'This reply was blocked') : failure.partial ? say('话没说完就断了', 'Cut off mid-reply') : say('他这次没回上来', "He didn't reply this time")} · <button className="cc-note-btn" onClick={() => onCallAgain(m, failure)}>{failure.blocked ? say('重新生成', 'Regenerate') : say('再叫他一下', 'Call him again')}</button></div>
       )}
       {stuckNote && <div className="cc-msg-note">{say('他好像卡住了', 'He seems stuck')}</div>}
     </div>
