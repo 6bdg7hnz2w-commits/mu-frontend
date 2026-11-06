@@ -638,6 +638,8 @@ html,body,#root { height:100%;background:var(--bg);color:var(--text);font-family
 .cc-pending-file .cc-file-name{max-width:120px;font-size:13px}
 .cc-notice{margin:0 6px 8px;padding:8px 12px;border-radius:var(--s-noticeR,10px);background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:13px;line-height:1.4}
 /* 消息下面的小字："他这次没回上来 · 再叫他一下"、"他好像卡住了"、"发送失败 · 点一下重发" */
+.cc-superseded{margin:2px 0;font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
+.cc-superseded-text{margin-top:4px;padding:0 4px;white-space:pre-wrap;opacity:.75}
 .cc-msg-note{margin-top:2px;padding:0 4px;font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
 /* 他定的闹钟响了：不画成她的气泡，居中一行小灰字 */
 .cc-alarm-line{text-align:center;margin:4px 0;font-size:12px;color:var(--s-meta,var(--text-dim));text-shadow:var(--s-metaShadow)}
